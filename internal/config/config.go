@@ -13,7 +13,7 @@ type Config struct {
 	StoragePath string `yaml:"storage_path" env:"STORAGE_PATH"`
 	HTTPServer  `yaml:"http_server"`
 	//Clients ClientConfig     `yaml:"clients"`
-	appSecret string `yaml:"app_secret" env-required:"true" env:"APP_SECRET"`
+	AppSecret string `yaml:"app_secret" env-required:"true" env:"APP_SECRET"`
 }
 
 type HTTPServer struct {

@@ -9,11 +9,13 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	todonotificator "github.com/kirill010106/todo-notificator"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/delete"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/get"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/save"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/pressly/goose/v3"
+	register "github.com/pressly/goose/v3/tests/gomigrations/register/testdata"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -69,10 +71,20 @@ func main() {
 	router.Use(middleware.URLFormat)
 
 	router.Route("/api/v1", func(r chi.Router) {
+
+		r.Post("/register", register.New(log, storage))
+		r.Post("/login", login.New(log, storage, cfg.AppSecret, duration))
 		r.Get("/health", health.New(log, storage.Db))
-		r.Post("/save", save.New(log, storage))
-		r.Get("/tasks/{user_id}", get.New(log, storage))
-		r.Delete("/users/{user_id}/tasks/{task_id}", delete.New(log, storage))
+
+		r.Group(func(r chi.Router) {
+			r.Use(auth.New(cfg.AppSecret))
+
+			r.Get("/tasks/", get.New(log, storage))
+			r.Post("/tasks", save.New(log, storage))
+			r.Delete("/tasks/{task_id}", delete.New(log, storage))
+			//r.Patch("tasks/{task_id}")
+		})
+
 	})
 
 	log.Info("starting HTTP server", slog.String("address", cfg.Address))

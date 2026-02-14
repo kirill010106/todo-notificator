@@ -174,3 +174,36 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 
 	return nil
 }
+
+func (s *Storage) User(ctx context.Context, email string) (domain.User, error) {
+	const op = "storage.postgres.User"
+
+	query := `SELECT id, email, password_hash from users WHERE email = $1`
+
+	var user domain.User
+	err := s.Db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.User{}, storage.ErrUserNotFound
+		}
+		return domain.User{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return user, nil
+}
+
+func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
+	const op = "storage.postgres.SaveUser"
+
+	query := `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING ID`
+
+	var id int64
+	err := s.Db.QueryRowContext(ctx, query, email, passHash).Scan(&id)
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+			return 0, storage.ErrUserExists
+		}
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+	return id, nil
+}
