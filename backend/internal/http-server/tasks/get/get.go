@@ -1,0 +1,70 @@
+package get
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+
+	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/render"
+	"github.com/kirill010106/todo-notificator/backend/internal/domain"
+	"github.com/kirill010106/todo-notificator/backend/internal/http-server/middleware/auth"
+	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/backend/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+)
+
+type TaskGetter interface {
+	GetTasks(ctx context.Context, userID int64) ([]domain.Task, error)
+}
+type Response struct {
+	resp.Response
+	Tasks []domain.Task `json:"tasks,omitempty"`
+}
+
+func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		const op = "handlers.tasks.get.New"
+
+		log = log.With(
+			slog.String("op", op),
+			slog.String("request_id", middleware.GetReqID(r.Context())),
+		)
+
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			log.Error("user_id not found in context")
+
+			render.Status(r, http.StatusUnauthorized)
+			render.JSON(w, r, resp.Error("unauthorized"))
+			return
+		}
+
+		log = log.With(slog.Int64("user_id", userID))
+
+		tasks, err := taskGetter.GetTasks(r.Context(), userID)
+
+		if err != nil {
+
+			if errors.Is(err, storage.ErrTaskNotFound) {
+				log.Info("tasks not found")
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("tasks not found"))
+				return
+			}
+			log.Error("failed to get tasks", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("failed to get tasks"))
+			return
+		}
+
+		log.Info("tasks retrieved successfully", slog.Int("task_count", len(tasks)))
+
+		render.Status(r, http.StatusOK)
+		render.JSON(w, r, Response{
+			Response: resp.OK(),
+			Tasks:    tasks,
+		})
+	}
+}
