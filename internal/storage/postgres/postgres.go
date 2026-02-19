@@ -99,7 +99,7 @@ WHERE user_id = $1`
 	return tasks, nil
 }
 
-func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) (int64, error) {
+func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) error {
 	const op = "storage.postgres.DeleteTask"
 
 	query := `
@@ -107,16 +107,16 @@ func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) (i
 		       WHERE user_id=$1 AND id=$2
 		RETURNING id
 `
-	var id int64
-	err := s.Db.QueryRowContext(ctx, query, userID, taskID).Scan(&id)
+	var deletedID int64
+	err := s.Db.QueryRowContext(ctx, query, userID, taskID).Scan(&deletedID)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("%s: %w", op, storage.ErrTaskNotFound)
+			return fmt.Errorf("%s: %w", op, storage.ErrTaskNotFound)
 		}
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: %w", op, err)
 	}
-	return id, nil
+	return nil
 }
 
 func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t domain.TaskUpdate) error {
@@ -206,4 +206,107 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 	return id, nil
+}
+
+func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
+	const op = "storage.postgres.SaveRefreshToken"
+
+	query := ` 
+		INSERT INTO refresh_tokens (user_id, token, expires_at)
+		VALUES ($1, $2, $3)
+	`
+
+	_, err := s.Db.ExecContext(ctx, query, userID, token, expiresAt)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
+	const op = "storage.postgres.GetRefreshToken"
+
+	query := `
+	SELECT id, user_id, token, expires_at, created_at
+	 FROM refresh_tokens
+	 WHERE token = $1 AND expires_at > NOW()
+	 `
+	var rt domain.RefreshToken
+	err := s.Db.QueryRowContext(ctx, query, token).Scan(
+		&rt.ID,
+		&rt.UserID,
+		&rt.Token,
+		&rt.ExpiresAt,
+		&rt.CreatedAt,
+	)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%s: %w", op, storage.ErrRefreshTokenInvalid)
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	return &rt, nil
+}
+
+func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
+	const op = "storage.postgres.DeleteRefreshToken"
+
+	query := `
+	DELETE FROM refresh_tokens
+	WHERE token = $1
+`
+	res, err := s.Db.ExecContext(ctx, query, token)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("%s: %w", op, storage.ErrRefreshTokenInvalid)
+	}
+
+	return nil
+}
+
+func (s *Storage) DeleteUserRefreshTokens(ctx context.Context, userID int64) error {
+	const op = "storage.postgres.DeleteUserRefreshTokens"
+
+	query := `DELETE FROM refresh_tokens WHERE user_id = $1`
+
+	_, err := s.Db.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, error) {
+	const op = "storage.postgres.GetUserByID"
+
+	var user domain.User
+	query := `
+	SELECT id, email, pass_hash FROM users
+	WHERE user_id = $1
+	`
+
+	err := s.Db.QueryRowContext(ctx, query, userID).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PassHash)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%s:%w", op, storage.ErrUserNotFound)
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return &user, err
+
 }

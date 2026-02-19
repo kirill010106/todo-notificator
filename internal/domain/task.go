@@ -9,7 +9,7 @@ const (
 
 type Task struct {
 	ID          int64
-	UserID      int
+	UserID      int64
 	Title       string
 	Description string
 	Deadline    *time.Time

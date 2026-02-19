@@ -12,13 +12,13 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 type Request struct {
-	UserID      int        `json:"user_id" validate:"required,gt=0"`
 	Title       string     `json:"title" validate:"required,max=255"`
 	Description string     `json:"description" validate:"max=2000"`
 	Deadline    *time.Time `json:"deadline"`
@@ -33,17 +33,19 @@ type TaskSaver interface {
 	SaveTask(ctx context.Context, t domain.Task) (int64, error)
 }
 
-func (r Request) ToDomain() domain.Task {
+func (r Request) ToDomain(userID int64) domain.Task {
 	return domain.Task{
-		UserID:      r.UserID,
+		UserID:      userID,
 		Title:       r.Title,
 		Description: r.Description,
 		Deadline:    r.Deadline,
 		Status:      domain.TaskStatusPending,
 	}
 }
+
+var validate = validator.New()
+
 func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
-	validate := validator.New()
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
@@ -53,6 +55,16 @@ func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
 
+		userID, ok := auth.GetUserID(r.Context())
+		if !ok {
+			log.Error("user_id not found in context")
+
+			render.Status(r, http.StatusUnauthorized)
+			render.JSON(w, r, resp.Error("unauthorized"))
+			return
+		}
+
+		log = log.With(slog.Int64("user_id", userID))
 		var req Request
 
 		err := render.DecodeJSON(r.Body, &req)
@@ -90,7 +102,7 @@ func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
 
 		log.Debug("request body decoded", slog.Any("request", req))
 
-		task := req.ToDomain()
+		task := req.ToDomain(userID)
 
 		id, err := taskSaver.SaveTask(r.Context(), task)
 
