@@ -11,8 +11,8 @@ import (
 	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/kirill010106/todo-notificator/backend/internal/domain"
-	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 	_ "github.com/lib/pq"
 )
 

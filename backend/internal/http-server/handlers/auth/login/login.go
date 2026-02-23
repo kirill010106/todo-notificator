@@ -11,12 +11,12 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
-	"github.com/kirill010106/todo-notificator/backend/internal/config"
-	"github.com/kirill010106/todo-notificator/backend/internal/domain"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
-	"github.com/kirill010106/todo-notificator/backend/internal/lib/jwt"
-	"github.com/kirill010106/todo-notificator/backend/internal/lib/sl"
-	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+	"github.com/kirill010106/todo-notificator/internal/config"
+	"github.com/kirill010106/todo-notificator/internal/domain"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 

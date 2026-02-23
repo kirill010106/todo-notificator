@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
 type Response struct {

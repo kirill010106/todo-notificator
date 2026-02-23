@@ -8,8 +8,8 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
-	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
 

@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
-	"github.com/kirill010106/todo-notificator/backend/internal/http-server/middleware/auth"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
-	"github.com/kirill010106/todo-notificator/backend/internal/lib/sl"
-	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 type TaskDeleter interface {

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
-	"github.com/kirill010106/todo-notificator/backend/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/domain"
 )
 
 func NewAccessToken(user domain.User, secret string, duration time.Duration) (string, error) {

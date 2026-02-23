@@ -8,7 +8,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/golang-jwt/jwt/v5"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
 type contextKey string

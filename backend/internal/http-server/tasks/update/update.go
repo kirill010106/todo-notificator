@@ -16,11 +16,11 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
-	"github.com/kirill010106/todo-notificator/backend/internal/domain"
-	"github.com/kirill010106/todo-notificator/backend/internal/http-server/middleware/auth"
-	resp "github.com/kirill010106/todo-notificator/backend/internal/lib/api/response"
-	"github.com/kirill010106/todo-notificator/backend/internal/lib/sl"
-	"github.com/kirill010106/todo-notificator/backend/internal/storage"
+	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 type Request struct {
