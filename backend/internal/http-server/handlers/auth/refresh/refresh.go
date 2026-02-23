@@ -76,6 +76,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 				log.Info("invalid refresh token")
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, "invalid or expired refresh token")
+				return
 			}
 			log.Error("failed to get refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)

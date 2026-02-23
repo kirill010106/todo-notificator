@@ -1,0 +1,21 @@
+bot_token: "8533399541:AAFjcfq7-M4xAs3ejB1rqJ0ZFUa40JljYUE"
+
+backend_url: "http://localhost:8082"
+
+http_server:
+  address: "localhost:8083"
+
+# database:
+#   host: "localhost"
+#   port: 5432
+#   user: "postgres"
+#   password: "postgres"
+#   dbname: "todo"
+#   sslmode: "disable"
+
+# За сколько до дедлайна отправлять уведомления
+notification_intervals:
+  - "24h"
+  - "3h"
+  - "30m"
+  - "5m"

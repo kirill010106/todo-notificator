@@ -16,6 +16,8 @@ require (
 	github.com/pressly/goose/v3 v3.26.0
 )
 
+require gopkg.in/telebot.v4 v4.0.0-beta.7 // indirect
+
 require (
 	github.com/BurntSushi/toml v1.2.1 // indirect
 	github.com/ajg/form v1.5.1 // indirect

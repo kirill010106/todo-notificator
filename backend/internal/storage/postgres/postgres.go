@@ -292,7 +292,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 	var user domain.User
 	query := `
 	SELECT id, email, password_hash FROM users
-	WHERE user_id = $1
+	WHERE id = $1
 	`
 
 	err := s.Db.QueryRowContext(ctx, query, userID).Scan(

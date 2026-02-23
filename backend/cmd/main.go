@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"log"
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	todonotificator "github.com/kirill010106/todo-notificator/backend"
@@ -101,17 +105,37 @@ func main() {
 
 	})
 
-	log.Info("starting HTTP server", slog.String("address", cfg.Address))
 	srv := &http.Server{
 		Addr:        cfg.Address,
 		Handler:     router,
 		ReadTimeout: cfg.Timeout,
 		IdleTimeout: cfg.IdleTimeout,
 	}
-	if err := srv.ListenAndServe(); err != nil {
-		log.Error("failed to start server")
+
+	go func() {
+		log.Info("starting HTTP server", slog.String("address", cfg.Address))
+
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Error("server error", sl.Err(err))
+			os.Exit(1)
+		}
+	}()
+
+	quit := make(chan os.Signal, 1)
+	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
+	sig := <-quit
+
+	log.Info("shutdown signal received", slog.String("signal", sig.String()))
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := srv.Shutdown(ctx); err != nil {
+		log.Error("forced shutdown", sl.Err(err))
+		os.Exit(1)
 	}
-	log.Error("server stopped")
+
+	log.Info("server stopped gracefully")
 }
 
 func setupLogger(env string) *slog.Logger {
