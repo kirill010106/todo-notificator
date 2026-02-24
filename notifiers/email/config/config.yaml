@@ -1,0 +1,11 @@
+smtp:
+  host: "smtp.mail.ru"
+  port: 587
+  username: ""
+  password: ""
+
+notification_intervals:
+  - "24h"
+  - "3h"
+  - "30m"
+  - "5m"
