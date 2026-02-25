@@ -1,0 +1,15 @@
+root = "."
+tmp_dir = "../tmp/backend"
+
+[build]
+  cmd        = "go build -o ../tmp/backend/app.exe ./cmd/main.go"
+  bin        = "../tmp/backend/app.exe"
+  include_ext = ["go", "yaml"]
+  exclude_dir = ["tmp", "vendor"]
+  delay      = 500
+
+[log]
+  time = true
+
+[color]
+  app = "green"

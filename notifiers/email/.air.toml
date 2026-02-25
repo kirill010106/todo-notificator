@@ -1,0 +1,15 @@
+root = "."
+tmp_dir = "../../tmp/email"
+
+[build]
+  cmd        = "go build -o ../../tmp/email/app.exe ./cmd/main.go"
+  bin        = "../../tmp/email/app.exe"
+  include_ext = ["go", "yaml"]
+  exclude_dir = ["tmp", "vendor"]
+  delay      = 500
+
+[log]
+  time = true
+
+[color]
+  app = "cyan"
