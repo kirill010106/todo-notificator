@@ -14,6 +14,12 @@ type Config struct {
 	SMTP      SMTP       `yaml:"smtp"`
 	Database  Database   `yaml:"database"`
 	Intervals []Duration `yaml:"notification_intervals"`
+	Webhook   Webhook    `yaml:"webhook"`
+}
+
+type Webhook struct {
+	Address string `yaml:"address" env:"WEBHOOK_ADDRESS" env-default:"localhost:8084"`
+	Secret  string `yaml:"secret" env:"WEBHOOK_SECRET" env-required:"true"`
 }
 
 type SMTP struct {

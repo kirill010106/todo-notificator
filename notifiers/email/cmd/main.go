@@ -4,6 +4,7 @@ import (
 	"context"
 	"log"
 	"log/slog"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -11,6 +12,7 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
+	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/scheduler"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
 )
@@ -48,6 +50,12 @@ func main() {
 		cfg.NotificationIntervals(),
 	)
 
+	webhookHandler := webhook.New(logger, sched, cfg.Webhook.Secret)
+	srv := &http.Server{
+		Addr:    cfg.Webhook.Address,
+		Handler: webhookHandler,
+	}
+
 	ctx, cancel := signal.NotifyContext(
 		context.Background(),
 		syscall.SIGINT,
@@ -55,8 +63,21 @@ func main() {
 	)
 	defer cancel()
 
+	go func() {
+		logger.Info("webhook server started",
+			slog.String("address", cfg.Webhook.Address))
+		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+			log.Fatalf("webhook server error: %v", err)
+		}
+	}()
+
 	logger.Info("starting email notifier")
 	sched.Start(ctx)
+
+	// Graceful shutdown webhook сервера
+	if err := srv.Shutdown(context.Background()); err != nil {
+		logger.Error("webhook server shutdown error", slog.String("error", err.Error()))
+	}
 
 	logger.Info("email notifier stopped")
 }

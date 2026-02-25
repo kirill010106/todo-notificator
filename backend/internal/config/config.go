@@ -9,12 +9,18 @@ import (
 )
 
 type Config struct {
-	Env             string `yaml:"env" env:"ENV" env-default:"local"`
-	StoragePath     string `yaml:"storage_path" env:"STORAGE_PATH"`
+	Env             string        `yaml:"env" env:"ENV" env-default:"local"`
+	StoragePath     string        `yaml:"storage_path" env:"STORAGE_PATH"`
 	HTTPServer      `yaml:"http_server"`
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env-default:"15m"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-default:"168h"`
 	AppSecret       string        `yaml:"app_secret" env-required:"true" env:"APP_SECRET"`
+	Webhook         Webhook       `yaml:"webhook"`
+}
+
+type Webhook struct {
+	URL    string `yaml:"url" env:"WEBHOOK_URL" env-default:""`
+	Secret string `yaml:"secret" env:"WEBHOOK_SECRET" env-default:""`
 }
 
 type HTTPServer struct {

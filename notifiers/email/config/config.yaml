@@ -4,6 +4,10 @@ smtp:
   username: ""
   password: ""
 
+webhook:
+  address: "localhost:8084"
+  secret: ""
+
 notification_intervals:
   - "24h"
   - "3h"

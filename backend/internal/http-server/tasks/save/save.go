@@ -45,7 +45,7 @@ func (r Request) ToDomain(userID int64) domain.Task {
 
 var validate = validator.New()
 
-func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
+func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
@@ -105,7 +105,6 @@ func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
 		task := req.ToDomain(userID)
 
 		id, err := taskSaver.SaveTask(r.Context(), task)
-
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskExists) {
 				log.Warn("task already exists", sl.Err(err))
@@ -120,17 +119,36 @@ func New(log *slog.Logger, taskSaver TaskSaver) http.HandlerFunc {
 			render.JSON(w, r, resp.Error("failed to save task"))
 			return
 		}
-		log.Info("task added", slog.Int64("id", id))
 
-		render.Status(r, http.StatusOK)
-		responseOK(w, r, id)
+		log.Info("task saved", slog.Int64("id", id))
+
+		render.Status(r, http.StatusCreated)
+		render.JSON(w, r, Response{
+			Response: resp.OK(),
+			Id:       id,
+		})
+
+		if webhookURL != "" {
+			go notifyScheduler(log, webhookURL, webhookSecret)
+		}
 	}
-
 }
 
-func responseOK(w http.ResponseWriter, r *http.Request, id int64) {
-	render.JSON(w, r, Response{
-		Response: resp.OK(),
-		Id:       id,
-	})
+func notifyScheduler(log *slog.Logger, url, secret string) {
+	req, err := http.NewRequest(http.MethodPost, url+"/webhook/task-created", nil)
+	if err != nil {
+		log.Warn("webhook: failed to build request", sl.Err(err))
+		return
+	}
+	req.Header.Set("X-Webhook-Secret", secret)
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Warn("webhook: notifier unavailable, scheduler will catch up via ticker", sl.Err(err))
+		return
+	}
+	defer res.Body.Close()
+
+	log.Debug("webhook: notifier signaled", slog.Int("status", res.StatusCode))
 }

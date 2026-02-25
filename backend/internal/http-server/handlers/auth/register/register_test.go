@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -23,59 +24,75 @@ func (m *mockUserSaver) SaveUser(ctx context.Context, email string, passHash []b
 	return m.ID, m.Error
 }
 
-func TestRegister_HappyPath(t *testing.T) {
-
-	mock := &mockUserSaver{
-		ID:    1,
-		Error: nil,
+func TestRegister(t *testing.T) {
+	tests := []struct {
+		name       string
+		body       string
+		mockID     int64
+		mockErr    error
+		wantCode   int
+		wantStatus string
+	}{
+		{
+			name:       "happy path",
+			body:       `{"email":"test@test.com", "password": "password123"}`,
+			mockID:     1,
+			mockErr:    nil,
+			wantCode:   http.StatusOK,
+			wantStatus: "OK",
+		},
+		{
+			name:       "user already exists",
+			body:       `{"email":"test@test.com", "password": "password123"}`,
+			mockID:     0,
+			mockErr:    storage.ErrUserExists,
+			wantCode:   http.StatusBadRequest,
+			wantStatus: "Error",
+		},
+		{
+			name:       "invalid email",
+			body:       `{"email":"notanemail", "password": "password123"}`,
+			mockID:     0,
+			mockErr:    nil,
+			wantCode:   http.StatusBadRequest,
+			wantStatus: "Error",
+		},
+		{
+			name:       "empty body",
+			body:       `{}`,
+			mockID:     0,
+			mockErr:    nil,
+			wantCode:   http.StatusBadRequest,
+			wantStatus: "Error",
+		},
+		{
+			name:       "db error",
+			body:       `{"email":"test@test.com", "password": "password123"}`,
+			mockID:     0,
+			mockErr:    errors.New("db error"),
+			wantCode:   http.StatusInternalServerError,
+			wantStatus: "Error",
+		},
 	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			//Arrange
+			mock := &mockUserSaver{ID: tt.mockID, Error: tt.mockErr}
+			handler := New(slog.New(slog.DiscardHandler), mock)
+			req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(tt.body))
+			req.Header.Set("Content-Type", "application/json")
+			w := httptest.NewRecorder()
 
-	handler := New(slog.New(slog.DiscardHandler), mock)
+			//Act
+			handler(w, req)
 
-	body := bytes.NewBufferString(
-		`{"email":"test@test.com", "password": "password123"}`,
-	)
+			//Assert
 
-	req := httptest.NewRequest("POST", "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handler(w, req)
-
-	var response Response
-
-	err := json.NewDecoder(w.Body).Decode(&response)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusOK, w.Code)
-	assert.Equal(t, int64(1), response.UserID)
-}
-
-func TestRegister_UserAlreadyExists(t *testing.T) {
-	mock := &mockUserSaver{
-		ID:    0,
-		Error: storage.ErrUserExists,
+			var response Response
+			err := json.NewDecoder(w.Body).Decode(&response)
+			assert.NoError(t, err)
+			assert.Equal(t, tt.wantCode, w.Code)
+			assert.Equal(t, tt.wantStatus, response.Response.Status)
+		})
 	}
-
-	handler := New(slog.New(slog.DiscardHandler), mock)
-
-	body := bytes.NewBufferString(
-		`{"email":"test@test.com", "password": "password123"}`,
-	)
-
-	req := httptest.NewRequest("POST", "/register", body)
-	req.Header.Set("Content-Type", "application/json")
-	w := httptest.NewRecorder()
-
-	handler(w, req)
-
-	var response Response
-
-	err := json.NewDecoder(w.Body).Decode(&response)
-
-	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadRequest, w.Code)
-	assert.Equal(t, "Error", response.Response.Status)
-	assert.Equal(t, int64(0), response.UserID)
-
 }

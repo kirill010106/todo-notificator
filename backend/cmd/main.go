@@ -98,7 +98,7 @@ func main() {
 
 			r.Post("/logout", logout.New(log, storage))
 			r.Get("/tasks", get.New(log, storage))
-			r.Post("/tasks", save.New(log, storage))
+			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
 			r.Delete("/tasks/{task_id}", delete.New(log, storage))
 			r.Patch("/tasks/{task_id}", update.New(log, storage))
 		})
