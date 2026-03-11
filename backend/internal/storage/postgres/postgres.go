@@ -13,7 +13,6 @@ import (
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/storage"
-	_ "github.com/lib/pq"
 )
 
 type Storage struct {
@@ -123,7 +122,7 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 	const op = "storage.postgres.UpdateTask"
 
 	setValues := make([]string, 0)
-	args := make([]interface{}, 0)
+	args := make([]any, 0)
 	argID := 1
 
 	if t.Title != nil {
@@ -200,7 +199,7 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 	err := s.Db.QueryRowContext(ctx, query, email, passHash).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
-		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return 0, storage.ErrUserExists
 		}
 		return 0, fmt.Errorf("%s: %w", op, err)
@@ -249,6 +248,7 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	return &rt, nil
 }
 
+// TODO: delete expired tokens
 func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 	const op = "storage.postgres.DeleteRefreshToken"
 
@@ -307,6 +307,6 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return &user, err
+	return &user, nil
 
 }

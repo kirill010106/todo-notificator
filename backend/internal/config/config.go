@@ -9,8 +9,8 @@ import (
 )
 
 type Config struct {
-	Env             string        `yaml:"env" env:"ENV" env-default:"local"`
-	StoragePath     string        `yaml:"storage_path" env:"STORAGE_PATH"`
+	Env             string `yaml:"env" env:"ENV" env-default:"local"`
+	StoragePath     string `yaml:"storage_path" env:"STORAGE_PATH"`
 	HTTPServer      `yaml:"http_server"`
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env-default:"15m"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-default:"168h"`
@@ -27,13 +27,6 @@ type HTTPServer struct {
 	Address     string        `yaml:"address" env-default:"localhost:8080"`
 	Timeout     time.Duration `yaml:"timeout" env-default:"4s"`
 	IdleTimeout time.Duration `yaml:"idle_timeout" env-default:"60s"`
-}
-
-type Client struct {
-	Address      string        `yaml:"address"`
-	Timeout      time.Duration `yaml:"timeout"`
-	RetriesCount int           `yaml:"retriesCount"`
-	Insecure     bool          `yaml:"insecure"`
 }
 
 func MustLoad() *Config {

@@ -16,6 +16,11 @@ type User struct {
 	Email string
 }
 
+type TaskWithUser struct {
+	Task Task
+	User User
+}
+
 type NotificationEvent struct {
 	Task Task
 	User User

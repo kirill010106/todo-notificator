@@ -11,7 +11,6 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage"
 )
 
-// realizr of sender.Sender
 type Sender interface {
 	Send(user domain.User, task domain.Task, interval time.Duration) error
 }
@@ -42,7 +41,6 @@ func New(
 		reschedule: make(chan struct{}, 1),
 	}
 }
-
 
 func (s *Scheduler) Reschedule() {
 	select {
@@ -76,38 +74,30 @@ func (s *Scheduler) Start(ctx context.Context) {
 }
 
 func (s *Scheduler) reload(ctx context.Context) {
-	tasks, err := s.storage.GetPendingTasksWithDeadline(ctx)
+	items, err := s.storage.GetPendingTasksWithUsers(ctx)
 	if err != nil {
 		s.log.Error("failed to load tasks", slog.String("error", err.Error()))
 		return
 	}
-	s.log.Info("reloading tasks", slog.Int("count", len(tasks)))
+	s.log.Info("reloading tasks", slog.Int("count", len(items)))
 
 	s.cancelAll()
 
 	now := time.Now()
 
-	for _, task := range tasks {
-		if task.Deadline == nil {
-			continue
-		}
-
-		user, err := s.storage.GetUserByID(ctx, task.UserID)
-		if err != nil || user == nil {
-			s.log.Warn("user not found",
-				slog.Int64("user_id", task.UserID),
-			)
+	for _, item := range items {
+		if item.Task.Deadline == nil {
 			continue
 		}
 
 		for _, interval := range s.intervals {
-			fireAt := task.Deadline.Add(-interval)
+			fireAt := item.Task.Deadline.Add(-interval)
 
 			if !fireAt.After(now) {
 				continue
 			}
 
-			s.scheduleOne(ctx, task, *user, fireAt, interval)
+			s.scheduleOne(ctx, item.Task, item.User, fireAt, interval)
 		}
 	}
 }

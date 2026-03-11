@@ -12,7 +12,7 @@ type Task struct {
 	UserID      int64      `json:"user_id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
-	Deadline    *time.Time `json:"deadline,omitempty"`
+	Deadline    *time.Time `json:"deadline,omitzero"`
 	Status      string     `json:"status"`
 	IsNotified  bool       `json:"is_notified"`
 }

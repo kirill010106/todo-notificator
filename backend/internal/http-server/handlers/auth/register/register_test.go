@@ -14,7 +14,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-// SaveUser(ctx context.Context, email string, passHash []byte) (int64, error)
 type mockUserSaver struct {
 	ID    int64
 	Error error
@@ -46,7 +45,7 @@ func TestRegister(t *testing.T) {
 			body:       `{"email":"test@test.com", "password": "password123"}`,
 			mockID:     0,
 			mockErr:    storage.ErrUserExists,
-			wantCode:   http.StatusBadRequest,
+			wantCode:   http.StatusConflict,
 			wantStatus: "Error",
 		},
 		{

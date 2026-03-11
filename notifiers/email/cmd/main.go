@@ -47,7 +47,7 @@ func main() {
 		logger,
 		storage,
 		sndr,
-		cfg.NotificationIntervals(),
+		cfg.Intervals,
 	)
 
 	webhookHandler := webhook.New(logger, sched, cfg.Webhook.Secret)

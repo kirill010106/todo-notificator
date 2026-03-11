@@ -19,22 +19,13 @@ import (
 type TaskDeleter interface {
 	DeleteTask(ctx context.Context, userID int64, taskId int64) error
 }
-type Request struct {
-	UserID int64 `json:"user_id" validate:"required,gt=0"`
-	TaskID int64 `json:"task_id" validate:"required"`
-}
-
-type Response struct {
-	resp.Response
-	TaskID int64 `json:"id"`
-}
 
 func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.delete.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -81,7 +72,7 @@ func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
 			return
 		}
 
-		log.Info("task deleted succesfully")
+		log.Info("task deleted successfully")
 
 		w.WriteHeader(http.StatusNoContent)
 	}
