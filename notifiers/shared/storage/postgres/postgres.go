@@ -98,7 +98,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error) {
 	const op = "storage.postgres.GetPendingTasksWithUsers"
 	query := `
-	SELECT t.id, t.user_id, t.title, t.description, t.deadline, u.id, u.email
+	SELECT t.id, t.user_id, t.title, t.description, t.deadline, t.status, u.id, u.email
 	FROM tasks t
 	JOIN users u ON u.id = t.user_id
 	WHERE t.status = 'pending'
