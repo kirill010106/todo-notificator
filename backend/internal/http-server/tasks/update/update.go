@@ -26,7 +26,7 @@ import (
 type Request struct {
 	Title       *string    `json:"title" validate:"omitempty,max=255"`
 	Description *string    `json:"description" validate:"omitempty,max=2000"`
-	Deadline    *time.Time `json:"deadline,omitempty"`
+	Deadline    *time.Time `json:"deadline,omitzero"`
 	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done"`
 }
 
@@ -81,7 +81,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.update.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)

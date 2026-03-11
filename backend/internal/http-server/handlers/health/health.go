@@ -10,20 +10,16 @@ import (
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
-type Response struct {
-	resp.Response
-}
-
 type DBHealthChecker interface {
-	Ping() error
+	PingContext(context.Context) error
 }
 
 func New(log *slog.Logger, db DBHealthChecker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		const op = "handlers.url.save.New"
-		_, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		const op = "handlers.health.New"
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 		defer cancel()
-		err := db.Ping()
+		err := db.PingContext(ctx)
 		if err != nil {
 			w.WriteHeader(http.StatusServiceUnavailable)
 			render.JSON(w, r, resp.Response{

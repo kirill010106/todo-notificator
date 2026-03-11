@@ -20,14 +20,15 @@ type TaskGetter interface {
 }
 type Response struct {
 	resp.Response
-	Tasks []domain.Task `json:"tasks,omitempty"`
+	Tasks []domain.Task `json:"tasks,omitzero"`
 }
 
+//TODO: add pagination and offset
 func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.get.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)

@@ -43,7 +43,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.refresh.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -64,7 +64,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		}
 
 		if err := validate.Struct(req); err != nil {
-			log.Warn("invalid requedst", sl.Err(err))
+			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, "validation error")
 			return
@@ -110,6 +110,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			log.Error("failed to generate access token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, "failed to generate token")
+			return
 		}
 
 		newRefreshToken, err := jwt.NewRefreshToken()
@@ -129,7 +130,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			return
 		}
 
-		log.Info("tokens refreshed succesfully")
+		log.Info("tokens refreshed successfully")
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{

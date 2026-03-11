@@ -31,7 +31,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.logout.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -57,7 +57,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 		}
 
 		if err := validate.Struct(req); err != nil {
-			log.Warn("invalid requedst", sl.Err(err))
+			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, "validation error")
 			return
@@ -84,7 +84,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 					return
 				}
 			}
-			log.Info("logged out succesfully")
+			log.Info("logged out successfully")
 		}
 
 		w.WriteHeader(http.StatusNoContent)

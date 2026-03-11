@@ -21,7 +21,7 @@ import (
 type Request struct {
 	Title       string     `json:"title" validate:"required,max=255"`
 	Description string     `json:"description" validate:"max=2000"`
-	Deadline    *time.Time `json:"deadline"`
+	Deadline    *time.Time `json:"deadline,omitzero"`
 }
 
 type Response struct {
@@ -50,7 +50,7 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)

@@ -1,7 +1,7 @@
 package config
 
 import (
-	"fmt"
+	"cmp"
 	"log"
 	"os"
 	"time"
@@ -11,10 +11,10 @@ import (
 )
 
 type Config struct {
-	SMTP      SMTP       `yaml:"smtp"`
-	Database  Database   `yaml:"database"`
-	Intervals []Duration `yaml:"notification_intervals"`
-	Webhook   Webhook    `yaml:"webhook"`
+	SMTP      SMTP            `yaml:"smtp"`
+	Database  Database        `yaml:"database"`
+	Intervals []time.Duration `yaml:"notification_intervals"`
+	Webhook   Webhook         `yaml:"webhook"`
 }
 
 type Webhook struct {
@@ -30,28 +30,7 @@ type SMTP struct {
 }
 
 type Database struct {
-	DBUrl string `env:"DATABASE_URL" env-requied:"true"`
-}
-
-type Duration struct {
-	time.Duration
-}
-
-func (d *Duration) UnmarshalText(text []byte) error {
-	var err error
-	d.Duration, err = time.ParseDuration(string(text))
-	if err != nil {
-		return fmt.Errorf("invalid duration %q: %w", string(text), err)
-	}
-	return nil
-}
-
-func (c *Config) NotificationIntervals() []time.Duration {
-	result := make([]time.Duration, len(c.Intervals))
-	for i, d := range c.Intervals {
-		result[i] = d.Duration
-	}
-	return result
+	DBUrl string `env:"DATABASE_URL" env-required:"true"`
 }
 
 func MustLoad() *Config {
@@ -59,10 +38,7 @@ func MustLoad() *Config {
 		log.Println("no .env file found, reading from environment")
 	}
 
-	configPath := os.Getenv("EMAIL_CONFIG_PATH")
-	if configPath == "" {
-		configPath = "config/config.yaml"
-	}
+	configPath := cmp.Or(os.Getenv("EMAIL_CONFIG_PATH"), "config/config.yaml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		log.Fatalf("config file not found: %s", configPath)

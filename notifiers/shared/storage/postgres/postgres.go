@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/kirill010106/todo-notificator/internal/storage"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
+	"github.com/kirill010106/todo-notificator/notifiers/shared/storage"
 
 	_ "github.com/lib/pq"
 )
@@ -91,18 +91,56 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return &user, err
+	return &user, nil
 
+}
+
+func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error) {
+	const op = "storage.postgres.GetPendingTasksWithUsers"
+	query := `
+	SELECT t.id, t.user_id, t.title, t.description, t.deadline, u.id, u.email
+	FROM tasks t
+	JOIN users u ON u.id = t.user_id
+	WHERE t.status = 'pending'
+	AND t.deadline IS NOT NULL
+	AND t.deadline > NOW()
+	ORDER BY t.deadline ASC
+	`
+
+	rows, err := s.Db.QueryContext(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	var res []domain.TaskWithUser
+	for rows.Next() {
+		var tw domain.TaskWithUser
+		if err := rows.Scan(
+			&tw.Task.ID,
+			&tw.Task.UserID,
+			&tw.Task.Title,
+			&tw.Task.Description,
+			&tw.Task.Deadline,
+			&tw.Task.Status,
+			&tw.User.ID,
+			&tw.User.Email,
+		); err != nil {
+			return nil, fmt.Errorf("%s scan: %w", op, err)
+		}
+		res = append(res, tw)
+	}
+	return res, rows.Err()
 }
 
 func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([]domain.Task, error) {
 	const op = "storage.postgres.GetTasksDueBetween"
 
 	query := `
-		SELECT id, user_id, title, description, deadline STATUS
+		SELECT id, user_id, title, description, deadline, status
 		FROM tasks
 		WHERE status = 'pending'
-			AND deadline IS NOT NILL
+			AND deadline IS NOT NULL
 			AND deadline BETWEEN $1 AND $2
 			ORDER BY deadline ASC
 	`

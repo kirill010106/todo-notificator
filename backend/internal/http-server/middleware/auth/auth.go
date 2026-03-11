@@ -2,13 +2,12 @@ package auth
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/render"
-	"github.com/golang-jwt/jwt/v5"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	j "github.com/kirill010106/todo-notificator/internal/lib/jwt"
 )
 
 type contextKey string
@@ -34,28 +33,15 @@ func New(secret string) func(next http.Handler) http.Handler {
 
 			tokenStr := parts[1]
 
-			claims := jwt.MapClaims{}
-			token, err := jwt.ParseWithClaims(tokenStr, claims, func(token *jwt.Token) (any, error) {
-				if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-					return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-				}
-				return []byte(secret), nil
-			})
+			uid, err := j.ParseAccessToken(tokenStr, secret)
 
-			if err != nil || !token.Valid {
+			if err != nil {
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, resp.Error("invalid token"))
 				return
 			}
 
-			uid, ok := claims["uid"].(float64)
-			if !ok {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("invalid token claims"))
-				return
-			}
-
-			ctx := context.WithValue(r.Context(), userIDKey, int64(uid))
+			ctx := context.WithValue(r.Context(), userIDKey, uid)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})

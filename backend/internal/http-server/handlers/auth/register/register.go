@@ -27,8 +27,9 @@ type UserSaver interface {
 	SaveUser(ctx context.Context, email string, passHash []byte) (int64, error)
 }
 
+var validate = validator.New()
+
 func New(log *slog.Logger, userSaver UserSaver) http.HandlerFunc {
-	validate := validator.New()
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.register.New"
 
@@ -56,7 +57,7 @@ func New(log *slog.Logger, userSaver UserSaver) http.HandlerFunc {
 		id, err := userSaver.SaveUser(r.Context(), req.Email, passHash)
 		if err != nil {
 			if errors.Is(err, storage.ErrUserExists) {
-				render.Status(r, http.StatusBadRequest)
+				render.Status(r, http.StatusConflict)
 				render.JSON(w, r, resp.Error("user already exists"))
 				return
 			}

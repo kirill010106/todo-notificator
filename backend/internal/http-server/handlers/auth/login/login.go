@@ -43,7 +43,7 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.login.New"
 
-		log = log.With(
+		log := log.With(
 			slog.String("op", op),
 			slog.String("request_id", middleware.GetReqID(r.Context())),
 		)
@@ -123,7 +123,7 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 			return
 		}
 
-		log.Info("user logged in succefully",
+		log.Info("user logged in successfully",
 			slog.Int64("id", user.ID),
 			slog.String("email", user.Email),
 		)

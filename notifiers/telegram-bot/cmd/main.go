@@ -1,4 +1,4 @@
-package telegram_bot
+package main
 
 import (
 	"log"
