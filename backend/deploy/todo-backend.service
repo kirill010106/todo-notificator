@@ -1,0 +1,44 @@
+# Systemd unit for ToDo Notificator — backend
+#
+# Установка на сервере (один раз):
+#   sudo mkdir -p /opt/todo-notificator/config
+#   sudo cp backend/deploy/todo-backend.service /etc/systemd/system/backend.service
+#   sudo cp backend/config/local.yaml /opt/todo-notificator/config/prod.yaml   # отредактируй!
+#   sudo nano /opt/todo-notificator/.env                                         # заполни секреты
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable backend
+#   sudo systemctl start backend
+
+[Unit]
+Description=ToDo Notificator — Backend API
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=todo
+Group=todo
+
+WorkingDirectory=/opt/todo-notificator
+
+# Переменные окружения: чувствительные значения хранятся отдельно от конфига
+EnvironmentFile=/opt/todo-notificator/.env
+
+ExecStart=/opt/todo-notificator/backend
+
+# Автоматический перезапуск при падении (но не при exit 0/SIGTERM)
+Restart=on-failure
+RestartSec=5s
+
+# Ограничения безопасности
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/opt/todo-notificator
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=todo-backend
+
+[Install]
+WantedBy=multi-user.target
