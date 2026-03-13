@@ -38,7 +38,7 @@ func MustLoad() *Config {
 		log.Println("no .env file found, reading from environment")
 	}
 
-	configPath := cmp.Or(os.Getenv("EMAIL_CONFIG_PATH"), "config/config.yaml")
+	configPath := cmp.Or(os.Getenv("EMAIL_CONFIG_PATH"), "config/local.yaml")
 
 	if _, err := os.Stat(configPath); os.IsNotExist(err) {
 		log.Fatalf("config file not found: %s", configPath)
