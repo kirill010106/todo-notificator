@@ -1,0 +1,41 @@
+# Systemd unit for ToDo Notificator — email notifier
+#
+# Установка на сервере (один раз):
+#   sudo cp notifiers/email/deploy/email-notifier.service /etc/systemd/system/email-notifier.service
+#   sudo nano /home/ubuntu/todo-notificator/.env.notifier   # заполнить секреты
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable email-notifier
+#   sudo systemctl start email-notifier
+
+[Unit]
+Description=ToDo Notificator — Email Notifier
+After=network.target postgresql.service backend.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=ubuntu
+Group=ubuntu
+
+WorkingDirectory=/home/ubuntu/todo-notificator
+
+EnvironmentFile=/home/ubuntu/todo-notificator/.env.notifier
+Environment=EMAIL_CONFIG_PATH=/home/ubuntu/todo-notificator/notifiers/email/config/prod.yaml
+Environment=WEBHOOK_ADDRESS=0.0.0.0:8084
+
+ExecStart=/home/ubuntu/todo-notificator/email-notifier
+
+Restart=on-failure
+RestartSec=5s
+
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ReadWritePaths=/home/ubuntu/todo-notificator
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=todo-email-notifier
+
+[Install]
+WantedBy=multi-user.target
