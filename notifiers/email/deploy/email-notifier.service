@@ -22,6 +22,8 @@ Group=todo
 WorkingDirectory=/opt/todo-notificator
 
 EnvironmentFile=/opt/todo-notificator/.env.notifier
+Environment=EMAIL_CONFIG_PATH=/opt/todo-notificator/config/email-prod.yaml
+Environment=WEBHOOK_ADDRESS=0.0.0.0:8086
 
 ExecStart=/opt/todo-notificator/email-notifier
 
