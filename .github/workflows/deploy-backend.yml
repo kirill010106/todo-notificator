@@ -16,7 +16,7 @@ concurrency:
   cancel-in-progress: false
 
 env:
-  DEPLOY_PATH: /opt/todo-notificator
+  DEPLOY_PATH: /home/ubuntu/todo-notificator
   SERVER_HOST: 185.65.200.160
   # Свободные порты (заняты на сервере: 80 443 8081 2019)
   BACKEND_PORT: 8082
@@ -74,7 +74,7 @@ jobs:
             ./notifiers/email/cmd/
 
       - name: Prepare notifier config artifact
-        run: cp ./notifiers/email/config/config.yaml ./notifier_config.yaml
+        run: cp ./notifiers/email/config/prod.yaml ./notifier_config.yaml
 
       - name: Upload binaries
         uses: actions/upload-artifact@v4
@@ -121,7 +121,8 @@ jobs:
             sudo systemctl stop backend        || true
             sudo systemctl stop email-notifier || true
 
-            sudo mkdir -p ${{ env.DEPLOY_PATH }}/config
+            sudo mkdir -p ${{ env.DEPLOY_PATH }}
+            sudo mkdir -p ${{ env.DEPLOY_PATH }}/notifiers/email/config
 
             sudo mv /tmp/backend_bin  ${{ env.DEPLOY_PATH }}/backend
             sudo mv /tmp/notifier_bin ${{ env.DEPLOY_PATH }}/email-notifier
@@ -129,7 +130,7 @@ jobs:
             sudo chmod +x ${{ env.DEPLOY_PATH }}/email-notifier
 
             # Обновляем notifier-конфиг при каждом деплое
-            sudo cp /tmp/notifier_config.yaml ${{ env.DEPLOY_PATH }}/config/email-prod.yaml
+            sudo cp /tmp/notifier_config.yaml ${{ env.DEPLOY_PATH }}/notifiers/email/config/prod.yaml
 
             sudo systemctl start backend
             sudo systemctl start email-notifier

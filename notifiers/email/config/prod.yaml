@@ -1,0 +1,15 @@
+smtp:
+  host: "smtp.mail.ru"
+  port: 587
+  username: ""
+  password: ""
+
+webhook:
+  address: "0.0.0.0:8086"
+  secret: ""
+
+notification_intervals:
+  - "24h"
+  - "3h"
+  - "30m"
+  - "5m"

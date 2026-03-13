@@ -2,9 +2,7 @@
 #
 # Установка на сервере (один раз):
 #   sudo cp notifiers/email/deploy/email-notifier.service /etc/systemd/system/email-notifier.service
-#   sudo cp notifiers/email/config/config.yaml /opt/todo-notificator/config/email-prod.yaml
-#   # Отредактировать email-prod.yaml: webhook.address: "0.0.0.0:8086"
-#   sudo nano /opt/todo-notificator/.env.notifier   # заполнить секреты
+#   sudo nano /home/ubuntu/todo-notificator/.env.notifier   # заполнить секреты
 #   sudo systemctl daemon-reload
 #   sudo systemctl enable email-notifier
 #   sudo systemctl start email-notifier
@@ -16,16 +14,16 @@ Wants=postgresql.service
 
 [Service]
 Type=simple
-User=todo
-Group=todo
+User=ubuntu
+Group=ubuntu
 
-WorkingDirectory=/opt/todo-notificator
+WorkingDirectory=/home/ubuntu/todo-notificator
 
-EnvironmentFile=/opt/todo-notificator/.env.notifier
-Environment=EMAIL_CONFIG_PATH=/opt/todo-notificator/config/email-prod.yaml
+EnvironmentFile=/home/ubuntu/todo-notificator/.env.notifier
+Environment=EMAIL_CONFIG_PATH=/home/ubuntu/todo-notificator/notifiers/email/config/prod.yaml
 Environment=WEBHOOK_ADDRESS=0.0.0.0:8086
 
-ExecStart=/opt/todo-notificator/email-notifier
+ExecStart=/home/ubuntu/todo-notificator/email-notifier
 
 Restart=on-failure
 RestartSec=5s
@@ -33,7 +31,7 @@ RestartSec=5s
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
-ReadWritePaths=/opt/todo-notificator
+ReadWritePaths=/home/ubuntu/todo-notificator
 
 StandardOutput=journal
 StandardError=journal
