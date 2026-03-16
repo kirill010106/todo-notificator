@@ -24,6 +24,15 @@ func New(log *slog.Logger, scheduler Scheduler, secret string) *Handler {
 }
 
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		w.WriteHeader(http.StatusMethodNotAllowed)
+		return
+	}
+	if h.secret == "" {
+		h.log.Error("webhook: secret is not set")
+		w.WriteHeader(http.StatusServiceUnavailable)
+		return
+	}
 	if r.Header.Get("X-Webhook-Secret") != h.secret {
 		h.log.Warn("webhook: unauthorized request",
 			slog.String("remote_addr", r.RemoteAddr))

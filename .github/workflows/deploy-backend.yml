@@ -122,12 +122,13 @@ jobs:
             sudo systemctl stop email-notifier || true
 
             sudo mkdir -p ${{ env.DEPLOY_PATH }}
+            sudo mkdir -p ${{ env.DEPLOY_PATH }}/bin
             sudo mkdir -p ${{ env.DEPLOY_PATH }}/notifiers/email/config
 
-            sudo mv /tmp/backend_bin  ${{ env.DEPLOY_PATH }}/backend
-            sudo mv /tmp/notifier_bin ${{ env.DEPLOY_PATH }}/email-notifier
-            sudo chmod +x ${{ env.DEPLOY_PATH }}/backend
-            sudo chmod +x ${{ env.DEPLOY_PATH }}/email-notifier
+            sudo mv /tmp/backend_bin  ${{ env.DEPLOY_PATH }}/bin/backend
+            sudo mv /tmp/notifier_bin ${{ env.DEPLOY_PATH }}/bin/email-notifier
+            sudo chmod +x ${{ env.DEPLOY_PATH }}/bin/backend
+            sudo chmod +x ${{ env.DEPLOY_PATH }}/bin/email-notifier
 
             # Обновляем notifier-конфиг при каждом деплое
             sudo cp /tmp/notifier_config.yaml ${{ env.DEPLOY_PATH }}/notifiers/email/config/prod.yaml

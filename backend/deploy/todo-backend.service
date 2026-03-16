@@ -23,7 +23,7 @@ WorkingDirectory=/home/ubuntu/todo-notificator
 EnvironmentFile=/home/ubuntu/todo-notificator/.env
 Environment=CONFIG_PATH=/home/ubuntu/todo-notificator/backend/config/prod.yaml
 
-ExecStart=/home/ubuntu/todo-notificator/backend
+ExecStart=/home/ubuntu/todo-notificator/bin/backend
 
 # Автоматический перезапуск при падении (но не при exit 0/SIGTERM)
 Restart=on-failure
