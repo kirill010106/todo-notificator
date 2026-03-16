@@ -67,35 +67,45 @@ RETURNING id`
 	return id, nil
 }
 
-func (s *Storage) GetTasks(ctx context.Context, userID int64) ([]domain.Task, error) {
+func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error) {
 	const op = "storage.postgres.getTasks"
 
-	query := `
+	countQuery := `
+		SELECT COUNT(*) FROM tasks WHERE user_id = $1
+	`
+
+	var total int
+	if err := s.Db.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
+		return nil, 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	dataQuery := `
 SELECT id, user_id, title, description, deadline, status, is_notified
 FROM tasks
-WHERE user_id = $1`
+	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
+LIMIT $2 OFFSET $3`
 
-	rows, err := s.Db.QueryContext(ctx, query, userID)
+	rows, err := s.Db.QueryContext(ctx, dataQuery, userID, limit, offset)
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
 	defer rows.Close()
 
-	tasks := make([]domain.Task, 0)
+	tasks := make([]domain.Task, 0, limit)
 
 	for rows.Next() {
 		var t domain.Task
 		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.Status, &t.IsNotified)
 		if err != nil {
-			return nil, fmt.Errorf("%s: %w", op, err)
+			return nil, 0, fmt.Errorf("%s: %w", op, err)
 		}
 		tasks = append(tasks, t)
 	}
 	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	return tasks, nil
+	return tasks, total, nil
 }
 
 func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) error {

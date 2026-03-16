@@ -58,7 +58,7 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 				return
 			}
 			log.Error("failed to decode request body", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("failed to decode request"))
 			return
 		}

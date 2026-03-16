@@ -1,3 +1,5 @@
+env: "local"
+
 smtp:
   host: "smtp.mail.ru"
   port: 587

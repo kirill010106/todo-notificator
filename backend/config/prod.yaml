@@ -1,0 +1,11 @@
+env: "prod"
+
+webhook:
+  url: "http://127.0.0.1:8084"
+  secret: ""
+http_server:
+  address: "0.0.0.0:8082"
+  timeout: 4s
+  idle_timeout: 60s
+access_token_ttl: 15m
+refresh_token_ttl: 168h

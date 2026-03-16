@@ -1,3 +1,5 @@
+env: "prod"
+
 smtp:
   host: "smtp.mail.ru"
   port: 587
@@ -5,7 +7,7 @@ smtp:
   password: ""
 
 webhook:
-  address: "0.0.0.0:8086"
+  address: "0.0.0.0:8084"
   secret: ""
 
 notification_intervals:

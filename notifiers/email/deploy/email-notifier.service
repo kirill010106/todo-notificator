@@ -21,9 +21,9 @@ WorkingDirectory=/home/ubuntu/todo-notificator
 
 EnvironmentFile=/home/ubuntu/todo-notificator/.env.notifier
 Environment=EMAIL_CONFIG_PATH=/home/ubuntu/todo-notificator/notifiers/email/config/prod.yaml
-Environment=WEBHOOK_ADDRESS=0.0.0.0:8086
+Environment=WEBHOOK_ADDRESS=0.0.0.0:8084
 
-ExecStart=/home/ubuntu/todo-notificator/email-notifier
+ExecStart=/home/ubuntu/todo-notificator/bin/email-notifier
 
 Restart=on-failure
 RestartSec=5s

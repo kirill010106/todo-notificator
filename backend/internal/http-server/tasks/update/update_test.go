@@ -1,0 +1,114 @@
+package update
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"net/http/httptest"
+	"strings"
+	"testing"
+	"time"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/kirill010106/todo-notificator/internal/domain"
+	authmw "github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
+	"github.com/kirill010106/todo-notificator/internal/storage"
+	"github.com/stretchr/testify/require"
+)
+
+type mockUpdater struct {
+	err error
+
+	called bool
+}
+
+func (m *mockUpdater) UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error {
+	m.called = true
+	return m.err
+}
+
+func TestUpdate_Unauthorized(t *testing.T) {
+	h := New(slog.New(slog.DiscardHandler), &mockUpdater{})
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"a"}`))
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+	require.Equal(t, http.StatusUnauthorized, w.Code)
+}
+
+func TestUpdate_EmptyBodyFields(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+	require.False(t, updater.called)
+}
+
+func TestUpdate_Success(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, updater.called)
+}
+
+func TestUpdate_NotFound(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{err: storage.ErrTaskNotFound}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+}
+
+func TestUpdate_InternalError(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{err: errors.New("boom")}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+}

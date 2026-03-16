@@ -2,7 +2,11 @@
 
 on:
   push:
+<<<<<<< HEAD
     branches: [main]
+=======
+    branches: [deploy]
+>>>>>>> deploy
     paths:
       - 'backend/**'
       - 'notifiers/**'
@@ -20,7 +24,11 @@ env:
   SERVER_HOST: 185.65.200.160
   # Свободные порты (заняты на сервере: 80 443 8081 2019)
   BACKEND_PORT: 8082
+<<<<<<< HEAD
   NOTIFIER_PORT: 8086
+=======
+  NOTIFIER_PORT: 8084
+>>>>>>> deploy
 
 jobs:
   # ─────────────────────────────────────────
@@ -122,12 +130,22 @@ jobs:
             sudo systemctl stop email-notifier || true
 
             sudo mkdir -p ${{ env.DEPLOY_PATH }}
+<<<<<<< HEAD
             sudo mkdir -p ${{ env.DEPLOY_PATH }}/notifiers/email/config
 
             sudo mv /tmp/backend_bin  ${{ env.DEPLOY_PATH }}/backend
             sudo mv /tmp/notifier_bin ${{ env.DEPLOY_PATH }}/email-notifier
             sudo chmod +x ${{ env.DEPLOY_PATH }}/backend
             sudo chmod +x ${{ env.DEPLOY_PATH }}/email-notifier
+=======
+            sudo mkdir -p ${{ env.DEPLOY_PATH }}/bin
+            sudo mkdir -p ${{ env.DEPLOY_PATH }}/notifiers/email/config
+
+            sudo mv /tmp/backend_bin  ${{ env.DEPLOY_PATH }}/bin/backend
+            sudo mv /tmp/notifier_bin ${{ env.DEPLOY_PATH }}/bin/email-notifier
+            sudo chmod +x ${{ env.DEPLOY_PATH }}/bin/backend
+            sudo chmod +x ${{ env.DEPLOY_PATH }}/bin/email-notifier
+>>>>>>> deploy
 
             # Обновляем notifier-конфиг при каждом деплое
             sudo cp /tmp/notifier_config.yaml ${{ env.DEPLOY_PATH }}/notifiers/email/config/prod.yaml
