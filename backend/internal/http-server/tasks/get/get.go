@@ -36,7 +36,6 @@ type Response struct {
 	Pagination Pagination    `json:"pagination"`
 }
 
-// TODO: add pagination and offset
 func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.get.New"

@@ -1,0 +1,370 @@
+openapi: 3.0.3
+info:
+  title: ToDo Notificator API
+  description: API для управления задачами с функциями уведомлений (email/telegram/etc.)
+  version: 1.0.0
+servers:
+  - url: http://localhost:8082/api/v1
+    description: Основной сервер (Local)
+tags:
+  - name: Auth
+    description: Аутентификация, регистрация и работа с JWT
+  - name: Tasks
+    description: Управление задачами (рекомендуется передавать токен)
+  - name: System
+    description: Системные ручки
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: "Передавайте access-token в формате: `Bearer <token>`"
+  schemas:
+    TokensResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        access_token:
+          type: string
+        refresh_token:
+          type: string
+        expires_in:
+          type: integer
+          description: Время жизни access-токена в секундах
+    ErrorResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: Error
+        error:
+          type: string
+          description: Текст ошибки
+    Task:
+      type: object
+      properties:
+        id:
+          type: integer
+        user_id:
+          type: integer
+        title:
+          type: string
+        description:
+          type: string
+        deadline:
+          type: string
+          format: date-time
+          nullable: true
+        reminder_at:
+          type: string
+          format: date-time
+          nullable: true
+        status:
+          type: string
+          enum: [pending, done]
+          example: pending
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+        offset:
+          type: integer
+        total:
+          type: integer
+security:
+  - bearerAuth: []
+paths:
+  /register:
+    post:
+      tags:
+        - Auth
+      summary: Регистрация нового пользователя
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+                  minLength: 6
+      responses:
+        "200":
+          description: Успешная регистрация
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensResponse'
+        "400":
+          description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /login:
+    post:
+      tags:
+        - Auth
+      summary: Вход в систему (Логин)
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [email, password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                password:
+                  type: string
+      responses:
+        "200":
+          description: Успешный вход
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensResponse'
+        "401":
+          description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /refresh:
+    post:
+      tags:
+        - Auth
+      summary: Обновление Access Token'а
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token:
+                  type: string
+      responses:
+        "200":
+          description: Успешное обновление токенов
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokensResponse'
+        "401":
+          description: Невалидный или истекший refresh токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /logout:
+    post:
+      tags:
+        - Auth
+      summary: Выход из системы
+      responses:
+        "200":
+          description: Успешный выход (токены удалены или стали недействительными)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+        "401":
+          description: Неавторизован
+  /tasks:
+    get:
+      tags:
+        - Tasks
+      summary: Получение списка задач
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 20
+            maximum: 100
+          description: Количество задач на страницу
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+          description: Смещение для пагинации
+      responses:
+        "200":
+          description: Список задач получен
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  tasks:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Task'
+                  pagination:
+                    $ref: '#/components/schemas/Pagination'
+        "500":
+          description: Внутренняя ошибка
+    post:
+      tags:
+        - Tasks
+      summary: Создать новую задачу
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title]
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  maxLength: 2000
+                deadline:
+                  type: string
+                  format: date-time
+                reminder_at:
+                  type: string
+                  format: date-time
+      responses:
+        "201":
+          description: Задача успешно создана
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  id:
+                    type: integer
+                    description: ID созданной задачи
+        "400":
+          description: Некорректные параметры
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+  /tasks/{task_id}:
+    patch:
+      tags:
+        - Tasks
+      summary: Обновить существующую задачу
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: integer
+          description: ID задачи
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                title:
+                  type: string
+                  maxLength: 255
+                description:
+                  type: string
+                  maxLength: 2000
+                deadline:
+                  type: string
+                  format: date-time
+                  nullable: true
+                reminder_at:
+                  type: string
+                  format: date-time
+                  nullable: true
+                status:
+                  type: string
+                  enum: [pending, done]
+      responses:
+        "200":
+          description: Задача успешно обновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  task_id:
+                    type: integer
+        "400":
+          description: Ошибка валидации
+        "500":
+          description: Внутренняя ошибка
+    delete:
+      tags:
+        - Tasks
+      summary: Удалить задачу
+      parameters:
+        - in: path
+          name: task_id
+          required: true
+          schema:
+            type: integer
+          description: ID задачи
+      responses:
+        "200":
+          description: Задача удалена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+        "400":
+          description: Ошибка запроса
+        "500":
+          description: Ошибка сервера
+  /health:
+    get:
+      tags:
+        - System
+      summary: Проверка работоспособности (Health check)
+      security: []
+      responses:
+        "200":
+          description: Сервер работает нормально
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
