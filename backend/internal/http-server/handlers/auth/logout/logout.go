@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
@@ -47,19 +48,19 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
 				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, "empty response body")
+				render.JSON(w, r, resp.Error("empty response body"))
 				return
 			}
 			log.Warn("failed to decode request body")
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, "failed to decode request")
+			render.JSON(w, r, resp.Error("failed to decode request"))
 			return
 		}
 
 		if err := validate.Struct(req); err != nil {
 			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, "validation error")
+			render.JSON(w, r, resp.Error("validation error"))
 			return
 		}
 
@@ -68,7 +69,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 			if err != nil {
 				log.Error("failed to delete all user tokens", sl.Err(err))
 				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, "failed to logout from all devices")
+				render.JSON(w, r, resp.Error("failed to logout from all devices"))
 				return
 			}
 			log.Info("logged out from all devices")
@@ -80,7 +81,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 				} else {
 					log.Error("failed to delete refresh token", sl.Err(err))
 					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, "failed to logout")
+					render.JSON(w, r, resp.Error("failed to logout"))
 					return
 				}
 			}
@@ -90,3 +91,4 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
+

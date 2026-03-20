@@ -2,11 +2,7 @@
 
 on:
   push:
-<<<<<<< HEAD
-    branches: [main]
-=======
     branches: [deploy]
->>>>>>> deploy
     paths:
       - 'backend/**'
       - 'notifiers/**'

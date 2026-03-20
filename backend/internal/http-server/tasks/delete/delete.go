@@ -44,14 +44,14 @@ func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
 		taskIDStr := chi.URLParam(r, "task_id")
 		if taskIDStr == "" {
 			log.Info("task_id is empty")
-			RenderBadRequest(r)
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("task_id is required"))
 			return
 		}
 		taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
 		if err != nil {
 			log.Info("invalid task_id", slog.String("val", taskIDStr))
-			RenderBadRequest(r)
+			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid task_id format"))
 			return
 		}
@@ -76,8 +76,4 @@ func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
 
 		w.WriteHeader(http.StatusNoContent)
 	}
-}
-
-func RenderBadRequest(r *http.Request) {
-	render.Status(r, http.StatusBadRequest)
 }

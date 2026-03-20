@@ -27,7 +27,7 @@ type Response struct {
 	resp.Response
 	AccessToken  string `json:"access_token"`
 	RefreshToken string `json:"refresh_token"`
-	ExpiresIn    int64  `json:"expires_at"`
+	ExpiresIn    int64  `json:"expires_in"`
 }
 
 type TokenRefresher interface {
@@ -54,19 +54,19 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
 				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, "empty request body")
+				render.JSON(w, r, resp.Error("empty request body"))
 				return
 			}
 			log.Warn("failed to decode request body", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, "failed to decode request")
+			render.JSON(w, r, resp.Error("failed to decode request"))
 			return
 		}
 
 		if err := validate.Struct(req); err != nil {
 			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, "validation error")
+			render.JSON(w, r, resp.Error("validation error"))
 			return
 		}
 
@@ -75,12 +75,12 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			if errors.Is(err, storage.ErrRefreshTokenInvalid) {
 				log.Info("invalid refresh token")
 				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, "invalid or expired refresh token")
+				render.JSON(w, r, resp.Error("invalid or expired refresh token"))
 				return
 			}
 			log.Error("failed to get refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, "internal server error")
+			render.JSON(w, r, resp.Error("internal server error"))
 			return
 		}
 
@@ -91,12 +91,12 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			if errors.Is(err, storage.ErrUserNotFound) {
 				log.Warn("user not found")
 				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, "user not found")
+				render.JSON(w, r, resp.Error("user not found"))
 				return
 			}
 			log.Error("failed to get user", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, "internal server error")
+			render.JSON(w, r, resp.Error("internal server error"))
 			return
 		}
 
@@ -109,7 +109,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		if err != nil {
 			log.Error("failed to generate access token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, "failed to generate token")
+			render.JSON(w, r, resp.Error("failed to generate token"))
 			return
 		}
 
@@ -117,7 +117,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		if err != nil {
 			log.Error("failed to generate refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, "failed to generate token")
+			render.JSON(w, r, resp.Error("failed to generate token"))
 			return
 		}
 
@@ -126,7 +126,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		if err != nil {
 			log.Error("failed to save refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, "failed to save token")
+			render.JSON(w, r, resp.Error("failed to save token"))
 			return
 		}
 
@@ -141,3 +141,4 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		})
 	}
 }
+
