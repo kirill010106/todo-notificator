@@ -2,12 +2,11 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"log/slog"
-	"sync"
 	"time"
 
 	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage"
 )
 
@@ -16,13 +15,10 @@ type Sender interface {
 }
 
 type Scheduler struct {
-	log       *slog.Logger
-	storage   storage.Storage
-	sender    Sender
-	intervals []time.Duration
-
-	mu         sync.Mutex
-	timers     map[string]*time.Timer
+	log        *slog.Logger
+	storage    storage.Storage
+	sender     Sender
+	intervals  []time.Duration
 	reschedule chan struct{}
 }
 
@@ -37,7 +33,6 @@ func New(
 		storage:    storage,
 		sender:     sender,
 		intervals:  intervals,
-		timers:     make(map[string]*time.Timer),
 		reschedule: make(chan struct{}, 1),
 	}
 }
@@ -50,38 +45,38 @@ func (s *Scheduler) Reschedule() {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	s.log.Info("scheduler started", slog.Any("intervals", s.intervals))
+	s.log.Info("polling scheduler started", slog.Any("intervals", s.intervals))
 
-	s.reload(ctx)
+	s.poll(ctx)
 
-	ticker := time.NewTicker(10 * time.Minute)
+	ticker := time.NewTicker(5 * time.Minute)
 	defer ticker.Stop()
 
 	for {
 		select {
 		case <-ticker.C:
-			s.log.Debug("ticker reload")
-			s.reload(ctx)
+			s.log.Debug("ticker poll tick")
+			s.poll(ctx)
 		case <-s.reschedule:
-			s.log.Info("reschedule triggered")
-			s.reload(ctx)
+			s.log.Info("reschedule polling triggered via webhook")
+			s.poll(ctx)
 		case <-ctx.Done():
-			s.cancelAll()
 			s.log.Info("scheduler stopped")
 			return
 		}
 	}
 }
 
-func (s *Scheduler) reload(ctx context.Context) {
+func (s *Scheduler) poll(ctx context.Context) {
 	items, err := s.storage.GetPendingTasksWithUsers(ctx)
 	if err != nil {
-		s.log.Error("failed to load tasks", slog.String("error", err.Error()))
+		s.log.Error("failed to load tasks", sl.Err(err))
 		return
 	}
-	s.log.Info("reloading tasks", slog.Int("count", len(items)))
 
-	s.cancelAll()
+	if len(items) > 0 {
+		s.log.Info("checking tasks for notification", slog.Int("count", len(items)))
+	}
 
 	now := time.Now()
 
@@ -94,56 +89,22 @@ func (s *Scheduler) reload(ctx context.Context) {
 			fireAt := item.Task.Deadline.Add(-interval)
 
 			if !fireAt.After(now) {
-				continue
+
+				s.log.Info("sending notification", slog.Int64("task_id", item.Task.ID), slog.String("email", item.User.Email))
+
+				if err := s.sender.Send(item.User, item.Task, interval); err != nil {
+					s.log.Error("failed to send notification", sl.Err(err))
+					continue
+				}
+
+				if err := s.storage.MarkTaskAsNotified(ctx, item.Task.ID); err != nil {
+					s.log.Error("failed to mark task as notified", slog.Int64("task_id", item.Task.ID), sl.Err(err))
+				}
+
+				break
 			}
-
-			s.scheduleOne(ctx, item.Task, item.User, fireAt, interval)
 		}
 	}
 }
 
-func (s *Scheduler) scheduleOne(
-	ctx context.Context,
-	task domain.Task,
-	user domain.User,
-	fireAt time.Time,
-	interval time.Duration,
-) {
-	key := fmt.Sprintf("%d:%s", task.ID, interval.String())
-	delay := time.Until(fireAt)
 
-	s.log.Debug("scheduling notification",
-		slog.String("key", key),
-		slog.String("task", task.Title),
-		slog.String("to", user.Email),
-		slog.Duration("in", delay),
-	)
-
-	timer := time.AfterFunc(delay, func() {
-		if err := s.sender.Send(user, task, interval); err != nil {
-			s.log.Error("failed to send notification",
-				slog.String("key", key),
-				slog.String("error", err.Error()),
-			)
-		}
-
-		s.mu.Lock()
-		delete(s.timers, key)
-		s.mu.Unlock()
-
-	})
-
-	s.mu.Lock()
-	s.timers[key] = timer
-	s.mu.Unlock()
-}
-
-func (s *Scheduler) cancelAll() {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-
-	for key, timer := range s.timers {
-		timer.Stop()
-		delete(s.timers, key)
-	}
-}

@@ -85,7 +85,7 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 				render.JSON(w, r, resp.Error("invalid credentials"))
 				return
 			}
-			log.Error("failed to get user", slog.String("error", err.Error()))
+			log.Error("failed to get user", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal error"))
 			return
