@@ -15,10 +15,10 @@ import (
 
 // mockStorage имплементирует storage.Storage для тестов
 type mockStorage struct {
-	tasks            []domain.TaskWithUser
-	getTasksErr      error
-	markedAsNotified []int64
-	markTaskErr      error
+	tasks               []domain.TaskWithUser
+	getTasksErr         error
+	markedAsNotified    []int64
+	markTaskErr         error
 }
 
 func (m *mockStorage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error) {
@@ -64,7 +64,7 @@ func (m *mockSender) Send(user domain.User, task domain.Task, interval time.Dura
 func TestScheduler_Poll(t *testing.T) {
 	// Создаем логгер, который не будет флудить в консоль
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-
+	
 	now := time.Now()
 	intervals := []time.Duration{1 * time.Hour}
 
@@ -153,13 +153,13 @@ func TestScheduler_Poll(t *testing.T) {
 
 			// Вместо экспорта метода Poll, мы можем просто положить в пакет scheduler функцию-хелпер для теста или создать алиас.
 			// Но так как функция s.poll() приватная, мы воспользуемся тем, что вызываем ее через триггер reschedule каналом
-
+			
 			// Создаем шедулер
 			s := scheduler.New(log, storageMock, senderMock, intervals)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
-
+			
 			// Запускаем шедулер в фоне - он вызовет s.poll(ctx) при старте!
 			go s.Start(ctx)
 
