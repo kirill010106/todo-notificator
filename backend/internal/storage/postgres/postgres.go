@@ -47,12 +47,12 @@ func (s *Storage) SaveTask(ctx context.Context, task domain.Task) (int64, error)
 	const op = "storage.postgres.saveTask"
 
 	query := `
-INSERT INTO tasks (user_id, title, description, deadline, status, is_notified)
-VALUES ($1, $2, $3, $4, $5, $6)
+INSERT INTO tasks (user_id, title, description, deadline, reminder_at, status, is_notified)
+VALUES ($1, $2, $3, $4, $5, $6, $7)
 RETURNING id`
 	var id int64
 
-	err := s.Db.QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.Status, task.IsNotified).Scan(&id)
+	err := s.Db.QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -156,6 +156,12 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 	if t.Deadline != nil {
 		setValues = append(setValues, fmt.Sprintf("deadline = $%d", argID))
 		args = append(args, *t.Deadline)
+		argID++
+	}
+
+	if t.ReminderAt != nil {
+		setValues = append(setValues, fmt.Sprintf("reminder_at = $%d", argID))
+		args = append(args, *t.ReminderAt)
 		argID++
 	}
 

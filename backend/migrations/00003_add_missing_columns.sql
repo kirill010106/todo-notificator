@@ -1,0 +1,4 @@
+-- +goose Up
+ALTER TABLE tasks ADD COLUMN IF NOT EXISTS updated_at TIMESTAMP WITH TIME ZONE DEFAULT now();
+-- +goose Down
+ALTER TABLE tasks DROP COLUMN IF NOT EXISTS updated_at;

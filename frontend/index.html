@@ -1,741 +1,922 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ru">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>ToDo Notificator</title>
-  <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js" defer></script>
-  <style>
-    [x-cloak] { display: none !important; }
-  </style>
-</head>
-<body class="bg-gray-100 min-h-screen" x-data="app()" x-init="init()">
-
-  <!-- TOAST уведомления -->
-  <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" x-cloak>
-    <template x-for="toast in toasts" :key="toast.id">
-      <div
-        x-show="toast.visible"
-        x-transition:enter="transition ease-out duration-300"
-        x-transition:enter-start="opacity-0 translate-x-8"
-        x-transition:enter-end="opacity-100 translate-x-0"
-        x-transition:leave="transition ease-in duration-200"
-        x-transition:leave-start="opacity-100"
-        x-transition:leave-end="opacity-0"
-        :class="toast.type === 'error' ? 'bg-red-500' : toast.type === 'success' ? 'bg-green-500' : 'bg-blue-500'"
-        class="text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-64"
-      >
-        <span x-text="toast.type === 'error' ? '✕' : '✓'" class="font-bold"></span>
-        <span x-text="toast.message" class="text-sm"></span>
-      </div>
-    </template>
-  </div>
-
-  <!-- AUTH страница (Login / Register) -->
-  <div x-show="!isAuthenticated" x-cloak class="min-h-screen flex items-center justify-center p-4">
-    <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-
-      <!-- Логотип -->
-      <div class="text-center mb-8">
-        <div class="text-4xl mb-2">✅</div>
-        <h1 class="text-2xl font-bold text-gray-800">ToDo Notificator</h1>
-        <p class="text-gray-500 text-sm mt-1">Управляй задачами эффективно</p>
-      </div>
-
-      <!-- Табы -->
-      <div class="flex bg-gray-100 rounded-lg p-1 mb-6">
-        <button
-          @click="authTab = 'login'"
-          :class="authTab === 'login' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
-          class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
-        >Войти</button>
-        <button
-          @click="authTab = 'register'"
-          :class="authTab === 'register' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
-          class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
-        >Регистрация</button>
-      </div>
-
-      <!-- Форма Login -->
-      <form x-show="authTab === 'login'" @submit.prevent="login()" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            x-model="loginForm.email"
-            placeholder="you@example.com"
-            required
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
-        </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
-          <div class="relative">
-            <input
-              :type="showLoginPassword ? 'text' : 'password'"
-              x-model="loginForm.password"
-              placeholder="••••••••"
-              required
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
-            />
-            <button type="button" @click="showLoginPassword = !showLoginPassword"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <span x-text="showLoginPassword ? '🙈' : '👁'"></span>
-            </button>
-          </div>
-        </div>
-        <button
-          type="submit"
-          :disabled="loading"
-          class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-2.5 rounded-lg transition-colors"
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ToDo Notificator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script
+      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
+      defer
+    ></script>
+    <style>
+      [x-cloak] {
+        display: none !important;
+      }
+    </style>
+  </head>
+  <body class="bg-gray-100 min-h-screen" x-data="app()" x-init="init()">
+    <!-- TOAST уведомления -->
+    <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" x-cloak>
+      <template x-for="toast in toasts" :key="toast.id">
+        <div
+          x-show="toast.visible"
+          x-transition:enter="transition ease-out duration-300"
+          x-transition:enter-start="opacity-0 translate-x-8"
+          x-transition:enter-end="opacity-100 translate-x-0"
+          x-transition:leave="transition ease-in duration-200"
+          x-transition:leave-start="opacity-100"
+          x-transition:leave-end="opacity-0"
+          :class="toast.type === 'error' ? 'bg-red-500' : toast.type === 'success' ? 'bg-green-500' : 'bg-blue-500'"
+          class="text-white px-4 py-3 rounded-lg shadow-lg flex items-center gap-2 min-w-64"
         >
-          <span x-show="!loading">Войти</span>
-          <span x-show="loading">Загрузка...</span>
-        </button>
-      </form>
-
-      <!-- Форма Register -->
-      <form x-show="authTab === 'register'" @submit.prevent="register()" class="space-y-4">
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
-          <input
-            type="email"
-            x-model="registerForm.email"
-            placeholder="you@example.com"
-            required
-            class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-          />
+          <span
+            x-text="toast.type === 'error' ? '✕' : '✓'"
+            class="font-bold"
+          ></span>
+          <span x-text="toast.message" class="text-sm"></span>
         </div>
-        <div>
-          <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
-          <div class="relative">
-            <input
-              :type="showRegisterPassword ? 'text' : 'password'"
-              x-model="registerForm.password"
-              placeholder="Минимум 8 символов"
-              required
-              minlength="8"
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
-            />
-            <button type="button" @click="showRegisterPassword = !showRegisterPassword"
-              class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600">
-              <span x-text="showRegisterPassword ? '🙈' : '👁'"></span>
-            </button>
-          </div>
-          <!-- Индикатор силы пароля -->
-          <div class="mt-2 flex gap-1" x-show="registerForm.password.length > 0">
-            <div :class="passwordStrength >= 1 ? 'bg-red-400' : 'bg-gray-200'" class="h-1 flex-1 rounded"></div>
-            <div :class="passwordStrength >= 2 ? 'bg-yellow-400' : 'bg-gray-200'" class="h-1 flex-1 rounded"></div>
-            <div :class="passwordStrength >= 3 ? 'bg-green-400' : 'bg-gray-200'" class="h-1 flex-1 rounded"></div>
-            <div :class="passwordStrength >= 4 ? 'bg-green-600' : 'bg-gray-200'" class="h-1 flex-1 rounded"></div>
-          </div>
-        </div>
-        <button
-          type="submit"
-          :disabled="loading"
-          class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2.5 rounded-lg transition-colors"
-        >
-          <span x-show="!loading">Зарегистрироваться</span>
-          <span x-show="loading">Загрузка...</span>
-        </button>
-      </form>
-
+      </template>
     </div>
-  </div>
 
-  <!-- DASHBOARD (после авторизации) -->
-  <div x-show="isAuthenticated" x-cloak class="min-h-screen flex flex-col">
-
-    <!-- Верхняя панель (Navbar) -->
-    <nav class="bg-white shadow-sm border-b border-gray-200">
-      <div class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between">
-        <div class="flex items-center gap-2">
-          <span class="text-xl">✅</span>
-          <span class="font-bold text-gray-800">ToDo Notificator</span>
+    <!-- AUTH страница (Login / Register) -->
+    <div
+      x-show="!isAuthenticated"
+      x-cloak
+      class="min-h-screen flex items-center justify-center p-4"
+    >
+      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
+        <!-- Логотип -->
+        <div class="text-center mb-8">
+          <div class="text-4xl mb-2">✅</div>
+          <h1 class="text-2xl font-bold text-gray-800">ToDo Notificator</h1>
+          <p class="text-gray-500 text-sm mt-1">Управляй задачами эффективно</p>
         </div>
-        <div class="flex items-center gap-3">
-          <span class="text-sm text-gray-500 hidden sm:block" x-text="userEmail"></span>
+
+        <!-- Табы -->
+        <div class="flex bg-gray-100 rounded-lg p-1 mb-6">
           <button
-            @click="logout()"
-            class="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
+            @click="authTab = 'login'"
+            :class="authTab === 'login' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+            class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
           >
-            <span>Выйти</span>
-            <span>→</span>
+            Войти
+          </button>
+          <button
+            @click="authTab = 'register'"
+            :class="authTab === 'register' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+            class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
+          >
+            Регистрация
           </button>
         </div>
-      </div>
-    </nav>
 
-    <!-- Основной контент -->
-    <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
-
-      <!-- Создание задачи -->
-      <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
-        <h2 class="text-lg font-semibold text-gray-800 mb-4">Новая задача</h2>
-        <form @submit.prevent="createTask()" class="space-y-3">
-          <div class="flex flex-col sm:flex-row gap-3">
-            <input
-              type="text"
-              x-model="newTask.title"
-              placeholder="Название задачи *"
-              required
-              maxlength="255"
-              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-            <input
-              type="datetime-local"
-              x-model="newTask.deadline"
-              class="sm:w-52 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-          </div>
-          <div class="flex gap-3">
-            <textarea
-              x-model="newTask.description"
-              placeholder="Описание (необязательно)"
-              maxlength="2000"
-              rows="2"
-              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-            ></textarea>
-            <button
-              type="submit"
-              :disabled="loadingCreate"
-              class="self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
+        <!-- Форма Login -->
+        <form
+          x-show="authTab === 'login'"
+          @submit.prevent="login()"
+          class="space-y-4"
+        >
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Email</label
             >
-              <span x-show="!loadingCreate">+ Добавить</span>
-              <span x-show="loadingCreate">...</span>
-            </button>
+            <input
+              type="email"
+              x-model="loginForm.email"
+              placeholder="you@example.com"
+              required
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
           </div>
-        </form>
-      </div>
-
-      <!-- Фильтры и статистика -->
-      <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-        <div class="flex gap-2">
-          <button @click="filter = 'all'" :class="filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-300'" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
-            Все <span class="ml-1 opacity-70" x-text="tasks.length"></span>
-          </button>
-          <button @click="filter = 'pending'" :class="filter === 'pending' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 border border-gray-300'" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
-            В работе <span class="ml-1 opacity-70" x-text="tasks.filter(t => t.status === 'pending').length"></span>
-          </button>
-          <button @click="filter = 'done'" :class="filter === 'done' ? 'bg-green-500 text-white' : 'bg-white text-gray-600 border border-gray-300'" class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors">
-            Готово <span class="ml-1 opacity-70" x-text="tasks.filter(t => t.status === 'done').length"></span>
-          </button>
-        </div>
-        <button @click="loadTasks()" class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1">
-          <span :class="loadingTasks ? 'animate-spin' : ''">↻</span>
-          Обновить
-        </button>
-      </div>
-
-      <!-- Список задач -->
-      <div x-show="loadingTasks && tasks.length === 0" class="text-center py-12 text-gray-400">
-        <div class="text-3xl mb-2 animate-pulse">⏳</div>
-        <p>Загрузка задач...</p>
-      </div>
-
-      <div x-show="!loadingTasks && filteredTasks.length === 0" class="text-center py-12 text-gray-400">
-        <div class="text-3xl mb-2">📭</div>
-        <p>Задач нет. Создайте первую!</p>
-      </div>
-
-      <div class="space-y-3">
-        <template x-for="task in filteredTasks" :key="task.id">
-          <div
-            :class="task.status === 'done' ? 'opacity-70' : ''"
-            class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:shadow-md"
-          >
-            <div class="flex items-start gap-3">
-
-              <!-- Чекбокс статуса -->
-              <!-- В режиме редактирования: меняет только локальный editForm.status без API вызова -->
-              <!-- Вне режима редактирования: сразу сохраняет в БД -->
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Пароль</label
+            >
+            <div class="relative">
+              <input
+                :type="showLoginPassword ? 'text' : 'password'"
+                x-model="loginForm.password"
+                placeholder="••••••••"
+                required
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
+              />
               <button
-                @click="editingTaskId === task.id
-                  ? (editForm.status = editForm.status === 'done' ? 'pending' : 'done')
-                  : toggleTaskStatus(task)"
-                :class="(editingTaskId === task.id ? editForm.status : task.status) === 'done'
-                  ? 'bg-green-500 border-green-500 text-white'
-                  : 'border-gray-300 hover:border-green-400'"
-                class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
-                :title="editingTaskId === task.id ? 'Статус изменится после сохранения' : 'Изменить статус'"
+                type="button"
+                @click="showLoginPassword = !showLoginPassword"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
               >
-                <span
-                  x-show="(editingTaskId === task.id ? editForm.status : task.status) === 'done'"
-                  class="text-xs"
-                >✓</span>
+                <span x-text="showLoginPassword ? '🙈' : '👁'"></span>
               </button>
-
-              <!-- Контент задачи -->
-              <div class="flex-1 min-w-0">
-
-                <!-- Просмотр -->
-                <div x-show="editingTaskId !== task.id">
-                  <div class="flex items-start justify-between gap-2">
-                    <h3
-                      :class="task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800'"
-                      class="font-medium text-sm"
-                      x-text="task.title"
-                    ></h3>
-                    <div class="flex items-center gap-1 flex-shrink-0">
-                      <button
-                        @click="startEdit(task)"
-                        class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
-                        title="Редактировать"
-                      >✏️</button>
-                      <button
-                        @click="deleteTask(task.id)"
-                        class="p-1 text-gray-400 hover:text-red-500 transition-colors"
-                        title="Удалить"
-                      >🗑️</button>
-                    </div>
-                  </div>
-                  <p x-show="task.description" x-text="task.description" class="text-xs text-gray-500 mt-1"></p>
-                  <div class="flex items-center gap-3 mt-2">
-                    <span
-                      :class="(editingTaskId === task.id ? editForm.status : task.status) === 'done'
-                        ? 'bg-green-100 text-green-700'
-                        : 'bg-yellow-100 text-yellow-700'"
-                      class="text-xs px-2 py-0.5 rounded-full font-medium"
-                      x-text="(editingTaskId === task.id ? editForm.status : task.status) === 'done' ? 'Выполнено' : 'В работе'"
-                    ></span>
-                    <span x-show="task.deadline" class="text-xs text-gray-400 flex items-center gap-1">
-                      <span>📅</span>
-                      <span x-text="formatDate(task.deadline)"></span>
-                    </span>
-                  </div>
-                </div>
-
-                <!-- Редактирование -->
-                <div x-show="editingTaskId === task.id" class="space-y-2">
-                  <input
-                    type="text"
-                    x-model="editForm.title"
-                    class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                    @keydown.enter="saveEdit(task.id)"
-                    @keydown.escape="editingTaskId = null"
-                  />
-                  <textarea
-                    x-model="editForm.description"
-                    rows="2"
-                    placeholder="Описание"
-                    class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-                  ></textarea>
-                  <div class="flex items-center gap-2">
-                    <input
-                      type="datetime-local"
-                      x-model="editForm.deadline"
-                      class="flex-1 px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
-                    />
-                    <select
-                      x-model="editForm.status"
-                      class="px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
-                    >
-                      <option value="pending">В работе</option>
-                      <option value="done">Готово</option>
-                    </select>
-                  </div>
-                  <div class="flex gap-2">
-                    <button @click="saveEdit(task.id)" class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700">Сохранить</button>
-                    <button @click="editingTaskId = null" class="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-lg hover:bg-gray-300">Отменить</button>
-                  </div>
-                </div>
-
-              </div>
             </div>
           </div>
-        </template>
+          <button
+            type="submit"
+            :disabled="loading"
+            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-2.5 rounded-lg transition-colors"
+          >
+            <span x-show="!loading">Войти</span>
+            <span x-show="loading">Загрузка...</span>
+          </button>
+        </form>
+
+        <!-- Форма Register -->
+        <form
+          x-show="authTab === 'register'"
+          @submit.prevent="register()"
+          class="space-y-4"
+        >
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Email</label
+            >
+            <input
+              type="email"
+              x-model="registerForm.email"
+              placeholder="you@example.com"
+              required
+              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+          </div>
+          <div>
+            <label class="block text-sm font-medium text-gray-700 mb-1"
+              >Пароль</label
+            >
+            <div class="relative">
+              <input
+                :type="showRegisterPassword ? 'text' : 'password'"
+                x-model="registerForm.password"
+                placeholder="Минимум 8 символов"
+                required
+                minlength="8"
+                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
+              />
+              <button
+                type="button"
+                @click="showRegisterPassword = !showRegisterPassword"
+                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+              >
+                <span x-text="showRegisterPassword ? '🙈' : '👁'"></span>
+              </button>
+            </div>
+            <!-- Индикатор силы пароля -->
+            <div
+              class="mt-2 flex gap-1"
+              x-show="registerForm.password.length > 0"
+            >
+              <div
+                :class="passwordStrength >= 1 ? 'bg-red-400' : 'bg-gray-200'"
+                class="h-1 flex-1 rounded"
+              ></div>
+              <div
+                :class="passwordStrength >= 2 ? 'bg-yellow-400' : 'bg-gray-200'"
+                class="h-1 flex-1 rounded"
+              ></div>
+              <div
+                :class="passwordStrength >= 3 ? 'bg-green-400' : 'bg-gray-200'"
+                class="h-1 flex-1 rounded"
+              ></div>
+              <div
+                :class="passwordStrength >= 4 ? 'bg-green-600' : 'bg-gray-200'"
+                class="h-1 flex-1 rounded"
+              ></div>
+            </div>
+          </div>
+          <button
+            type="submit"
+            :disabled="loading"
+            class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2.5 rounded-lg transition-colors"
+          >
+            <span x-show="!loading">Зарегистрироваться</span>
+            <span x-show="loading">Загрузка...</span>
+          </button>
+        </form>
       </div>
+    </div>
 
-      <!-- Пагинация -->
-      <div x-show="pagination.total > pagination.limit" class="flex items-center justify-center gap-2 mt-6">
-        <button
-          @click="changePage(-1)"
-          :disabled="pagination.offset === 0"
-          class="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50"
-        >← Назад</button>
-        <span class="text-sm text-gray-500">
-          <span x-text="Math.floor(pagination.offset / pagination.limit) + 1"></span>
-          из
-          <span x-text="Math.ceil(pagination.total / pagination.limit)"></span>
-        </span>
-        <button
-          @click="changePage(1)"
-          :disabled="pagination.offset + pagination.limit >= pagination.total"
-          class="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50"
-        >Вперёд →</button>
-      </div>
+    <!-- DASHBOARD (после авторизации) -->
+    <div x-show="isAuthenticated" x-cloak class="min-h-screen flex flex-col">
+      <!-- Верхняя панель (Navbar) -->
+      <nav class="bg-white shadow-sm border-b border-gray-200">
+        <div
+          class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between"
+        >
+          <div class="flex items-center gap-2">
+            <span class="text-xl">✅</span>
+            <span class="font-bold text-gray-800">ToDo Notificator</span>
+          </div>
+          <div class="flex items-center gap-3">
+            <span
+              class="text-sm text-gray-500 hidden sm:block"
+              x-text="userEmail"
+            ></span>
+            <button
+              @click="logout()"
+              class="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
+            >
+              <span>Выйти</span>
+              <span>→</span>
+            </button>
+          </div>
+        </div>
+      </nav>
 
-    </main>
-  </div>
+      <!-- Основной контент -->
+      <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        <!-- Создание задачи -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Новая задача</h2>
+          <form @submit.prevent="createTask()" class="space-y-3">
+            <div class="flex flex-col sm:flex-row gap-3 items-end">
+              <input
+                type="text"
+                x-model="newTask.title"
+                placeholder="Название задачи *"
+                required
+                maxlength="255"
+                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              />
+              <div class="flex flex-col gap-1 w-full sm:w-52">
+                <label class="text-xs text-gray-500">Дедлайн</label>
+                <input
+                  type="datetime-local"
+                  x-model="newTask.deadline"
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div class="flex flex-col gap-1 w-full sm:w-52">
+                <label class="text-xs text-gray-500">Напомнить</label>
+                <input
+                  type="datetime-local"
+                  x-model="newTask.reminder_at"
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+            </div>
+            <div class="flex gap-3">
+              <textarea
+                x-model="newTask.description"
+                placeholder="Описание (необязательно)"
+                maxlength="2000"
+                rows="2"
+                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+              ></textarea>
+              <button
+                type="submit"
+                :disabled="loadingCreate"
+                class="self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
+              >
+                <span x-show="!loadingCreate">+ Добавить</span>
+                <span x-show="loadingCreate">...</span>
+              </button>
+            </div>
+          </form>
+        </div>
 
-  <script>
-    const API_BASE = 'http://localhost:8082/api/v1'
+        <!-- Фильтры и статистика -->
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+          <div class="flex gap-2">
+            <button
+              @click="filter = 'all'"
+              :class="filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Все <span class="ml-1 opacity-70" x-text="tasks.length"></span>
+            </button>
+            <button
+              @click="filter = 'pending'"
+              :class="filter === 'pending' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              В работе
+              <span
+                class="ml-1 opacity-70"
+                x-text="tasks.filter(t => t.status === 'pending').length"
+              ></span>
+            </button>
+            <button
+              @click="filter = 'done'"
+              :class="filter === 'done' ? 'bg-green-500 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Готово
+              <span
+                class="ml-1 opacity-70"
+                x-text="tasks.filter(t => t.status === 'done').length"
+              ></span>
+            </button>
+          </div>
+          <button
+            @click="loadTasks()"
+            class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+          >
+            <span :class="loadingTasks ? 'animate-spin' : ''">↻</span>
+            Обновить
+          </button>
+        </div>
 
-    function app() {
-      return {
-        // Состояние аутентификации
-        isAuthenticated: false,
-        authTab: 'login',
-        userEmail: '',
+        <!-- Список задач -->
+        <div
+          x-show="loadingTasks && tasks.length === 0"
+          class="text-center py-12 text-gray-400"
+        >
+          <div class="text-3xl mb-2 animate-pulse">⏳</div>
+          <p>Загрузка задач...</p>
+        </div>
 
-        // Формы
-        loginForm: { email: '', password: '' },
-        registerForm: { email: '', password: '' },
-        showLoginPassword: false,
-        showRegisterPassword: false,
+        <div
+          x-show="!loadingTasks && filteredTasks.length === 0"
+          class="text-center py-12 text-gray-400"
+        >
+          <div class="text-3xl mb-2">📭</div>
+          <p>Задач нет. Создайте первую!</p>
+        </div>
 
-        // Задачи
-        tasks: [],
-        filter: 'all',
-        newTask: { title: '', description: '', deadline: '' },
-        editingTaskId: null,
-        editForm: { title: '', description: '', deadline: '', status: 'pending' },
+        <div class="space-y-3">
+          <template x-for="task in filteredTasks" :key="task.id">
+            <div
+              :class="task.status === 'done' ? 'opacity-70' : ''"
+              class="bg-white rounded-xl shadow-sm border border-gray-200 p-4 transition-all hover:shadow-md"
+            >
+              <div class="flex items-start gap-3">
+                <!-- Чекбокс статуса -->
+                <!-- В режиме редактирования: меняет только локальный editForm.status без API вызова -->
+                <!-- Вне режима редактирования: сразу сохраняет в БД -->
+                <button
+                  @click="editingTaskId === task.id
+                  ? (editForm.status = editForm.status === 'done' ? 'pending' : 'done')
+                  : toggleTaskStatus(task)"
+                  :class="(editingTaskId === task.id ? editForm.status : task.status) === 'done'
+                  ? 'bg-green-500 border-green-500 text-white'
+                  : 'border-gray-300 hover:border-green-400'"
+                  class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                  :title="editingTaskId === task.id ? 'Статус изменится после сохранения' : 'Изменить статус'"
+                >
+                  <span
+                    x-show="(editingTaskId === task.id ? editForm.status : task.status) === 'done'"
+                    class="text-xs"
+                    >✓</span
+                  >
+                </button>
 
-        // Пагинация
-        pagination: { limit: 20, offset: 0, total: 0 },
+                <!-- Контент задачи -->
+                <div class="flex-1 min-w-0">
+                  <!-- Просмотр -->
+                  <div x-show="editingTaskId !== task.id">
+                    <div class="flex items-start justify-between gap-2">
+                      <h3
+                        :class="task.status === 'done' ? 'line-through text-gray-400' : 'text-gray-800'"
+                        class="font-medium text-sm"
+                        x-text="task.title"
+                      ></h3>
+                      <div class="flex items-center gap-1 flex-shrink-0">
+                        <button
+                          @click="startEdit(task)"
+                          class="p-1 text-gray-400 hover:text-blue-500 transition-colors"
+                          title="Редактировать"
+                        >
+                          ✏️
+                        </button>
+                        <button
+                          @click="deleteTask(task.id)"
+                          class="p-1 text-gray-400 hover:text-red-500 transition-colors"
+                          title="Удалить"
+                        >
+                          🗑️
+                        </button>
+                      </div>
+                    </div>
+                    <p
+                      x-show="task.description"
+                      x-text="task.description"
+                      class="text-xs text-gray-500 mt-1"
+                    ></p>
+                    <div class="flex items-center gap-3 mt-2">
+                      <span
+                        :class="(editingTaskId === task.id ? editForm.status : task.status) === 'done'
+                        ? 'bg-green-100 text-green-700'
+                        : 'bg-yellow-100 text-yellow-700'"
+                        class="text-xs px-2 py-0.5 rounded-full font-medium"
+                        x-text="(editingTaskId === task.id ? editForm.status : task.status) === 'done' ? 'Выполнено' : 'В работе'"
+                      ></span>
+                      <span
+                        x-show="task.deadline"
+                        class="text-xs text-gray-400 flex items-center gap-1"
+                      >
+                        <span title="Дедлайн">📅</span>
+                        <span x-text="formatDate(task.deadline)"></span>
+                      </span>
+                      <span
+                        x-show="task.reminder_at"
+                        class="text-xs text-blue-400 flex items-center gap-1"
+                      >
+                        <span title="Напоминание">⏰</span>
+                        <span x-text="formatDate(task.reminder_at)"></span>
+                      </span>
+                    </div>
+                  </div>
 
-        // UI состояние
-        loading: false,
-        loadingCreate: false,
-        loadingTasks: false,
-        toasts: [],
+                  <!-- Редактирование -->
+                  <div x-show="editingTaskId === task.id" class="space-y-2">
+                    <input
+                      type="text"
+                      x-model="editForm.title"
+                      class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                      @keydown.enter="saveEdit(task.id)"
+                      @keydown.escape="editingTaskId = null"
+                    />
+                    <textarea
+                      x-model="editForm.description"
+                      rows="2"
+                      placeholder="Описание"
+                      class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                    ></textarea>
+                    <div class="flex items-center gap-2">
+                      <div class="flex flex-col gap-1 flex-1">
+                        <label class="text-xs text-gray-500">Дедлайн</label>
+                        <input
+                          type="datetime-local"
+                          x-model="editForm.deadline"
+                          class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
+                        />
+                      </div>
+                      <div class="flex flex-col gap-1 flex-1">
+                        <label class="text-xs text-gray-500">Напомнить</label>
+                        <input
+                          type="datetime-local"
+                          x-model="editForm.reminder_at"
+                          class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
+                        />
+                      </div>
+                      <select
+                        x-model="editForm.status"
+                        class="px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
+                      >
+                        <option value="pending">В работе</option>
+                        <option value="done">Готово</option>
+                      </select>
+                    </div>
+                    <div class="flex gap-2">
+                      <button
+                        @click="saveEdit(task.id)"
+                        class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"
+                      >
+                        Сохранить
+                      </button>
+                      <button
+                        @click="editingTaskId = null"
+                        class="px-3 py-1 bg-gray-200 text-gray-600 text-xs rounded-lg hover:bg-gray-300"
+                      >
+                        Отменить
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
 
-        // Вычисляемые свойства
-        get filteredTasks() {
-          if (this.filter === 'all') return this.tasks
-          return this.tasks.filter(t => t.status === this.filter)
-        },
+        <!-- Пагинация -->
+        <div
+          x-show="pagination.total > pagination.limit"
+          class="flex items-center justify-center gap-2 mt-6"
+        >
+          <button
+            @click="changePage(-1)"
+            :disabled="pagination.offset === 0"
+            class="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50"
+          >
+            ← Назад
+          </button>
+          <span class="text-sm text-gray-500">
+            <span
+              x-text="Math.floor(pagination.offset / pagination.limit) + 1"
+            ></span>
+            из
+            <span
+              x-text="Math.ceil(pagination.total / pagination.limit)"
+            ></span>
+          </span>
+          <button
+            @click="changePage(1)"
+            :disabled="pagination.offset + pagination.limit >= pagination.total"
+            class="px-3 py-1.5 rounded-lg border border-gray-300 text-sm disabled:opacity-40 hover:bg-gray-50"
+          >
+            Вперёд →
+          </button>
+        </div>
+      </main>
+    </div>
 
-        get passwordStrength() {
-          const p = this.registerForm.password
-          if (p.length === 0) return 0
-          let score = 0
-          if (p.length >= 8) score++
-          if (p.length >= 12) score++
-          if (/[A-Z]/.test(p) && /[a-z]/.test(p)) score++
-          if (/[0-9]/.test(p) || /[^A-Za-z0-9]/.test(p)) score++
-          return score
-        },
+    <script>
+      const API_BASE = "http://localhost:8082/api/v1";
 
-        // Инициализация
-        init() {
-          const accessToken = localStorage.getItem('access_token')
-          const email = localStorage.getItem('user_email')
-          if (accessToken) {
-            this.isAuthenticated = true
-            this.userEmail = email || ''
-            this.loadTasks()
-          }
-        },
+      function app() {
+        return {
+          // Состояние аутентификации
+          isAuthenticated: false,
+          authTab: "login",
+          userEmail: "",
 
-        // Уведомления
-        showToast(message, type = 'success') {
-          const id = Date.now()
-          this.toasts.push({ id, message, type, visible: true })
-          setTimeout(() => {
-            const toast = this.toasts.find(t => t.id === id)
-            if (toast) toast.visible = false
+          // Формы
+          loginForm: { email: "", password: "" },
+          registerForm: { email: "", password: "" },
+          showLoginPassword: false,
+          showRegisterPassword: false,
+
+          // Задачи
+          tasks: [],
+          filter: "all",
+          newTask: {
+            title: "",
+            description: "",
+            deadline: "",
+            reminder_at: "",
+          },
+          editingTaskId: null,
+          editForm: {
+            title: "",
+            description: "",
+            deadline: "",
+            reminder_at: "",
+            status: "pending",
+          },
+
+          // Пагинация
+          pagination: { limit: 20, offset: 0, total: 0 },
+
+          // UI состояние
+          loading: false,
+          loadingCreate: false,
+          loadingTasks: false,
+          toasts: [],
+
+          // Вычисляемые свойства
+          get filteredTasks() {
+            if (this.filter === "all") return this.tasks;
+            return this.tasks.filter((t) => t.status === this.filter);
+          },
+
+          get passwordStrength() {
+            const p = this.registerForm.password;
+            if (p.length === 0) return 0;
+            let score = 0;
+            if (p.length >= 8) score++;
+            if (p.length >= 12) score++;
+            if (/[A-Z]/.test(p) && /[a-z]/.test(p)) score++;
+            if (/[0-9]/.test(p) || /[^A-Za-z0-9]/.test(p)) score++;
+            return score;
+          },
+
+          // Инициализация
+          init() {
+            const accessToken = localStorage.getItem("access_token");
+            const email = localStorage.getItem("user_email");
+            if (accessToken) {
+              this.isAuthenticated = true;
+              this.userEmail = email || "";
+              this.loadTasks();
+            }
+          },
+
+          // Уведомления
+          showToast(message, type = "success") {
+            const id = Date.now();
+            this.toasts.push({ id, message, type, visible: true });
             setTimeout(() => {
-              this.toasts = this.toasts.filter(t => t.id !== id)
-            }, 300)
-          }, 3000)
-        },
+              const toast = this.toasts.find((t) => t.id === id);
+              if (toast) toast.visible = false;
+              setTimeout(() => {
+                this.toasts = this.toasts.filter((t) => t.id !== id);
+              }, 300);
+            }, 3000);
+          },
 
-        // API запрос с автоматическим обновлением токена
-        async apiRequest(path, options = {}) {
-          const accessToken = localStorage.getItem('access_token')
+          // API запрос с автоматическим обновлением токена
+          async apiRequest(path, options = {}) {
+            const accessToken = localStorage.getItem("access_token");
 
-          const config = {
-            headers: {
-              'Content-Type': 'application/json',
-              ...(accessToken ? { 'Authorization': `Bearer ${accessToken}` } : {}),
-              ...options.headers
-            },
-            ...options
-          }
+            const config = {
+              headers: {
+                "Content-Type": "application/json",
+                ...(accessToken
+                  ? { Authorization: `Bearer ${accessToken}` }
+                  : {}),
+                ...options.headers,
+              },
+              ...options,
+            };
 
-          let response = await fetch(`${API_BASE}${path}`, config)
+            let response = await fetch(`${API_BASE}${path}`, config);
 
-          // Если 401 - пробуем обновить токен
-          if (response.status === 401) {
-            const refreshed = await this.refreshToken()
-            if (refreshed) {
-              config.headers.Authorization = `Bearer ${localStorage.getItem('access_token')}`
-              response = await fetch(`${API_BASE}${path}`, config)
-            } else {
-              this.handleLogout()
-              return null
-            }
-          }
-
-          return response
-        },
-
-        // Обновление токена
-        async refreshToken() {
-          const refreshTokenValue = localStorage.getItem('refresh_token')
-          if (!refreshTokenValue) return false
-
-          try {
-            const response = await fetch(`${API_BASE}/refresh`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ refresh_token: refreshTokenValue })
-            })
-
-            if (!response.ok) return false
-
-            const data = await response.json()
-            if (data.access_token) {
-              localStorage.setItem('access_token', data.access_token)
-              localStorage.setItem('refresh_token', data.refresh_token)
-              return true
+            // Если 401 - пробуем обновить токен
+            if (response.status === 401) {
+              const refreshed = await this.refreshToken();
+              if (refreshed) {
+                config.headers.Authorization = `Bearer ${localStorage.getItem("access_token")}`;
+                response = await fetch(`${API_BASE}${path}`, config);
+              } else {
+                this.handleLogout();
+                return null;
+              }
             }
 
-            return false
-          } catch {
-            return false
-          }
-        },
+            return response;
+          },
 
-        // Аутентификация
-        async login() {
-          this.loading = true
-          try {
-            const response = await fetch(`${API_BASE}/login`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(this.loginForm)
-            })
+          // Обновление токена
+          async refreshToken() {
+            const refreshTokenValue = localStorage.getItem("refresh_token");
+            if (!refreshTokenValue) return false;
 
-            const data = await response.json()
+            try {
+              const response = await fetch(`${API_BASE}/refresh`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ refresh_token: refreshTokenValue }),
+              });
 
-            if (!response.ok) {
-              this.showToast(data.error || 'Ошибка входа', 'error')
-              return
+              if (!response.ok) return false;
+
+              const data = await response.json();
+              if (data.access_token) {
+                localStorage.setItem("access_token", data.access_token);
+                localStorage.setItem("refresh_token", data.refresh_token);
+                return true;
+              }
+
+              return false;
+            } catch {
+              return false;
             }
+          },
 
-            localStorage.setItem('access_token', data.access_token || data.token)
-            if (data.refresh_token) localStorage.setItem('refresh_token', data.refresh_token)
-            localStorage.setItem('user_email', this.loginForm.email)
+          // Аутентификация
+          async login() {
+            this.loading = true;
+            try {
+              const response = await fetch(`${API_BASE}/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(this.loginForm),
+              });
 
-            this.userEmail = this.loginForm.email
-            this.isAuthenticated = true
-            this.loginForm = { email: '', password: '' }
+              const data = await response.json();
 
-            this.showToast('Добро пожаловать!', 'success')
-            this.loadTasks()
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          } finally {
-            this.loading = false
-          }
-        },
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка входа", "error");
+                return;
+              }
 
-        async register() {
-          this.loading = true
-          try {
-            const response = await fetch(`${API_BASE}/register`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(this.registerForm)
-            })
+              localStorage.setItem(
+                "access_token",
+                data.access_token || data.token,
+              );
+              if (data.refresh_token)
+                localStorage.setItem("refresh_token", data.refresh_token);
+              localStorage.setItem("user_email", this.loginForm.email);
 
-            const data = await response.json()
+              this.userEmail = this.loginForm.email;
+              this.isAuthenticated = true;
+              this.loginForm = { email: "", password: "" };
 
-            if (!response.ok) {
-              this.showToast(data.error || 'Ошибка регистрации', 'error')
-              return
+              this.showToast("Добро пожаловать!", "success");
+              this.loadTasks();
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            } finally {
+              this.loading = false;
             }
+          },
 
-            this.showToast('Аккаунт создан! Теперь войдите.', 'success')
-            this.authTab = 'login'
-            this.loginForm.email = this.registerForm.email
-            this.registerForm = { email: '', password: '' }
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          } finally {
-            this.loading = false
-          }
-        },
+          async register() {
+            this.loading = true;
+            try {
+              const response = await fetch(`${API_BASE}/register`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(this.registerForm),
+              });
 
-        async logout() {
-          try {
-            const refreshTokenValue = localStorage.getItem('refresh_token')
-            if (refreshTokenValue) {
-              await this.apiRequest('/logout', {
-                method: 'POST',
-                body: JSON.stringify({ refresh_token: refreshTokenValue })
-              })
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка регистрации", "error");
+                return;
+              }
+
+              this.showToast("Аккаунт создан! Теперь войдите.", "success");
+              this.authTab = "login";
+              this.loginForm.email = this.registerForm.email;
+              this.registerForm = { email: "", password: "" };
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            } finally {
+              this.loading = false;
             }
-          } catch {}
-          this.handleLogout()
-        },
+          },
 
-        handleLogout() {
-          localStorage.removeItem('access_token')
-          localStorage.removeItem('refresh_token')
-          localStorage.removeItem('user_email')
-          this.isAuthenticated = false
-          this.tasks = []
-          this.userEmail = ''
-          this.showToast('Вы вышли из системы', 'info')
-        },
+          async logout() {
+            try {
+              const refreshTokenValue = localStorage.getItem("refresh_token");
+              if (refreshTokenValue) {
+                await this.apiRequest("/logout", {
+                  method: "POST",
+                  body: JSON.stringify({ refresh_token: refreshTokenValue }),
+                });
+              }
+            } catch {}
+            this.handleLogout();
+          },
 
-        // Задачи
-        async loadTasks() {
-          this.loadingTasks = true
-          try {
-            const params = new URLSearchParams({
-              limit: this.pagination.limit,
-              offset: this.pagination.offset
-            })
-            const response = await this.apiRequest(`/tasks?${params}`)
-            if (!response) return
+          handleLogout() {
+            localStorage.removeItem("access_token");
+            localStorage.removeItem("refresh_token");
+            localStorage.removeItem("user_email");
+            this.isAuthenticated = false;
+            this.tasks = [];
+            this.userEmail = "";
+            this.showToast("Вы вышли из системы", "info");
+          },
 
-            const data = await response.json()
+          // Задачи
+          async loadTasks() {
+            this.loadingTasks = true;
+            try {
+              const params = new URLSearchParams({
+                limit: this.pagination.limit,
+                offset: this.pagination.offset,
+              });
+              const response = await this.apiRequest(`/tasks?${params}`);
+              if (!response) return;
 
-            if (!response.ok) {
-              this.showToast(data.error || 'Ошибка загрузки задач', 'error')
-              return
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка загрузки задач", "error");
+                return;
+              }
+
+              this.tasks = data.tasks || [];
+              if (data.pagination) {
+                this.pagination.total = data.pagination.total;
+              }
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            } finally {
+              this.loadingTasks = false;
             }
+          },
 
-            this.tasks = data.tasks || []
-            if (data.pagination) {
-              this.pagination.total = data.pagination.total
+          async createTask() {
+            if (!this.newTask.title.trim()) return;
+
+            this.loadingCreate = true;
+            try {
+              const body = {
+                title: this.newTask.title.trim(),
+                description: this.newTask.description.trim(),
+              };
+              if (this.newTask.deadline) {
+                body.deadline = new Date(this.newTask.deadline).toISOString();
+              }
+              if (this.newTask.reminder_at) {
+                body.reminder_at = new Date(
+                  this.newTask.reminder_at,
+                ).toISOString();
+              }
+
+              const response = await this.apiRequest("/tasks", {
+                method: "POST",
+                body: JSON.stringify(body),
+              });
+              if (!response) return;
+
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка создания задачи", "error");
+                return;
+              }
+
+              this.newTask = { title: "", description: "", deadline: "" };
+              this.showToast("Задача создана!", "success");
+              await this.loadTasks();
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            } finally {
+              this.loadingCreate = false;
             }
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          } finally {
-            this.loadingTasks = false
-          }
-        },
+          },
 
-        async createTask() {
-          if (!this.newTask.title.trim()) return
+          async deleteTask(taskId) {
+            if (!confirm("Удалить задачу?")) return;
 
-          this.loadingCreate = true
-          try {
+            try {
+              const response = await this.apiRequest(`/tasks/${taskId}`, {
+                method: "DELETE",
+              });
+              if (!response) return;
+
+              if (response.status === 204 || response.ok) {
+                this.tasks = this.tasks.filter((t) => t.id !== taskId);
+                this.showToast("Задача удалена", "success");
+              } else {
+                const data = await response.json();
+                this.showToast(data.error || "Ошибка удаления", "error");
+              }
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            }
+          },
+
+          async toggleTaskStatus(task) {
+            const newStatus = task.status === "done" ? "pending" : "done";
+            await this.updateTask(task.id, { status: newStatus });
+          },
+
+          startEdit(task) {
+            this.editingTaskId = task.id;
+            this.editForm = {
+              title: task.title,
+              description: task.description || "",
+              deadline: task.deadline ? task.deadline.slice(0, 16) : "",
+              reminder_at: task.reminder_at
+                ? task.reminder_at.slice(0, 16)
+                : "",
+              status: task.status,
+            };
+          },
+
+          async saveEdit(taskId) {
             const body = {
-              title: this.newTask.title.trim(),
-              description: this.newTask.description.trim(),
+              title: this.editForm.title.trim(),
+              description: this.editForm.description.trim(),
+              status: this.editForm.status,
+            };
+            if (this.editForm.deadline) {
+              body.deadline = new Date(this.editForm.deadline).toISOString();
             }
-            if (this.newTask.deadline) {
-              body.deadline = new Date(this.newTask.deadline).toISOString()
-            }
-
-            const response = await this.apiRequest('/tasks', {
-              method: 'POST',
-              body: JSON.stringify(body)
-            })
-            if (!response) return
-
-            const data = await response.json()
-
-            if (!response.ok) {
-              this.showToast(data.error || 'Ошибка создания задачи', 'error')
-              return
-            }
-
-            this.newTask = { title: '', description: '', deadline: '' }
-            this.showToast('Задача создана!', 'success')
-            await this.loadTasks()
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          } finally {
-            this.loadingCreate = false
-          }
-        },
-
-        async deleteTask(taskId) {
-          if (!confirm('Удалить задачу?')) return
-
-          try {
-            const response = await this.apiRequest(`/tasks/${taskId}`, { method: 'DELETE' })
-            if (!response) return
-
-            if (response.status === 204 || response.ok) {
-              this.tasks = this.tasks.filter(t => t.id !== taskId)
-              this.showToast('Задача удалена', 'success')
+            if (this.editForm.reminder_at) {
+              body.reminder_at = new Date(
+                this.editForm.reminder_at,
+              ).toISOString();
             } else {
-              const data = await response.json()
-              this.showToast(data.error || 'Ошибка удаления', 'error')
-            }
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          }
-        },
-
-        async toggleTaskStatus(task) {
-          const newStatus = task.status === 'done' ? 'pending' : 'done'
-          await this.updateTask(task.id, { status: newStatus })
-        },
-
-        startEdit(task) {
-          this.editingTaskId = task.id
-          this.editForm = {
-            title: task.title,
-            description: task.description || '',
-            deadline: task.deadline ? task.deadline.slice(0, 16) : '',
-            status: task.status
-          }
-        },
-
-        async saveEdit(taskId) {
-          const body = {
-            title: this.editForm.title.trim(),
-            description: this.editForm.description.trim(),
-            status: this.editForm.status,
-          }
-          if (this.editForm.deadline) {
-            body.deadline = new Date(this.editForm.deadline).toISOString()
-          }
-
-          await this.updateTask(taskId, body)
-          this.editingTaskId = null
-        },
-
-        async updateTask(taskId, fields) {
-          try {
-            const response = await this.apiRequest(`/tasks/${taskId}`, {
-              method: 'PATCH',
-              body: JSON.stringify(fields)
-            })
-            if (!response) return
-
-            const data = await response.json()
-
-            if (!response.ok) {
-              this.showToast(data.error || 'Ошибка обновления', 'error')
-              return
+              body.reminder_at = null;
             }
 
-            this.showToast('Задача обновлена', 'success')
-            await this.loadTasks()
-          } catch (err) {
-            this.showToast('Ошибка подключения к серверу', 'error')
-          }
-        },
+            await this.updateTask(taskId, body);
+            this.editingTaskId = null;
+          },
 
-        // Пагинация
-        changePage(direction) {
-          this.pagination.offset = Math.max(0, this.pagination.offset + direction * this.pagination.limit)
-          this.loadTasks()
-        },
+          async updateTask(taskId, fields) {
+            try {
+              const response = await this.apiRequest(`/tasks/${taskId}`, {
+                method: "PATCH",
+                body: JSON.stringify(fields),
+              });
+              if (!response) return;
 
-        // Форматирование даты
-        formatDate(dateStr) {
-          if (!dateStr) return ''
-          const d = new Date(dateStr)
-          return d.toLocaleString('ru-RU', {
-            day: '2-digit', month: '2-digit', year: 'numeric',
-            hour: '2-digit', minute: '2-digit'
-          })
-        }
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка обновления", "error");
+                return;
+              }
+
+              this.showToast("Задача обновлена", "success");
+              await this.loadTasks();
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            }
+          },
+
+          // Пагинация
+          changePage(direction) {
+            this.pagination.offset = Math.max(
+              0,
+              this.pagination.offset + direction * this.pagination.limit,
+            );
+            this.loadTasks();
+          },
+
+          // Форматирование даты
+          formatDate(dateStr) {
+            if (!dateStr) return "";
+            const d = new Date(dateStr);
+            return d.toLocaleString("ru-RU", {
+              day: "2-digit",
+              month: "2-digit",
+              year: "numeric",
+              hour: "2-digit",
+              minute: "2-digit",
+            });
+          },
+        };
       }
-    }
-  </script>
-
-</body>
+    </script>
+  </body>
 </html>

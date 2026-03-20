@@ -27,6 +27,7 @@ type Request struct {
 	Title       *string    `json:"title" validate:"omitempty,max=255"`
 	Description *string    `json:"description" validate:"omitempty,max=2000"`
 	Deadline    *time.Time `json:"deadline,omitzero"`
+	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
 	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done"`
 }
 
@@ -65,6 +66,7 @@ func (r Request) ToDomain() domain.TaskUpdate {
 		Title:       r.Title,
 		Description: r.Description,
 		Deadline:    r.Deadline,
+		ReminderAt:  r.ReminderAt,
 		Status:      r.Status,
 	}
 }
@@ -73,7 +75,8 @@ func (r Request) IsEmpty() bool {
 	return r.Title == nil &&
 		r.Description == nil &&
 		r.Deadline == nil &&
-		r.Status == nil
+		r.Status == nil &&
+		r.ReminderAt == nil
 }
 
 func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
@@ -158,6 +161,12 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 			log.Error("internal validation error", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal server error"))
+			return
+		}
+
+		if req.ReminderAt != nil && req.ReminderAt.Before(time.Now()) {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("reminder_at must be in the future"))
 			return
 		}
 

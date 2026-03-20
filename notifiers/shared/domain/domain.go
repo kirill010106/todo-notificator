@@ -7,6 +7,7 @@ type Task struct {
 	UserID      int64
 	Title       string
 	Description string
+	ReminderAt  *time.Time
 	Deadline    *time.Time
 	Status      string
 }
@@ -22,8 +23,8 @@ type TaskWithUser struct {
 }
 
 type NotificationEvent struct {
-	Task Task
-	User User
-	FireAt time.Time
+	Task     Task
+	User     User
+	FireAt   time.Time
 	Interval time.Duration
 }

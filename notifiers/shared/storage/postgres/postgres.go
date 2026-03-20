@@ -43,7 +43,7 @@ func (s *Storage) GetPendingTasksWithDeadline(ctx context.Context) ([]domain.Tas
 
 	query :=
 		`
-	SELECT id, user_id, title, description, deadline, status
+	SELECT id, user_id, title, description, reminder_at, deadline, status
 	FROM tasks
 	WHERE status = 'pending'
 		AND deadline IS NOT NULL
@@ -61,7 +61,7 @@ func (s *Storage) GetPendingTasksWithDeadline(ctx context.Context) ([]domain.Tas
 	for rows.Next() {
 		var t domain.Task
 		if err := rows.Scan(
-			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.Status,
+			&t.ID, &t.UserID, &t.Title, &t.Description, &t.ReminderAt, &t.Deadline, &t.Status,
 		); err != nil {
 			return nil, fmt.Errorf("%s scan: %w", op, err)
 		}
@@ -98,14 +98,14 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error) {
 	const op = "storage.postgres.GetPendingTasksWithUsers"
 	query := `
-	SELECT t.id, t.user_id, t.title, t.description, t.deadline, t.status, u.id, u.email
+	SELECT t.id, t.user_id, t.title, t.description, t.reminder_at, t.deadline, t.status, u.id, u.email
 	FROM tasks t
 	JOIN users u ON u.id = t.user_id
 	WHERE t.status = 'pending'
 	AND t.is_notified = false
-	AND t.deadline IS NOT NULL
-	AND t.deadline > NOW()
-	ORDER BY t.deadline ASC
+	AND t.reminder_at IS NOT NULL
+	AND t.reminder_at <= NOW()
+	ORDER BY t.reminder_at ASC
 	`
 
 	rows, err := s.Db.QueryContext(ctx, query)
@@ -122,6 +122,7 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 			&tw.Task.UserID,
 			&tw.Task.Title,
 			&tw.Task.Description,
+			&tw.Task.ReminderAt,
 			&tw.Task.Deadline,
 			&tw.Task.Status,
 			&tw.User.ID,
@@ -138,7 +139,7 @@ func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([
 	const op = "storage.postgres.GetTasksDueBetween"
 
 	query := `
-		SELECT id, user_id, title, description, deadline, status
+		SELECT id, user_id, title, description, reminder_at, deadline, status
 		FROM tasks
 		WHERE status = 'pending'
 			AND deadline IS NOT NULL
@@ -156,7 +157,7 @@ func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([
 	for rows.Next() {
 		var t domain.Task
 		if err := rows.Scan(
-			&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.Status,
+			&t.ID, &t.UserID, &t.Title, &t.Description, &t.ReminderAt, &t.Deadline, &t.Status,
 		); err != nil {
 			return nil, fmt.Errorf("%s scan: %w", op, err)
 		}

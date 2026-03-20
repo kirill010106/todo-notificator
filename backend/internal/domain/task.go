@@ -15,11 +15,13 @@ type Task struct {
 	Deadline    *time.Time `json:"deadline,omitzero"`
 	Status      string     `json:"status"`
 	IsNotified  bool       `json:"is_notified"`
+	ReminderAt  *time.Time `json:"reminder_at"`
 }
 
 type TaskUpdate struct {
 	Title       *string
 	Description *string
 	Status      *string
+	ReminderAt  *time.Time `json:"reminder_at"`
 	Deadline    *time.Time
 }

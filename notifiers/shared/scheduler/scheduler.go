@@ -5,8 +5,8 @@ import (
 	"log/slog"
 	"time"
 
-	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage"
 )
 
@@ -18,7 +18,6 @@ type Scheduler struct {
 	log        *slog.Logger
 	storage    storage.Storage
 	sender     Sender
-	intervals  []time.Duration
 	reschedule chan struct{}
 }
 
@@ -32,7 +31,6 @@ func New(
 		log:        log,
 		storage:    storage,
 		sender:     sender,
-		intervals:  intervals,
 		reschedule: make(chan struct{}, 1),
 	}
 }
@@ -45,7 +43,7 @@ func (s *Scheduler) Reschedule() {
 }
 
 func (s *Scheduler) Start(ctx context.Context) {
-	s.log.Info("polling scheduler started", slog.Any("intervals", s.intervals))
+	s.log.Info("polling scheduler started")
 
 	s.poll(ctx)
 
@@ -81,30 +79,21 @@ func (s *Scheduler) poll(ctx context.Context) {
 	now := time.Now()
 
 	for _, item := range items {
-		if item.Task.Deadline == nil {
+		if item.Task.ReminderAt == nil || item.Task.ReminderAt.After(now) {
 			continue
 		}
 
-		for _, interval := range s.intervals {
-			fireAt := item.Task.Deadline.Add(-interval)
+		s.log.Info("sending notification", slog.Int64("task_id", item.Task.ID), slog.String("email", item.User.Email))
 
-			if !fireAt.After(now) {
-
-				s.log.Info("sending notification", slog.Int64("task_id", item.Task.ID), slog.String("email", item.User.Email))
-
-				if err := s.sender.Send(item.User, item.Task, interval); err != nil {
-					s.log.Error("failed to send notification", sl.Err(err))
-					continue
-				}
-
-				if err := s.storage.MarkTaskAsNotified(ctx, item.Task.ID); err != nil {
-					s.log.Error("failed to mark task as notified", slog.Int64("task_id", item.Task.ID), sl.Err(err))
-				}
-
-				break
-			}
+		if err := s.sender.Send(item.User, item.Task, time.Duration(0)); err != nil {
+			s.log.Error("failed to send notification", sl.Err(err))
+			continue
 		}
+
+		if err := s.storage.MarkTaskAsNotified(ctx, item.Task.ID); err != nil {
+			s.log.Error("failed to mark task as notified", slog.Int64("task_id", item.Task.ID), sl.Err(err))
+		}
+
 	}
 }
-
 

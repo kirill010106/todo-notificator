@@ -22,6 +22,7 @@ type Request struct {
 	Title       string     `json:"title" validate:"required,max=255"`
 	Description string     `json:"description" validate:"max=2000"`
 	Deadline    *time.Time `json:"deadline,omitzero"`
+	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
 }
 
 type Response struct {
@@ -39,12 +40,14 @@ func (r Request) ToDomain(userID int64) domain.Task {
 		Title:       r.Title,
 		Description: r.Description,
 		Deadline:    r.Deadline,
+		ReminderAt:  r.ReminderAt,
 		Status:      domain.TaskStatusPending,
 	}
 }
 
 var validate = validator.New()
 
+// TODO: add categories support
 func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -97,6 +100,12 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal server error"))
+			return
+		}
+
+		if req.ReminderAt != nil && req.ReminderAt.Before(time.Now()) {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("reminder_at must be in the future"))
 			return
 		}
 

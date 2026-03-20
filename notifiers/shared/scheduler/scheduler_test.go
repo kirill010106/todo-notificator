@@ -85,7 +85,7 @@ func TestScheduler_Poll(t *testing.T) {
 					Task: domain.Task{
 						ID:       1,
 						Title:    "Горит задача",
-						Deadline: func() *time.Time { t := now; return &t }(), // Дедлайн сейчас
+						ReminderAt: func() *time.Time { t := now; return &t }(), // Дедлайн сейчас
 					},
 				},
 			},
@@ -100,7 +100,7 @@ func TestScheduler_Poll(t *testing.T) {
 					Task: domain.Task{
 						ID:       2,
 						Title:    "Задача в будущем",
-						Deadline: func() *time.Time { t := now.Add(2 * time.Hour); return &t }(), // Дедлайн через 2 часа, интервал 1 час — отправлять рано
+						ReminderAt: func() *time.Time { t := now.Add(2 * time.Hour); return &t }(), // Дедлайн через 2 часа, интервал 1 час — отправлять рано
 					},
 				},
 			},
@@ -115,7 +115,7 @@ func TestScheduler_Poll(t *testing.T) {
 					Task: domain.Task{
 						ID:       3,
 						Title:    "Задача с ошибкой отправки",
-						Deadline: func() *time.Time { t := now; return &t }(),
+						ReminderAt: func() *time.Time { t := now; return &t }(),
 					},
 				},
 			},
@@ -131,7 +131,7 @@ func TestScheduler_Poll(t *testing.T) {
 					Task: domain.Task{
 						ID:       4,
 						Title:    "Без дедлайна",
-						Deadline: nil,
+						ReminderAt: nil,
 					},
 				},
 			},
@@ -172,3 +172,4 @@ func TestScheduler_Poll(t *testing.T) {
 		})
 	}
 }
+

@@ -8,6 +8,7 @@ import (
 	tele "gopkg.in/telebot.v4"
 )
 
+// TODO: notification via tele/element bot
 func main() {
 	pref := tele.Settings{
 		Token:  os.Getenv("BOT_TOKEN"),
