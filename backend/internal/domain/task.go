@@ -9,6 +9,7 @@ const (
 
 type Task struct {
 	ID          int64      `json:"id"`
+	CategoryID  int64      `json:"category_id"`
 	UserID      int64      `json:"user_id"`
 	Title       string     `json:"title"`
 	Description string     `json:"description"`
@@ -24,4 +25,5 @@ type TaskUpdate struct {
 	Status      *string
 	ReminderAt  *time.Time `json:"reminder_at"`
 	Deadline    *time.Time
+	CategoryID  *int64
 }

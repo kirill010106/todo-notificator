@@ -8,4 +8,6 @@ var (
 	ErrUserNotFound        = errors.New("user not found")
 	ErrUserExists          = errors.New("user already exists")
 	ErrRefreshTokenInvalid = errors.New("refresh token invalid or expired")
+	ErrCategoryExists      = errors.New("category already exists")
+	ErrCategoryNotFound    = errors.New("category not found")
 )

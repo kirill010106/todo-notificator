@@ -16,6 +16,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/delete"
@@ -101,6 +102,8 @@ func main() {
 			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
 			r.Delete("/tasks/{task_id}", delete.New(log, storage))
 			r.Patch("/tasks/{task_id}", update.New(log, storage))
+
+			r.Post("/categories", create.New(log, storage))
 		})
 
 	})

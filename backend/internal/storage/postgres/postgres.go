@@ -326,3 +326,28 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 	return &user, nil
 
 }
+
+func (s *Storage) CreateCategory(ctx context.Context, category domain.Category) (int64, error) {
+	const op = "storage.postgres.CreateCategory"
+
+	query := `
+		INSERT INTO categories (user_id, name)
+		VALUES ($1, $2)
+		RETURNING id
+	`
+	var id int64
+
+	err := s.Db.QueryRowContext(ctx, query, category.UserID, category.Name).Scan(&id)
+
+	if err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == pgerrcode.UniqueViolation {
+				return 0, fmt.Errorf("%s: %w", op, storage.ErrTaskExists)
+			}
+		}
+		return 0, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return id, nil
+}
