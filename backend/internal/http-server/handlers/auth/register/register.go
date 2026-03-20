@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 	"golang.org/x/crypto/bcrypt"
 )
@@ -48,7 +49,7 @@ func New(log *slog.Logger, userSaver UserSaver) http.HandlerFunc {
 
 		passHash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
 		if err != nil {
-			log.Error("failed to generate password hash", slog.String("error", err.Error()))
+			log.Error("failed to generate password hash", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal error"))
 			return

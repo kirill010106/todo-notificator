@@ -102,6 +102,7 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 	FROM tasks t
 	JOIN users u ON u.id = t.user_id
 	WHERE t.status = 'pending'
+	AND t.is_notified = false
 	AND t.deadline IS NOT NULL
 	AND t.deadline > NOW()
 	ORDER BY t.deadline ASC
@@ -163,4 +164,18 @@ func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([
 	}
 
 	return tasks, rows.Err()
+}
+
+func (s *Storage) MarkTaskAsNotified(ctx context.Context, taskID int64) error {
+	const op = "storage.postgres.MarkTaskAsNotified"
+
+	query := `
+	UPDATE tasks SET is_notified = true WHERE id = $1
+	`
+
+	_, err := s.Db.ExecContext(ctx, query, taskID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
 }

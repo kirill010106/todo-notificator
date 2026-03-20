@@ -12,6 +12,7 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/scheduler"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
@@ -76,8 +77,10 @@ func main() {
 
 	// Graceful shutdown webhook сервера
 	if err := srv.Shutdown(context.Background()); err != nil {
-		logger.Error("webhook server shutdown error", slog.String("error", err.Error()))
+		logger.Error("webhook server shutdown error", sl.Err(err))
 	}
 
 	logger.Info("email notifier stopped")
 }
+
+

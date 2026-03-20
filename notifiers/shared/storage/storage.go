@@ -19,4 +19,5 @@ var (
 type Storage interface {
 	GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error)
 	GetTasksDueBetween(ctx context.Context, from, to time.Time) ([]domain.Task, error)
+	MarkTaskAsNotified(ctx context.Context, taskID int64) error
 }
