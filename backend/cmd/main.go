@@ -104,6 +104,10 @@ func main() {
 			r.Patch("/tasks/{task_id}", update.New(log, storage))
 
 			r.Post("/categories", create.New(log, storage))
+			// TODO: CRUD for categories
+			// r.Get("/categories")
+			// r.Delete("/categories/{category_id}")
+			// r.Patch("/categories/{category_id}")
 		})
 
 	})
