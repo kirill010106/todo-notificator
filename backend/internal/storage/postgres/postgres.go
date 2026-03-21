@@ -80,7 +80,7 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int)
 	}
 
 	dataQuery := `
-SELECT id, user_id, title, description, deadline, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`
@@ -95,7 +95,7 @@ LIMIT $2 OFFSET $3`
 
 	for rows.Next() {
 		var t domain.Task
-		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.Status, &t.IsNotified)
+		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified)
 		if err != nil {
 			return nil, 0, fmt.Errorf("%s: %w", op, err)
 		}

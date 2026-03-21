@@ -17,6 +17,9 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
+	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
+	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
+	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/delete"
@@ -104,10 +107,9 @@ func main() {
 			r.Patch("/tasks/{task_id}", update.New(log, storage))
 
 			r.Post("/categories", create.New(log, storage))
-			// TODO: CRUD for categories
-			// r.Get("/categories")
-			// r.Delete("/categories/{category_id}")
-			// r.Patch("/categories/{category_id}")
+			r.Get("/categories", categoriesget.New(log, storage))
+			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage))
+			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage))
 		})
 
 	})

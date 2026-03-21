@@ -303,6 +303,10 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
+                category_id:
+                  type: integer
+                  format: int64
+                  nullable: true
       responses:
         "201":
           description: Задача создана
@@ -365,6 +369,10 @@ paths:
                 status:
                   type: string
                   enum: [pending, done]
+                category_id:
+                  type: integer
+                  format: int64
+                  nullable: true
       responses:
         "200":
           description: Задача обновлена

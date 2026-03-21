@@ -223,6 +223,82 @@
 
       <!-- Основной контент -->
       <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        <!-- Категории -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Категории</h2>
+          <div class="flex flex-col sm:flex-row gap-3 mb-4">
+            <input
+              type="text"
+              x-model="newCategoryName"
+              placeholder="Новая категория"
+              maxlength="255"
+              class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+            />
+            <button
+              @click="createCategory()"
+              class="bg-indigo-600 hover:bg-indigo-700 text-white font-medium px-4 py-2.5 rounded-lg transition-colors"
+            >
+              + Добавить категорию
+            </button>
+          </div>
+
+          <div
+            x-show="categories.length === 0"
+            class="text-sm text-gray-400"
+          >
+            Категорий пока нет
+          </div>
+
+          <div class="flex flex-wrap gap-2" x-show="categories.length > 0">
+            <template x-for="category in categories" :key="category.id">
+              <div
+                class="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 text-sm px-3 py-1.5 rounded-full"
+              >
+                <template x-if="editingCategoryId !== category.id">
+                  <span x-text="category.name"></span>
+                </template>
+                <template x-if="editingCategoryId === category.id">
+                  <input
+                    type="text"
+                    x-model="editingCategoryName"
+                    class="px-2 py-0.5 border border-indigo-300 rounded text-xs bg-white"
+                    @keydown.enter="saveCategoryEdit(category.id)"
+                    @keydown.escape="cancelCategoryEdit()"
+                  />
+                </template>
+
+                <template x-if="editingCategoryId !== category.id">
+                  <button
+                    @click="startCategoryEdit(category)"
+                    class="text-indigo-500 hover:text-indigo-700"
+                    title="Редактировать"
+                  >
+                    ✏️
+                  </button>
+                </template>
+                <template x-if="editingCategoryId === category.id">
+                  <button
+                    @click="saveCategoryEdit(category.id)"
+                    class="text-green-600 hover:text-green-800"
+                    title="Сохранить"
+                  >
+                    ✓
+                  </button>
+                </template>
+                <button
+                  @click="deleteCategory(category.id)"
+                  class="text-red-500 hover:text-red-700"
+                  title="Удалить"
+                >
+                  ✕
+                </button>
+              </div>
+            </template>
+          </div>
+        </div>
+
         <!-- Создание задачи -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
@@ -395,6 +471,11 @@
                     ></p>
                     <div class="flex items-center gap-3 mt-2">
                       <span
+                        x-show="task.category_id"
+                        class="text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full"
+                        x-text="categoryNameById(task.category_id)"
+                      ></span>
+                      <span
                         :class="(editingTaskId === task.id ? editForm.status : task.status) === 'done'
                         ? 'bg-green-100 text-green-700'
                         : 'bg-yellow-100 text-yellow-700'"
@@ -529,6 +610,10 @@
 
           // Задачи
           tasks: [],
+          categories: [],
+          newCategoryName: "",
+          editingCategoryId: null,
+          editingCategoryName: "",
           filter: "all",
           newTask: {
             title: "",
@@ -578,6 +663,7 @@
             if (accessToken) {
               this.isAuthenticated = true;
               this.userEmail = email || "";
+              this.loadCategories();
               this.loadTasks();
             }
           },
@@ -684,6 +770,7 @@
               this.loginForm = { email: "", password: "" };
 
               this.showToast("Добро пожаловать!", "success");
+              this.loadCategories();
               this.loadTasks();
             } catch (err) {
               this.showToast("Ошибка подключения к серверу", "error");
@@ -738,8 +825,120 @@
             localStorage.removeItem("user_email");
             this.isAuthenticated = false;
             this.tasks = [];
+            this.categories = [];
             this.userEmail = "";
             this.showToast("Вы вышли из системы", "info");
+          },
+
+          // Категории
+          async loadCategories() {
+            try {
+              const response = await this.apiRequest("/categories", {
+                method: "GET",
+              });
+              if (!response) return;
+
+              const data = await response.json();
+              if (!response.ok) {
+                this.categories = [];
+                return;
+              }
+
+              this.categories = data.categories || [];
+            } catch {
+              this.categories = [];
+            }
+          },
+
+          async createCategory() {
+            const name = this.newCategoryName.trim();
+            if (!name) return;
+
+            try {
+              const response = await this.apiRequest("/categories", {
+                method: "POST",
+                body: JSON.stringify({ name }),
+              });
+              if (!response) return;
+
+              const data = await response.json();
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка создания категории", "error");
+                return;
+              }
+
+              this.newCategoryName = "";
+              this.showToast("Категория создана", "success");
+              await this.loadCategories();
+            } catch {
+              this.showToast("Ошибка подключения к серверу", "error");
+            }
+          },
+
+          startCategoryEdit(category) {
+            this.editingCategoryId = category.id;
+            this.editingCategoryName = category.name;
+          },
+
+          cancelCategoryEdit() {
+            this.editingCategoryId = null;
+            this.editingCategoryName = "";
+          },
+
+          async saveCategoryEdit(categoryId) {
+            const name = this.editingCategoryName.trim();
+            if (!name) {
+              this.showToast("Название категории не может быть пустым", "error");
+              return;
+            }
+
+            try {
+              const response = await this.apiRequest(`/categories/${categoryId}`, {
+                method: "PATCH",
+                body: JSON.stringify({ name }),
+              });
+              if (!response) return;
+
+              const data = await response.json();
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка обновления категории", "error");
+                return;
+              }
+
+              this.cancelCategoryEdit();
+              this.showToast("Категория обновлена", "success");
+              await this.loadCategories();
+            } catch {
+              this.showToast("Ошибка подключения к серверу", "error");
+            }
+          },
+
+          async deleteCategory(categoryId) {
+            if (!confirm("Удалить категорию?")) return;
+
+            try {
+              const response = await this.apiRequest(`/categories/${categoryId}`, {
+                method: "DELETE",
+              });
+              if (!response) return;
+
+              if (response.status === 204 || response.ok) {
+                this.showToast("Категория удалена", "success");
+                await this.loadCategories();
+                return;
+              }
+
+              const data = await response.json();
+              this.showToast(data.error || "Ошибка удаления категории", "error");
+            } catch {
+              this.showToast("Ошибка подключения к серверу", "error");
+            }
+          },
+
+          categoryNameById(categoryId) {
+            const id = Number(categoryId);
+            const category = this.categories.find((c) => Number(c.id) === id);
+            return category ? category.name : "Категория";
           },
 
           // Задачи
@@ -788,7 +987,6 @@
                   this.newTask.reminder_at,
                 ).toISOString();
               }
-
               const response = await this.apiRequest("/tasks", {
                 method: "POST",
                 body: JSON.stringify(body),
@@ -802,7 +1000,12 @@
                 return;
               }
 
-              this.newTask = { title: "", description: "", deadline: "" };
+              this.newTask = {
+                title: "",
+                description: "",
+                deadline: "",
+                reminder_at: "",
+              };
               this.showToast("Задача создана!", "success");
               await this.loadTasks();
             } catch (err) {
@@ -843,10 +1046,8 @@
             this.editForm = {
               title: task.title,
               description: task.description || "",
-              deadline: task.deadline ? task.deadline.slice(0, 16) : "",
-              reminder_at: task.reminder_at
-                ? task.reminder_at.slice(0, 16)
-                : "",
+              deadline: this.toDateTimeLocal(task.deadline),
+              reminder_at: this.toDateTimeLocal(task.reminder_at),
               status: task.status,
             };
           },
@@ -867,7 +1068,6 @@
             } else {
               body.reminder_at = null;
             }
-
             await this.updateTask(taskId, body);
             this.editingTaskId = null;
           },
@@ -907,6 +1107,7 @@
           formatDate(dateStr) {
             if (!dateStr) return "";
             const d = new Date(dateStr);
+            if (Number.isNaN(d.getTime())) return "";
             return d.toLocaleString("ru-RU", {
               day: "2-digit",
               month: "2-digit",
@@ -914,6 +1115,16 @@
               hour: "2-digit",
               minute: "2-digit",
             });
+          },
+
+          toDateTimeLocal(dateStr) {
+            if (!dateStr) return "";
+            const d = new Date(dateStr);
+            if (Number.isNaN(d.getTime())) return "";
+
+            const tzOffsetMs = d.getTimezoneOffset() * 60000;
+            const local = new Date(d.getTime() - tzOffsetMs);
+            return local.toISOString().slice(0, 16);
           },
         };
       }

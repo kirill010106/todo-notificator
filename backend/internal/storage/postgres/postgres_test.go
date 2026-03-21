@@ -35,7 +35,7 @@ func TestGetTasks_SuccessWithPagination(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
 FROM tasks
 WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)
@@ -44,9 +44,9 @@ LIMIT $2 OFFSET $3`)
 	mock.ExpectQuery(dataQuery).
 		WithArgs(userID, limit, offset).
 		WillReturnRows(
-			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "status", "is_notified"}).
-				AddRow(int64(10), userID, "T1", "D1", now, "pending", false).
-				AddRow(int64(9), userID, "T2", "D2", nil, "done", true),
+			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified"}).
+				AddRow(int64(10), userID, "T1", "D1", now, now, "pending", false).
+				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true),
 		)
 
 	tasks, total, err := s.GetTasks(context.Background(), userID, limit, offset)
@@ -101,7 +101,7 @@ func TestGetTasks_DataQueryError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
 FROM tasks
 WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)

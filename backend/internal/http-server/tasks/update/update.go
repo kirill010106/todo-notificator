@@ -12,12 +12,11 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
 
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -84,21 +83,10 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.update.New"
 
-		log := log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
-		)
-
-		userID, ok := auth.GetUserID(r.Context())
+		log, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
 		if !ok {
-			log.Error("user_id not found in context")
-
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, resp.Error("unauthorized"))
 			return
 		}
-
-		log = log.With(slog.Int64("user_id", userID))
 
 		taskIDStr := chi.URLParam(r, "task_id")
 		if taskIDStr == "" {
