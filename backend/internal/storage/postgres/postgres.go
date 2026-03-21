@@ -68,7 +68,7 @@ RETURNING id`
 }
 
 func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error) {
-	const op = "storage.postgres.getTasks"
+	const op = "storage.postgres.GetTasks"
 
 	countQuery := `
 		SELECT COUNT(*) FROM tasks WHERE user_id = $1
@@ -343,11 +343,97 @@ func (s *Storage) CreateCategory(ctx context.Context, category domain.Category) 
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) {
 			if pgErr.Code == pgerrcode.UniqueViolation {
-				return 0, fmt.Errorf("%s: %w", op, storage.ErrTaskExists)
+				return 0, fmt.Errorf("%s: %w", op, storage.ErrCategoryExists)
 			}
 		}
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	return id, nil
+}
+
+func (s *Storage) GetCategories(ctx context.Context, userID int64) ([]domain.Category, error) {
+	const op = "storage.postgres.GetCategories"
+
+	query := `
+		SELECT id, user_id, name  FROM categories
+		WHERE user_id = $1
+	`
+
+	rows, err := s.Db.QueryContext(ctx, query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+
+	categories := make([]domain.Category, 0)
+
+	for rows.Next() {
+		var c domain.Category
+		err := rows.Scan(&c.ID, &c.UserID, &c.Name)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", op, err)
+		}
+		categories = append(categories, c)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return categories, nil
+}
+
+func (s *Storage) DeleteCategory(ctx context.Context, userID int64, categoryID int64) error {
+	const op = "storage.postgres.DeleteCategory"
+
+	query := `
+		DELETE FROM categories
+		WHERE user_id = $1 AND id=$2
+		RETURNING id
+	`
+	var deletedID int64
+	err := s.Db.QueryRowContext(ctx, query, userID, categoryID).Scan(&deletedID)
+
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return fmt.Errorf("%s: %w", op, storage.ErrCategoryNotFound)
+		}
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *Storage) UpdateCategory(ctx context.Context, userID int64, categoryID int64, c domain.CategoryUpdate) error {
+	const op = "storage.postgres.UpdateCategory"
+	setValues := make([]string, 0)
+	args := make([]any, 0)
+	argID := 1
+	if c.Name != nil {
+		setValues = append(setValues, fmt.Sprintf("name = $%d", argID))
+		args = append(args, *c.Name)
+		argID++
+	}
+	if len(setValues) == 0 {
+		return nil
+	}
+
+	query := fmt.Sprintf(`
+			UPDATE categories
+			SET %s
+			WHERE user_id = $%d AND id = $%d
+`, strings.Join(setValues, ", "), argID, argID+1)
+
+	args = append(args, userID, categoryID)
+
+	res, err := s.Db.ExecContext(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rowsAffected, _ := res.RowsAffected()
+	if rowsAffected == 0 {
+		return storage.ErrCategoryNotFound
+	}
+
+	return nil
 }
