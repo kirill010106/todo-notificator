@@ -15,6 +15,7 @@ import (
 	authmw "github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/storage"
+	"github.com/kirill010106/todo-notificator/utils"
 	"github.com/stretchr/testify/require"
 )
 
@@ -110,4 +111,60 @@ func TestSave_InternalError(t *testing.T) {
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusInternalServerError, w.Code)
+}
+
+func TestSave_CategoryNotFound(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockTaskSaver{err: storage.ErrCategoryNotFound}
+	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/tasks", h)
+
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/tasks",
+		strings.NewReader(`{"title":"task","category_id":999}`),
+	)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "category not found")
+}
+
+func TestSave_WithCategory(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockTaskSaver{id: 42}
+	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/tasks", h)
+
+	categoryID := int64(10)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/tasks",
+		strings.NewReader(`{"title":"task","category_id":10}`),
+	)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.True(t, saver.called)
+	require.NotNil(t, saver.task.CategoryID)
+	require.Equal(t, utils.Int64Ptr(categoryID), saver.task.CategoryID)
+	require.Contains(t, w.Body.String(), `"id":42`)
 }

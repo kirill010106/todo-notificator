@@ -16,7 +16,7 @@ import (
 )
 
 type Storage struct {
-	Db *sql.DB
+	DB *sql.DB
 }
 
 func New(storagePath string) (*Storage, error) {
@@ -33,12 +33,12 @@ func New(storagePath string) (*Storage, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	return &Storage{Db: db}, nil
+	return &Storage{DB: db}, nil
 }
 
 func (s *Storage) Close() error {
-	if s.Db != nil {
-		return s.Db.Close()
+	if s.DB != nil {
+		return s.DB.Close()
 	}
 	return nil
 }
@@ -46,13 +46,30 @@ func (s *Storage) Close() error {
 func (s *Storage) SaveTask(ctx context.Context, task domain.Task) (int64, error) {
 	const op = "storage.postgres.saveTask"
 
+	var categoryArg any = nil
+	if task.CategoryID != nil && *task.CategoryID > 0 {
+		var exists bool
+		err := s.DB.QueryRowContext(
+			ctx,
+			`SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1 AND user_id = $2)`,
+			task.CategoryID, task.UserID,
+		).Scan(&exists)
+		if err != nil {
+			return 0, fmt.Errorf("%s: %w", op, err)
+		}
+		if !exists {
+			return 0, fmt.Errorf("%s: %w", op, storage.ErrCategoryNotFound)
+		}
+		categoryArg = task.CategoryID
+	}
+
 	query := `
-INSERT INTO tasks (user_id, title, description, deadline, reminder_at, status, is_notified)
-VALUES ($1, $2, $3, $4, $5, $6, $7)
+INSERT INTO tasks (user_id, title, description, deadline, reminder_at, status, is_notified, category_id)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id`
 	var id int64
 
-	err := s.Db.QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified).Scan(&id)
+	err := s.DB.QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified, categoryArg).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -75,17 +92,17 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int)
 	`
 
 	var total int
-	if err := s.Db.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
+	if err := s.DB.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
 
 	dataQuery := `
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`
 
-	rows, err := s.Db.QueryContext(ctx, dataQuery, userID, limit, offset)
+	rows, err := s.DB.QueryContext(ctx, dataQuery, userID, limit, offset)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -95,7 +112,7 @@ LIMIT $2 OFFSET $3`
 
 	for rows.Next() {
 		var t domain.Task
-		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified)
+		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID)
 		if err != nil {
 			return nil, 0, fmt.Errorf("%s: %w", op, err)
 		}
@@ -117,7 +134,7 @@ func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) er
 		RETURNING id
 `
 	var deletedID int64
-	err := s.Db.QueryRowContext(ctx, query, userID, taskID).Scan(&deletedID)
+	err := s.DB.QueryRowContext(ctx, query, userID, taskID).Scan(&deletedID)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -165,6 +182,25 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 		argID++
 	}
 
+	if t.CategoryID != nil {
+		var exists bool
+		err := s.DB.QueryRowContext(
+			ctx,
+			`SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1 AND user_id = $2)`,
+			*t.CategoryID, userID,
+		).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("%s: %w", op, err)
+		}
+		if !exists {
+			return storage.ErrCategoryNotFound
+		}
+
+		setValues = append(setValues, fmt.Sprintf("category_id = $%d", argID))
+		args = append(args, *t.CategoryID)
+		argID++
+	}
+
 	if len(setValues) == 0 {
 		return nil
 	}
@@ -177,7 +213,7 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 
 	args = append(args, userID, taskID)
 
-	res, err := s.Db.ExecContext(ctx, query, args...)
+	res, err := s.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -196,7 +232,7 @@ func (s *Storage) User(ctx context.Context, email string) (domain.User, error) {
 	query := `SELECT id, email, password_hash from users WHERE email = $1`
 
 	var user domain.User
-	err := s.Db.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash)
+	err := s.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.User{}, storage.ErrUserNotFound
@@ -212,7 +248,7 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 	query := `INSERT INTO users (email, password_hash) VALUES ($1, $2) RETURNING ID`
 
 	var id int64
-	err := s.Db.QueryRowContext(ctx, query, email, passHash).Scan(&id)
+	err := s.DB.QueryRowContext(ctx, query, email, passHash).Scan(&id)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
@@ -231,7 +267,7 @@ func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token stri
 		VALUES ($1, $2, $3)
 	`
 
-	_, err := s.Db.ExecContext(ctx, query, userID, token, expiresAt)
+	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -247,7 +283,7 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	 WHERE token = $1 AND expires_at > NOW()
 	 `
 	var rt domain.RefreshToken
-	err := s.Db.QueryRowContext(ctx, query, token).Scan(
+	err := s.DB.QueryRowContext(ctx, query, token).Scan(
 		&rt.ID,
 		&rt.UserID,
 		&rt.Token,
@@ -272,7 +308,7 @@ func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 	DELETE FROM refresh_tokens
 	WHERE token = $1
 `
-	res, err := s.Db.ExecContext(ctx, query, token)
+	res, err := s.DB.ExecContext(ctx, query, token)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -294,7 +330,7 @@ func (s *Storage) DeleteUserRefreshTokens(ctx context.Context, userID int64) err
 
 	query := `DELETE FROM refresh_tokens WHERE user_id = $1`
 
-	_, err := s.Db.ExecContext(ctx, query, userID)
+	_, err := s.DB.ExecContext(ctx, query, userID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -311,7 +347,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 	WHERE id = $1
 	`
 
-	err := s.Db.QueryRowContext(ctx, query, userID).Scan(
+	err := s.DB.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
 		&user.PassHash)
@@ -337,7 +373,7 @@ func (s *Storage) CreateCategory(ctx context.Context, category domain.Category) 
 	`
 	var id int64
 
-	err := s.Db.QueryRowContext(ctx, query, category.UserID, category.Name).Scan(&id)
+	err := s.DB.QueryRowContext(ctx, query, category.UserID, category.Name).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -360,7 +396,7 @@ func (s *Storage) GetCategories(ctx context.Context, userID int64) ([]domain.Cat
 		WHERE user_id = $1
 	`
 
-	rows, err := s.Db.QueryContext(ctx, query, userID)
+	rows, err := s.DB.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -392,7 +428,7 @@ func (s *Storage) DeleteCategory(ctx context.Context, userID int64, categoryID i
 		RETURNING id
 	`
 	var deletedID int64
-	err := s.Db.QueryRowContext(ctx, query, userID, categoryID).Scan(&deletedID)
+	err := s.DB.QueryRowContext(ctx, query, userID, categoryID).Scan(&deletedID)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -425,7 +461,7 @@ func (s *Storage) UpdateCategory(ctx context.Context, userID int64, categoryID i
 
 	args = append(args, userID, categoryID)
 
-	res, err := s.Db.ExecContext(ctx, query, args...)
+	res, err := s.DB.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -435,5 +471,67 @@ func (s *Storage) UpdateCategory(ctx context.Context, userID int64, categoryID i
 		return storage.ErrCategoryNotFound
 	}
 
+	return nil
+}
+
+func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserStats, error) {
+	const op = "storage.postgres.GetUserStats"
+
+	query :=
+		`
+	SELECT id, user_id, points, level, total_pomodoros, total_burnt_tasks, current_streak, best_streak, updated_at FROM user_stats WHERE user_id = $1
+	`
+
+	var uS domain.UserStats
+
+	err := s.DB.QueryRowContext(ctx, query, userID).
+		Scan(&uS.ID, &uS.UserID, &uS.Points, &uS.Level, &uS.TotalPomodoros, &uS.TotalBurntTasks, &uS.CurrentStreak, &uS.BestStreak, &uS.UpdatedAt)
+	if err != nil {
+		return domain.UserStats{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return uS, nil
+}
+
+func (s *Storage) UpdateUserStats(ctx context.Context, stats domain.UserStats) error {
+	const op = "storage.postgres.UpdateStats"
+
+	query := `
+        INSERT INTO user_stats (
+    user_id, 
+    points, 
+    level, 
+    total_pomodoros, 
+    total_burnt_tasks, 
+    current_streak, 
+    best_streak, 
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id) DO UPDATE SET
+    points          = COALESCE(EXCLUDED.points, user_stats.points),
+    level           = COALESCE(EXCLUDED.level, user_stats.level),
+    total_pomodoros = COALESCE(EXCLUDED.total_pomodoros, user_stats.total_pomodoros),
+    total_burnt_tasks = COALESCE(EXCLUDED.total_burnt_tasks, user_stats.total_burnt_tasks),
+    current_streak  = COALESCE(EXCLUDED.current_streak, user_stats.current_streak),
+    best_streak     = COALESCE(EXCLUDED.best_streak, user_stats.best_streak),
+    updated_at      = NOW()
+;
+    `
+
+	_, err := s.DB.ExecContext(ctx, query,
+		stats.UserID,
+		stats.Points,
+		stats.Level,
+		stats.TotalPomodoros,
+		stats.TotalBurntTasks,
+		stats.CurrentStreak,
+		stats.BestStreak,
+		time.Now(),
+	)
+
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
 	return nil
 }

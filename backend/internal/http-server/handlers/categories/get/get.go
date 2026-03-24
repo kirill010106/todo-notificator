@@ -20,7 +20,7 @@ type CategoryGetter interface {
 
 type Response struct {
 	resp.Response
-	Categories []domain.Category
+	Categories []domain.Category `json:"categories"`
 }
 
 func New(log *slog.Logger, categoryGetter CategoryGetter) http.HandlerFunc {

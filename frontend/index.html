@@ -339,6 +339,18 @@
                 rows="2"
                 class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
               ></textarea>
+              <div class="flex flex-col gap-1 self-end">
+                <label class="text-xs text-gray-500">Категория</label>
+                <select
+                  x-model="newTask.category_id"
+                  class="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                >
+                  <option :value="null">Без категории</option>
+                  <template x-for="cat in categories" :key="cat.id">
+                    <option :value="cat.id" x-text="cat.name"></option>
+                  </template>
+                </select>
+              </div>
               <button
                 type="submit"
                 :disabled="loadingCreate"
@@ -471,7 +483,7 @@
                     ></p>
                     <div class="flex items-center gap-3 mt-2">
                       <span
-                        x-show="task.category_id"
+                        x-show="task.category_id > 0"
                         class="text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full"
                         x-text="categoryNameById(task.category_id)"
                       ></span>
@@ -530,6 +542,18 @@
                           x-model="editForm.reminder_at"
                           class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
                         />
+                      </div>
+                      <div class="flex flex-col gap-1 flex-1">
+                        <label class="text-xs text-gray-500">Категория</label>
+                        <select
+                          x-model="editForm.category_id"
+                          class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
+                        >
+                          <option :value="null">Без категории</option>
+                          <template x-for="cat in categories" :key="cat.id">
+                            <option :value="cat.id" x-text="cat.name"></option>
+                          </template>
+                        </select>
                       </div>
                       <select
                         x-model="editForm.status"
@@ -620,6 +644,7 @@
             description: "",
             deadline: "",
             reminder_at: "",
+            category_id: null,
           },
           editingTaskId: null,
           editForm: {
@@ -628,6 +653,7 @@
             deadline: "",
             reminder_at: "",
             status: "pending",
+            category_id: null,
           },
 
           // Пагинация
@@ -663,8 +689,7 @@
             if (accessToken) {
               this.isAuthenticated = true;
               this.userEmail = email || "";
-              this.loadCategories();
-              this.loadTasks();
+              this.loadCategories().then(() => this.loadTasks());
             }
           },
 
@@ -987,6 +1012,9 @@
                   this.newTask.reminder_at,
                 ).toISOString();
               }
+              if (this.newTask.category_id) {
+                body.category_id = Number(this.newTask.category_id);
+              }
               const response = await this.apiRequest("/tasks", {
                 method: "POST",
                 body: JSON.stringify(body),
@@ -1005,6 +1033,7 @@
                 description: "",
                 deadline: "",
                 reminder_at: "",
+                category_id: null,
               };
               this.showToast("Задача создана!", "success");
               await this.loadTasks();
@@ -1049,6 +1078,7 @@
               deadline: this.toDateTimeLocal(task.deadline),
               reminder_at: this.toDateTimeLocal(task.reminder_at),
               status: task.status,
+              category_id: task.category_id || null,
             };
           },
 
@@ -1067,6 +1097,9 @@
               ).toISOString();
             } else {
               body.reminder_at = null;
+            }
+            if (this.editForm.category_id) {
+              body.category_id = Number(this.editForm.category_id);
             }
             await this.updateTask(taskId, body);
             this.editingTaskId = null;

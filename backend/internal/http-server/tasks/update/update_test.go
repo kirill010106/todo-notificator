@@ -112,3 +112,41 @@ func TestUpdate_InternalError(t *testing.T) {
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 }
+
+func TestUpdate_CategoryNotFound(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{err: storage.ErrCategoryNotFound}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":999}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.Contains(t, w.Body.String(), "category not found")
+}
+
+func TestUpdate_WithCategory(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater))
+
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":5}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, updater.called)
+}

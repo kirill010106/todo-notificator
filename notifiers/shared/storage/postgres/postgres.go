@@ -14,7 +14,7 @@ import (
 )
 
 type Storage struct {
-	Db *sql.DB
+	DB *sql.DB
 }
 
 func New(DBUrl string) (*Storage, error) {
@@ -30,12 +30,12 @@ func New(DBUrl string) (*Storage, error) {
 	}
 
 	return &Storage{
-		Db: db,
+		DB: db,
 	}, nil
 }
 
 func (s *Storage) Close() error {
-	return s.Db.Close()
+	return s.DB.Close()
 }
 
 func (s *Storage) GetPendingTasksWithDeadline(ctx context.Context) ([]domain.Task, error) {
@@ -51,7 +51,7 @@ func (s *Storage) GetPendingTasksWithDeadline(ctx context.Context) ([]domain.Tas
 	ORDER BY deadline ASC
 	`
 
-	rows, err := s.Db.QueryContext(ctx, query)
+	rows, err := s.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -79,7 +79,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 	SELECT id, email FROM users WHERE id = $1
 	`
 
-	err := s.Db.QueryRowContext(ctx, query, userID).Scan(
+	err := s.DB.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
 	)
@@ -108,7 +108,7 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 	ORDER BY t.reminder_at ASC
 	`
 
-	rows, err := s.Db.QueryContext(ctx, query)
+	rows, err := s.DB.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -147,7 +147,7 @@ func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([
 			ORDER BY deadline ASC
 	`
 
-	rows, err := s.Db.QueryContext(ctx, query, from, to)
+	rows, err := s.DB.QueryContext(ctx, query, from, to)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
@@ -174,7 +174,7 @@ func (s *Storage) MarkTaskAsNotified(ctx context.Context, taskID int64) error {
 	UPDATE tasks SET is_notified = true WHERE id = $1
 	`
 
-	_, err := s.Db.ExecContext(ctx, query, taskID)
+	_, err := s.DB.ExecContext(ctx, query, taskID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

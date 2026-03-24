@@ -21,7 +21,7 @@ func TestGetTasks_SuccessWithPagination(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	userID := int64(42)
 	limit := 2
@@ -35,7 +35,7 @@ func TestGetTasks_SuccessWithPagination(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id
 FROM tasks
 WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)
@@ -44,9 +44,9 @@ LIMIT $2 OFFSET $3`)
 	mock.ExpectQuery(dataQuery).
 		WithArgs(userID, limit, offset).
 		WillReturnRows(
-			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified"}).
-				AddRow(int64(10), userID, "T1", "D1", now, now, "pending", false).
-				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true),
+			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified", "category_id"}).
+				AddRow(int64(10), userID, "T1", "D1", now, now, "pending", false, int64(0)).
+				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true, int64(3)),
 		)
 
 	tasks, total, err := s.GetTasks(context.Background(), userID, limit, offset)
@@ -67,7 +67,7 @@ func TestGetTasks_CountQueryError(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	countQuery := regexp.QuoteMeta(`
 		SELECT COUNT(*) FROM tasks WHERE user_id = $1
@@ -89,7 +89,7 @@ func TestGetTasks_DataQueryError(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	userID := int64(7)
 
@@ -101,7 +101,7 @@ func TestGetTasks_DataQueryError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id
 FROM tasks
 WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)
@@ -122,7 +122,7 @@ func TestCreateCategory_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	category := domain.Category{UserID: 5, Name: "Work"}
 
@@ -147,7 +147,7 @@ func TestCreateCategory_Conflict(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	query := regexp.QuoteMeta(`
 		INSERT INTO categories (user_id, name)
@@ -170,7 +170,7 @@ func TestGetCategories_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	query := regexp.QuoteMeta(`
 		SELECT id, user_id, name  FROM categories
@@ -198,7 +198,7 @@ func TestDeleteCategory_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	query := regexp.QuoteMeta(`
 		DELETE FROM categories
@@ -220,7 +220,7 @@ func TestDeleteCategory_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	query := regexp.QuoteMeta(`
 		DELETE FROM categories
@@ -243,7 +243,7 @@ func TestUpdateCategory_Success(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	name := "Urgent"
 
@@ -267,7 +267,7 @@ func TestUpdateCategory_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	defer db.Close()
 
-	s := &Storage{Db: db}
+	s := &Storage{DB: db}
 
 	name := "Urgent"
 
@@ -284,5 +284,183 @@ func TestUpdateCategory_NotFound(t *testing.T) {
 	err = s.UpdateCategory(context.Background(), 4, 12, domain.CategoryUpdate{Name: &name})
 	require.Error(t, err)
 	require.ErrorIs(t, err, storage.ErrCategoryNotFound)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetUserStats_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(123)
+	now := time.Now().UTC().Truncate(time.Second)
+	points := int64(100)
+	level := int64(2)
+	totalPomodoros := int64(10)
+	totalBurntTasks := int64(3)
+	currentStreak := int64(5)
+	bestStreak := int64(7)
+
+	query := regexp.QuoteMeta(`
+       SELECT id, user_id, points, level, total_pomodoros, total_burnt_tasks, current_streak, best_streak, updated_at FROM user_stats WHERE user_id = $1
+       `)
+	mock.ExpectQuery(query).
+		WithArgs(userID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "points", "level", "total_pomodoros", "total_burnt_tasks", "current_streak", "best_streak", "updated_at"}).
+			AddRow(int64(1), userID, points, level, totalPomodoros, totalBurntTasks, currentStreak, bestStreak, now))
+
+	stats, err := s.GetUserStats(context.Background(), userID)
+	require.NoError(t, err)
+	require.Equal(t, userID, stats.UserID)
+	require.NotNil(t, stats.Points)
+	require.Equal(t, points, *stats.Points)
+	require.NotNil(t, stats.Level)
+	require.Equal(t, level, *stats.Level)
+	require.NotNil(t, stats.TotalPomodoros)
+	require.Equal(t, totalPomodoros, *stats.TotalPomodoros)
+	require.NotNil(t, stats.TotalBurntTasks)
+	require.Equal(t, totalBurntTasks, *stats.TotalBurntTasks)
+	require.NotNil(t, stats.CurrentStreak)
+	require.Equal(t, currentStreak, *stats.CurrentStreak)
+	require.NotNil(t, stats.BestStreak)
+	require.Equal(t, bestStreak, *stats.BestStreak)
+	require.NotNil(t, stats.UpdatedAt)
+	require.WithinDuration(t, now, *stats.UpdatedAt, time.Second)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetUserStats_Error(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(123)
+
+	query := regexp.QuoteMeta(`
+       SELECT id, user_id, points, level, total_pomodoros, total_burnt_tasks, current_streak, best_streak, updated_at FROM user_stats WHERE user_id = $1
+       `)
+	mock.ExpectQuery(query).
+		WithArgs(userID).
+		WillReturnError(sql.ErrNoRows)
+
+	stats, err := s.GetUserStats(context.Background(), userID)
+	require.Error(t, err)
+	require.Equal(t, int64(0), stats.ID)
+	require.Contains(t, err.Error(), "sql: no rows in result set")
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateUserStats_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(123)
+	now := time.Now()
+	points := int64(100)
+	level := int64(2)
+	totalPomodoros := int64(10)
+	totalBurntTasks := int64(3)
+	currentStreak := int64(5)
+	bestStreak := int64(7)
+
+	query := regexp.QuoteMeta(`
+	INSERT INTO user_stats (
+    user_id, 
+    points, 
+    level, 
+    total_pomodoros, 
+    total_burnt_tasks, 
+    current_streak, 
+    best_streak, 
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id) DO UPDATE SET
+    points          = COALESCE(EXCLUDED.points, user_stats.points),
+    level           = COALESCE(EXCLUDED.level, user_stats.level),
+    total_pomodoros = COALESCE(EXCLUDED.total_pomodoros, user_stats.total_pomodoros),
+    total_burnt_tasks = COALESCE(EXCLUDED.total_burnt_tasks, user_stats.total_burnt_tasks),
+    current_streak  = COALESCE(EXCLUDED.current_streak, user_stats.current_streak),
+    best_streak     = COALESCE(EXCLUDED.best_streak, user_stats.best_streak),
+    updated_at      = NOW()
+;
+       `)
+	mock.ExpectExec(query).
+		WithArgs(userID, &points, &level, &totalPomodoros, &totalBurntTasks, &currentStreak, &bestStreak, sqlmock.AnyArg()).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	stats := domain.UserStats{
+		UserID:          userID,
+		Points:          &points,
+		Level:           &level,
+		TotalPomodoros:  &totalPomodoros,
+		TotalBurntTasks: &totalBurntTasks,
+		CurrentStreak:   &currentStreak,
+		BestStreak:      &bestStreak,
+		UpdatedAt:       &now,
+	}
+
+	err = s.UpdateUserStats(context.Background(), stats)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUpdateUserStats_Error(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(123)
+	points := int64(100)
+	level := int64(2)
+	totalPomodoros := int64(10)
+	totalBurntTasks := int64(3)
+	currentStreak := int64(5)
+	bestStreak := int64(7)
+
+	query := regexp.QuoteMeta(`
+	INSERT INTO user_stats (
+    user_id, 
+    points, 
+    level, 
+    total_pomodoros, 
+    total_burnt_tasks, 
+    current_streak, 
+    best_streak, 
+    updated_at
+)
+VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+ON CONFLICT (user_id) DO UPDATE SET
+    points          = COALESCE(EXCLUDED.points, user_stats.points),
+    level           = COALESCE(EXCLUDED.level, user_stats.level),
+    total_pomodoros = COALESCE(EXCLUDED.total_pomodoros, user_stats.total_pomodoros),
+    total_burnt_tasks = COALESCE(EXCLUDED.total_burnt_tasks, user_stats.total_burnt_tasks),
+    current_streak  = COALESCE(EXCLUDED.current_streak, user_stats.current_streak),
+    best_streak     = COALESCE(EXCLUDED.best_streak, user_stats.best_streak),
+    updated_at      = NOW()
+;
+       `)
+	mock.ExpectExec(query).
+		WithArgs(userID, &points, &level, &totalPomodoros, &totalBurntTasks, &currentStreak, &bestStreak, sqlmock.AnyArg()).
+		WillReturnError(errors.New("update failed"))
+
+	stats := domain.UserStats{
+		UserID:          userID,
+		Points:          &points,
+		Level:           &level,
+		TotalPomodoros:  &totalPomodoros,
+		TotalBurntTasks: &totalBurntTasks,
+		CurrentStreak:   &currentStreak,
+		BestStreak:      &bestStreak,
+	}
+
+	err = s.UpdateUserStats(context.Background(), stats)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "update failed")
 	require.NoError(t, mock.ExpectationsWereMet())
 }

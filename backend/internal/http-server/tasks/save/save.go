@@ -23,11 +23,12 @@ type Request struct {
 	Description string     `json:"description" validate:"max=2000"`
 	Deadline    *time.Time `json:"deadline,omitzero"`
 	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
+	CategoryID  *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
 }
 
 type Response struct {
 	resp.Response
-	Id int64 `json:"id,omitempty"`
+	ID int64 `json:"id,omitempty"`
 }
 
 type TaskSaver interface {
@@ -35,19 +36,20 @@ type TaskSaver interface {
 }
 
 func (r Request) ToDomain(userID int64) domain.Task {
-	return domain.Task{
+	task := domain.Task{
 		UserID:      userID,
 		Title:       r.Title,
 		Description: r.Description,
 		Deadline:    r.Deadline,
 		ReminderAt:  r.ReminderAt,
+		CategoryID:  r.CategoryID,
 		Status:      domain.TaskStatusPending,
 	}
+	return task
 }
 
 var validate = validator.New()
 
-// TODO: add categories support
 func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -122,6 +124,13 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 				render.JSON(w, r, resp.Error("task already exists"))
 				return
 			}
+			if errors.Is(err, storage.ErrCategoryNotFound) {
+				log.Warn("category not found", sl.Err(err))
+
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("category not found"))
+				return
+			}
 			log.Error("failed to save task", sl.Err(err))
 
 			render.Status(r, http.StatusInternalServerError)
@@ -134,7 +143,7 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 		render.Status(r, http.StatusCreated)
 		render.JSON(w, r, Response{
 			Response: resp.OK(),
-			Id:       id,
+			ID:       id,
 		})
 
 		if webhookURL != "" {

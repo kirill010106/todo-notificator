@@ -71,8 +71,9 @@ func main() {
 	}
 
 	log.Info("Running migrations...")
-	if err := goose.Up(storage.Db, "migrations"); err != nil {
+	if err := goose.Up(storage.DB, "migrations"); err != nil {
 		log.Error("failed to run migrations", sl.Err(err))
+		os.Exit(1)
 	}
 	log.Info("Migrations applied successfully!")
 
@@ -94,7 +95,7 @@ func main() {
 
 		r.Post("/register", register.New(log, storage))
 		r.Post("/login", login.New(log, storage, cfg))
-		r.Get("/health", health.New(log, storage.Db))
+		r.Get("/health", health.New(log, storage.DB))
 		r.Post("/refresh", refresh.New(log, storage, cfg))
 
 		r.Group(func(r chi.Router) {
@@ -110,6 +111,11 @@ func main() {
 			r.Get("/categories", categoriesget.New(log, storage))
 			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage))
 			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage))
+
+			// r.Get("users/{user_id}/stats")
+			// r.Patch("users/{user_id}/stats")
+			// POST /pomodoro/sessions - записать завершённую помодоро сессию
+
 		})
 
 	})

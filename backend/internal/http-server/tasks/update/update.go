@@ -28,6 +28,7 @@ type Request struct {
 	Deadline    *time.Time `json:"deadline,omitzero"`
 	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
 	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done"`
+	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
 }
 
 type Response struct {
@@ -67,6 +68,7 @@ func (r Request) ToDomain() domain.TaskUpdate {
 		Deadline:    r.Deadline,
 		ReminderAt:  r.ReminderAt,
 		Status:      r.Status,
+		CategoryID:  r.CategoryID,
 	}
 }
 
@@ -75,7 +77,8 @@ func (r Request) IsEmpty() bool {
 		r.Description == nil &&
 		r.Deadline == nil &&
 		r.Status == nil &&
-		r.ReminderAt == nil
+		r.ReminderAt == nil &&
+		r.CategoryID == nil
 }
 
 func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
@@ -167,6 +170,11 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 				log.Info("task not found or access denied")
 				render.Status(r, http.StatusNotFound)
 				render.JSON(w, r, resp.Error("task not found"))
+				return
+			}
+			if errors.Is(err, storage.ErrCategoryNotFound) {
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("category not found"))
 				return
 			}
 			log.Error("failed to update task", sl.Err(err))

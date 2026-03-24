@@ -1,0 +1,43 @@
+run:
+  timeout: 5m
+  tests: true # Линтить и тесты тоже
+
+linters:
+  disable-all: true
+  enable:
+    # --- Базовые ---
+    - gofmt
+    - goimports
+    - govet           # Стандартные ошибки (важно!)
+    - staticcheck     # Умный статический анализ
+    
+    # --- Чистота кода ---
+    - unused          # Поиск неиспользуемого кода
+    - gosimple        # Упрощение кода
+    - stylecheck      # Стиль кода
+    - bodyclose       # Проверка закрытия resp.Body (критично для вашего notifyScheduler!)
+    
+    # --- Безопасность и ошибки ---
+    - errcheck        # Проверка, что ошибки не игнорируются
+    - nilerr          # Проверка возврата nil вместо ошибки
+    - gosec           # Поиск уязвимостей безопасности
+
+linters-settings:
+  govet:
+    enable-all: true
+    disable:
+      - fieldalignment # Слишком шумный, можно включить позже
+  
+  staticcheck:
+    checks: ["all", "-SA1019", "-ST1000"] # Игнорировать предупреждения об устаревших функциях, если используете легаси
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
+  exclude-rules:
+    # Разрешить использовать _, если так задумано
+    - path: _test\.go
+      linters:
+        - errcheck
+        - forcetypeassert
