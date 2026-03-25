@@ -359,7 +359,6 @@ func TestUpdateUserStats_Success(t *testing.T) {
 
 	s := &Storage{DB: db}
 	userID := int64(123)
-	now := time.Now()
 	points := int64(100)
 	level := int64(2)
 	totalPomodoros := int64(10)
@@ -393,18 +392,16 @@ ON CONFLICT (user_id) DO UPDATE SET
 		WithArgs(userID, &points, &level, &totalPomodoros, &totalBurntTasks, &currentStreak, &bestStreak, sqlmock.AnyArg()).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	stats := domain.UserStats{
-		UserID:          userID,
+	stats := domain.UserStatsUpdate{
 		Points:          &points,
 		Level:           &level,
 		TotalPomodoros:  &totalPomodoros,
 		TotalBurntTasks: &totalBurntTasks,
 		CurrentStreak:   &currentStreak,
 		BestStreak:      &bestStreak,
-		UpdatedAt:       &now,
 	}
 
-	err = s.UpdateUserStats(context.Background(), stats)
+	err = s.UpdateUserStats(context.Background(), userID, stats)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
@@ -449,8 +446,7 @@ ON CONFLICT (user_id) DO UPDATE SET
 		WithArgs(userID, &points, &level, &totalPomodoros, &totalBurntTasks, &currentStreak, &bestStreak, sqlmock.AnyArg()).
 		WillReturnError(errors.New("update failed"))
 
-	stats := domain.UserStats{
-		UserID:          userID,
+	stats := domain.UserStatsUpdate{
 		Points:          &points,
 		Level:           &level,
 		TotalPomodoros:  &totalPomodoros,
@@ -459,7 +455,7 @@ ON CONFLICT (user_id) DO UPDATE SET
 		BestStreak:      &bestStreak,
 	}
 
-	err = s.UpdateUserStats(context.Background(), stats)
+	err = s.UpdateUserStats(context.Background(), userID, stats)
 	require.Error(t, err)
 	require.Contains(t, err.Error(), "update failed")
 	require.NoError(t, mock.ExpectationsWereMet())

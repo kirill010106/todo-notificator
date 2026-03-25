@@ -223,6 +223,219 @@
 
       <!-- Основной контент -->
       <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        <!-- Статистика -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
+          <div class="flex items-start justify-between gap-4">
+            <div>
+              <h2 class="text-lg font-semibold text-gray-800">Статистика</h2>
+              <p class="text-xs text-gray-500 mt-1">
+                Данные подтягиваются из профиля пользователя
+              </p>
+            </div>
+            <div class="flex items-center gap-2">
+              <button
+                @click="loadStats()"
+                class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
+                title="Обновить статистику"
+              >
+                <span :class="loadingStats ? 'animate-spin' : ''">↻</span>
+                Обновить
+              </button>
+              <button
+                @click="toggleStatsDebug()"
+                class="text-sm text-gray-500 hover:text-gray-700"
+                title="Служебный режим"
+              >
+                Debug
+              </button>
+            </div>
+          </div>
+
+          <div
+            x-show="loadingStats && !stats"
+            class="text-sm text-gray-400 mt-4"
+          >
+            Загрузка статистики...
+          </div>
+
+          <div x-show="stats" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Очки</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.points)"
+              ></div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Уровень</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.level)"
+              ></div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Помодоро</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.total_pomodoros)"
+              ></div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Сожжённые задачи</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.total_burnt_tasks)"
+              ></div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Текущий стрик</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.current_streak)"
+              ></div>
+            </div>
+            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
+              <div class="text-xs text-gray-500">Лучший стрик</div>
+              <div
+                class="text-lg font-semibold text-gray-800"
+                x-text="statsValue(stats?.best_streak)"
+              ></div>
+            </div>
+          </div>
+
+          <div x-show="stats" class="mt-3 text-xs text-gray-400">
+            Обновлено:
+            <span x-text="formatDate(stats?.updated_at)"></span>
+          </div>
+
+          <!-- Служебная debug-панель -->
+          <div
+            x-show="statsDebugEnabled"
+            x-cloak
+            class="mt-5 border-t border-gray-200 pt-5"
+          >
+            <div class="flex items-start justify-between gap-4">
+              <div>
+                <h3 class="text-sm font-semibold text-gray-800">
+                  Debug: обновление статистики
+                </h3>
+                <p class="text-xs text-gray-500 mt-1">
+                  Отправляет `PATCH /me/stats`. Пустые поля не отправляются.
+                </p>
+              </div>
+              <button
+                @click="resetStatsDebugForm()"
+                class="text-xs text-gray-500 hover:text-gray-700"
+              >
+                Сбросить форму
+              </button>
+            </div>
+
+            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Очки (points)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.points"
+                  placeholder="например 120"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Уровень (level)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.level"
+                  placeholder="например 3"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Помодоро (total_pomodoros)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.total_pomodoros"
+                  placeholder="например 10"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Сожжённые (total_burnt_tasks)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.total_burnt_tasks"
+                  placeholder="например 2"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Текущий стрик (current_streak)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.current_streak"
+                  placeholder="например 5"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-xs text-gray-500 mb-1"
+                  >Лучший стрик (best_streak)</label
+                >
+                <input
+                  type="number"
+                  x-model="statsUpdateForm.best_streak"
+                  placeholder="например 12"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+            </div>
+
+            <div class="flex flex-wrap gap-2 mt-4">
+              <button
+                @click="submitStatsUpdate()"
+                :disabled="loadingStatsUpdate"
+                class="bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
+              >
+                <span x-show="!loadingStatsUpdate">Отправить PATCH</span>
+                <span x-show="loadingStatsUpdate">Отправка...</span>
+              </button>
+              <button
+                @click="applyStatsDelta({ total_pomodoros: 1 })"
+                class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium px-3 py-2 rounded-lg border border-indigo-200"
+                title="Прибавить 1 помодоро (через PATCH текущего значения + 1)"
+              >
+                +1 помодоро
+              </button>
+              <button
+                @click="applyStatsDelta({ total_burnt_tasks: 1 })"
+                class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-medium px-3 py-2 rounded-lg border border-rose-200"
+                title="Прибавить 1 'сожжённую' задачу"
+              >
+                +1 burnt
+              </button>
+              <button
+                @click="applyStatsDelta({ points: 10 })"
+                class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium px-3 py-2 rounded-lg border border-amber-200"
+                title="Прибавить 10 очков"
+              >
+                +10 points
+              </button>
+            </div>
+          </div>
+        </div>
+
         <!-- Категории -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
@@ -659,6 +872,20 @@
           // Пагинация
           pagination: { limit: 20, offset: 0, total: 0 },
 
+          // Статистика
+          stats: null,
+          loadingStats: false,
+          statsDebugEnabled: false,
+          loadingStatsUpdate: false,
+          statsUpdateForm: {
+            points: "",
+            level: "",
+            total_pomodoros: "",
+            total_burnt_tasks: "",
+            current_streak: "",
+            best_streak: "",
+          },
+
           // UI состояние
           loading: false,
           loadingCreate: false,
@@ -686,10 +913,16 @@
           init() {
             const accessToken = localStorage.getItem("access_token");
             const email = localStorage.getItem("user_email");
+            const debugFlag =
+              localStorage.getItem("stats_debug") === "1" ||
+              new URLSearchParams(window.location.search).get("debug") === "1" ||
+              window.location.hash.includes("debug");
+            this.statsDebugEnabled = debugFlag;
             if (accessToken) {
               this.isAuthenticated = true;
               this.userEmail = email || "";
               this.loadCategories().then(() => this.loadTasks());
+              this.loadStats();
             }
           },
 
@@ -797,6 +1030,7 @@
               this.showToast("Добро пожаловать!", "success");
               this.loadCategories();
               this.loadTasks();
+              this.loadStats();
             } catch (err) {
               this.showToast("Ошибка подключения к серверу", "error");
             } finally {
@@ -851,8 +1085,147 @@
             this.isAuthenticated = false;
             this.tasks = [];
             this.categories = [];
+            this.stats = null;
             this.userEmail = "";
             this.showToast("Вы вышли из системы", "info");
+          },
+
+          // Статистика
+          statsValue(v) {
+            if (v === null || v === undefined) return "—";
+            if (typeof v === "number") return String(v);
+            return String(v);
+          },
+
+          toggleStatsDebug() {
+            this.statsDebugEnabled = !this.statsDebugEnabled;
+            localStorage.setItem("stats_debug", this.statsDebugEnabled ? "1" : "0");
+            this.showToast(
+              this.statsDebugEnabled
+                ? "Debug-панель статистики включена"
+                : "Debug-панель статистики выключена",
+              "info",
+            );
+          },
+
+          resetStatsDebugForm() {
+            this.statsUpdateForm = {
+              points: "",
+              level: "",
+              total_pomodoros: "",
+              total_burnt_tasks: "",
+              current_streak: "",
+              best_streak: "",
+            };
+          },
+
+          toOptionalInt(v) {
+            if (v === null || v === undefined) return undefined;
+            const s = String(v).trim();
+            if (s === "") return undefined;
+            const n = Number(s);
+            if (!Number.isFinite(n)) return undefined;
+            return Math.trunc(n);
+          },
+
+          buildStatsUpdatePayload() {
+            const payload = {};
+            const fields = [
+              "points",
+              "level",
+              "total_pomodoros",
+              "total_burnt_tasks",
+              "current_streak",
+              "best_streak",
+            ];
+            for (const f of fields) {
+              const n = this.toOptionalInt(this.statsUpdateForm[f]);
+              if (n !== undefined) payload[f] = n;
+            }
+            return payload;
+          },
+
+          async loadStats() {
+            if (!this.isAuthenticated) return;
+            this.loadingStats = true;
+            try {
+              const response = await this.apiRequest("/me/stats", { method: "GET" });
+              if (!response) return;
+              const data = await response.json();
+              if (!response.ok) {
+                this.stats = null;
+                this.showToast(data.error || "Ошибка загрузки статистики", "error");
+                return;
+              }
+              this.stats = data.user_stats || null;
+            } catch {
+              this.stats = null;
+              this.showToast("Ошибка подключения к серверу (stats)", "error");
+            } finally {
+              this.loadingStats = false;
+            }
+          },
+
+          async submitStatsUpdate() {
+            const payload = this.buildStatsUpdatePayload();
+            if (Object.keys(payload).length === 0) {
+              this.showToast("Заполните хотя бы одно поле", "error");
+              return;
+            }
+            this.loadingStatsUpdate = true;
+            try {
+              const response = await this.apiRequest("/me/stats", {
+                method: "PATCH",
+                body: JSON.stringify(payload),
+              });
+              if (!response) return;
+              if (response.status === 204 || response.ok) {
+                this.showToast("Статистика обновлена", "success");
+                await this.loadStats();
+                return;
+              }
+              const data = await response.json();
+              this.showToast(data.error || "Ошибка обновления статистики", "error");
+            } catch {
+              this.showToast("Ошибка подключения к серверу (stats update)", "error");
+            } finally {
+              this.loadingStatsUpdate = false;
+            }
+          },
+
+          async applyStatsDelta(delta) {
+            if (!this.stats) {
+              await this.loadStats();
+            }
+            if (!this.stats) {
+              this.showToast("Нет статистики для изменения", "error");
+              return;
+            }
+            const payload = {};
+            for (const [k, dv] of Object.entries(delta)) {
+              const current = this.stats?.[k];
+              const curN = typeof current === "number" ? current : Number(current ?? 0);
+              payload[k] = (Number.isFinite(curN) ? curN : 0) + Number(dv);
+            }
+            this.loadingStatsUpdate = true;
+            try {
+              const response = await this.apiRequest("/me/stats", {
+                method: "PATCH",
+                body: JSON.stringify(payload),
+              });
+              if (!response) return;
+              if (response.status === 204 || response.ok) {
+                this.showToast("Статистика обновлена", "success");
+                await this.loadStats();
+                return;
+              }
+              const data = await response.json();
+              this.showToast(data.error || "Ошибка обновления статистики", "error");
+            } catch {
+              this.showToast("Ошибка подключения к серверу (stats update)", "error");
+            } finally {
+              this.loadingStatsUpdate = false;
+            }
           },
 
           // Категории

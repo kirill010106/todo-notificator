@@ -493,7 +493,7 @@ func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserSt
 	return uS, nil
 }
 
-func (s *Storage) UpdateUserStats(ctx context.Context, stats domain.UserStats) error {
+func (s *Storage) UpdateUserStats(ctx context.Context, userID int64, stats domain.UserStatsUpdate) error {
 	const op = "storage.postgres.UpdateStats"
 
 	query := `
@@ -520,7 +520,7 @@ ON CONFLICT (user_id) DO UPDATE SET
     `
 
 	_, err := s.DB.ExecContext(ctx, query,
-		stats.UserID,
+		userID,
 		stats.Points,
 		stats.Level,
 		stats.TotalPomodoros,
