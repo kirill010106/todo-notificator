@@ -21,6 +21,7 @@ import (
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
+	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/delete"
 	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/get"
@@ -112,8 +113,8 @@ func main() {
 			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage))
 			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage))
 
-			// r.Get("users/{user_id}/stats")
-			// r.Patch("users/{user_id}/stats")
+			r.Get("/me/stats", statsget.New(log, storage))
+			// r.Patch("me/stats")
 			// POST /pomodoro/sessions - записать завершённую помодоро сессию
 
 		})

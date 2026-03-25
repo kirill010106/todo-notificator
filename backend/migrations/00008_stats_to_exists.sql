@@ -1,3 +1,4 @@
+-- +goose Up
 INSERT INTO user_stats (user_id, points, level, total_pomodoros, total_burnt_tasks, current_streak, best_streak, updated_at)
 SELECT 
     id, 
@@ -12,3 +13,7 @@ FROM users u
 WHERE NOT EXISTS (
     SELECT 1 FROM user_stats us WHERE us.user_id = u.id
 );
+
+-- +goose Down
+DELETE FROM user_stats
+WHERE user_id IN (SELECT id FROM users);

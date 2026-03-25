@@ -1,3 +1,4 @@
+-- +goose Up
 CREATE TABLE user_stats (
     id SERIAL PRIMARY KEY,
     user_id INT NOT NULL UNIQUE REFERENCES users(id) ON DELETE CASCADE,
@@ -30,3 +31,9 @@ CREATE TABLE pomodoro_sessions (
 );
 
 ALTER TABLE tasks ADD COLUMN burnt BOOLEAN NOT NULL DEFAULT false;
+
+-- +goose Down
+DROP TABLE IF EXISTS user_stats;
+-- DROP TABLE IF EXISTS achievements;
+DROP TABLE IF EXISTS pomodoro_sessions;
+ALTER TABLE tasks DROP COLUMN IF EXISTS burnt;
