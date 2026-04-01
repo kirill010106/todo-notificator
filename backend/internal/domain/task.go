@@ -5,6 +5,7 @@ import "time"
 const (
 	TaskStatusPending = "pending"
 	TaskStatusDone    = "done"
+	TaskStatusBurnt   = "burnt"
 )
 
 type Task struct {

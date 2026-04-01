@@ -10,4 +10,7 @@ var (
 	ErrRefreshTokenInvalid = errors.New("refresh token invalid or expired")
 	ErrCategoryExists      = errors.New("category already exists")
 	ErrCategoryNotFound    = errors.New("category not found")
+	ErrSessionActive       = errors.New("session already active")
+	ErrSessionNotFound     = errors.New("session not found")
+	ErrBreakExhausted      = errors.New("breaks exhausted")
 )

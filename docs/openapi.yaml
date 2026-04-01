@@ -118,6 +118,101 @@ components:
         total:
           type: integer
 
+    UserStats:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        points:
+          type: integer
+          format: int64
+          nullable: true
+        level:
+          type: integer
+          format: int64
+          nullable: true
+        total_pomodoros:
+          type: integer
+          format: int64
+          nullable: true
+        total_burnt_tasks:
+          type: integer
+          format: int64
+          nullable: true
+        current_streak:
+          type: integer
+          format: int64
+          nullable: true
+        best_streak:
+          type: integer
+          format: int64
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    UserStatsUpdate:
+      type: object
+      properties:
+        points:
+          type: integer
+          format: int64
+          nullable: true
+        level:
+          type: integer
+          format: int64
+          nullable: true
+        total_pomodoros:
+          type: integer
+          format: int64
+          nullable: true
+        total_burnt_tasks:
+          type: integer
+          format: int64
+          nullable: true
+        current_streak:
+          type: integer
+          format: int64
+          nullable: true
+        best_streak:
+          type: integer
+          format: int64
+          nullable: true
+
+    PomodoroSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        task_id:
+          type: integer
+          format: int64
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_minutes:
+          type: integer
+        breaks_used:
+          type: integer
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
 security:
   - bearerAuth: []
 
@@ -557,3 +652,102 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+
+  /me/stats:
+    get:
+      tags: [System]
+      summary: Получить статистику пользователя
+      responses:
+        "200":
+          description: Статистика пользователя
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  stats:
+                    $ref: '#/components/schemas/UserStats'
+        "401":
+          description: Неавторизован
+    patch:
+      tags: [System]
+      summary: Обновить статистику пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatsUpdate'
+      responses:
+        "200":
+          description: Статистика обновлена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  stats:
+                    $ref: '#/components/schemas/UserStats'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+
+  /pomodoro/sessions:
+    post:
+      tags: [System]
+      summary: Записать завершённую помодоро-сессию
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [task_id, started_at, completed_at, duration_minutes]
+              properties:
+                task_id:
+                  type: integer
+                  format: int64
+                started_at:
+                  type: string
+                  format: date-time
+                completed_at:
+                  type: string
+                  format: date-time
+                duration_minutes:
+                  type: integer
+                breaks_used:
+                  type: integer
+                  nullable: true
+      responses:
+        "201":
+          description: Сессия записана
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  id:
+                    type: integer
+                    format: int64
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован

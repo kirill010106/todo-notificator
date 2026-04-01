@@ -27,7 +27,7 @@ type Request struct {
 	Description *string    `json:"description" validate:"omitempty,max=2000"`
 	Deadline    *time.Time `json:"deadline,omitzero"`
 	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done"`
+	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
 	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
 }
 
