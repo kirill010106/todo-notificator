@@ -21,6 +21,9 @@ import (
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
+	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
+	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
+	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
 	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
 	statsupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
@@ -116,7 +119,10 @@ func main() {
 
 			r.Get("/me/stats", statsget.New(log, storage))
 			r.Patch("/me/stats", statsupdate.New(log, storage))
-			// POST /pomodoro/sessions - записать завершённую помодоро сессию
+
+			r.Post("/pomodoros/start", pomodorostart.New(log, storage))
+			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage))
+			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage))
 
 		})
 
