@@ -17,7 +17,8 @@ type Task struct {
 	Deadline    *time.Time `json:"deadline,omitzero"`
 	Status      string     `json:"status"`
 	IsNotified  bool       `json:"is_notified"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
+	//TODO: pomodoro taken
+	ReminderAt *time.Time `json:"reminder_at,omitzero"`
 }
 
 type TaskUpdate struct {
