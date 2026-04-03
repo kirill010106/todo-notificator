@@ -66,7 +66,7 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			return
 		}
 
-		if err := validate.Struct(req); err != nil {
+		if err = validate.Struct(req); err != nil {
 			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.ValidationError(err.(validator.ValidationErrors)))
@@ -100,22 +100,34 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			return
 		}
 
-		if req.FinishTask && session.TaskID != nil && *session.TaskID > 0 {
-			var newTaskStatus string
+		if session.TaskID != nil && *session.TaskID > 0 {
+			updatePayload := domain.TaskUpdate{}
+			shouldUpdate := false
+
+			// Increment pomodoros taken if the session successfully completed
 			if req.Action == domain.PomodoroStatusCompleted {
-				newTaskStatus = domain.TaskStatusDone
-			} else {
-				newTaskStatus = domain.TaskStatusBurnt
+				updatePayload.IncrementPomodorosTaken = true
+				shouldUpdate = true
 			}
 
-			updatePayload := domain.TaskUpdate{
-				Status: &newTaskStatus,
+			if req.FinishTask {
+				var newTaskStatus string
+				if req.Action == domain.PomodoroStatusCompleted {
+					newTaskStatus = domain.TaskStatusDone
+				} else {
+					newTaskStatus = domain.TaskStatusBurnt
+				}
+				updatePayload.Status = &newTaskStatus
+				shouldUpdate = true
 			}
-			err = provider.UpdateTask(r.Context(), userID, *session.TaskID, updatePayload)
-			if err != nil {
-				log.Error("failed to update task status", sl.Err(err))
-			} else {
-				log.Info("task marked as finished by pomodoro action", slog.String("new_status", newTaskStatus))
+
+			if shouldUpdate {
+				err = provider.UpdateTask(r.Context(), userID, *session.TaskID, updatePayload)
+				if err != nil {
+					log.Error("failed to update task", sl.Err(err))
+				} else {
+					log.Info("task updated by pomodoro action")
+				}
 			}
 		}
 

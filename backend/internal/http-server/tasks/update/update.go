@@ -23,12 +23,12 @@ import (
 )
 
 type Request struct {
-	Title       *string    `json:"title" validate:"omitempty,max=255"`
-	Description *string    `json:"description" validate:"omitempty,max=2000"`
-	Deadline    *time.Time `json:"deadline,omitzero"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
-	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	Title              *string    `json:"title" validate:"omitempty,max=255"`
+	Description        *string    `json:"description" validate:"omitempty,max=2000"`
+	Deadline           *time.Time `json:"deadline,omitzero"`
+	ReminderAt         *time.Time `json:"reminder_at,omitzero"`
+	Status             *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
+	CategoryID         *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
 }
 
 type Response struct {
@@ -63,12 +63,12 @@ func formatValidationError(err validator.FieldError) string {
 
 func (r Request) ToDomain() domain.TaskUpdate {
 	return domain.TaskUpdate{
-		Title:       r.Title,
-		Description: r.Description,
-		Deadline:    r.Deadline,
-		ReminderAt:  r.ReminderAt,
-		Status:      r.Status,
-		CategoryID:  r.CategoryID,
+		Title:              r.Title,
+		Description:        r.Description,
+		Deadline:           r.Deadline,
+		ReminderAt:         r.ReminderAt,
+		Status:             r.Status,
+		CategoryID:         r.CategoryID,
 	}
 }
 

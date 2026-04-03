@@ -16,6 +16,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/resend"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/verify"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
 	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
@@ -125,6 +126,8 @@ func main() {
 			r.Post("/pomodoros/start", pomodorostart.New(log, storage))
 			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage))
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage))
+
+			r.Post("/verify/resend", resend.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
 
 		})
 

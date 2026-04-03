@@ -21,9 +21,9 @@ import (
 type Request struct {
 	Title       string     `json:"title" validate:"required,max=255"`
 	Description string     `json:"description" validate:"max=2000"`
-	Deadline    *time.Time `json:"deadline,omitzero"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	CategoryID  *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
+	Deadline           *time.Time `json:"deadline,omitzero"`
+	ReminderAt         *time.Time `json:"reminder_at,omitzero"`
+	CategoryID         *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
 }
 
 type Response struct {
@@ -40,10 +40,10 @@ func (r Request) ToDomain(userID int64) domain.Task {
 		UserID:      userID,
 		Title:       r.Title,
 		Description: r.Description,
-		Deadline:    r.Deadline,
-		ReminderAt:  r.ReminderAt,
-		CategoryID:  r.CategoryID,
-		Status:      domain.TaskStatusPending,
+		Deadline:           r.Deadline,
+		ReminderAt:         r.ReminderAt,
+		CategoryID:         r.CategoryID,
+		Status:             domain.TaskStatusPending,
 	}
 	return task
 }

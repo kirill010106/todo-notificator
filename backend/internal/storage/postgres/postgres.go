@@ -97,7 +97,7 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int)
 	}
 
 	dataQuery := `
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`
@@ -112,7 +112,7 @@ LIMIT $2 OFFSET $3`
 
 	for rows.Next() {
 		var t domain.Task
-		err := rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID)
+		err = rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID, &t.PomodorosTaken)
 		if err != nil {
 			return nil, 0, fmt.Errorf("%s: %w", op, err)
 		}
@@ -199,6 +199,10 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 		setValues = append(setValues, fmt.Sprintf("category_id = $%d", argID))
 		args = append(args, *t.CategoryID)
 		argID++
+	}
+
+	if t.IncrementPomodorosTaken {
+		setValues = append(setValues, "pomodoro_taken = pomodoro_taken + 1")
 	}
 
 	if len(setValues) == 0 {
