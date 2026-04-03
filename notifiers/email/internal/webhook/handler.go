@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"encoding/json"
 	"log/slog"
 	"net/http"
 )
@@ -12,13 +13,25 @@ type Scheduler interface {
 type Handler struct {
 	log       *slog.Logger
 	scheduler Scheduler
+	sender    EmailSender
 	secret    string
 }
 
-func New(log *slog.Logger, scheduler Scheduler, secret string) *Handler {
+type EmailSender interface {
+	SendVerificationEmail(email, token string) error
+}
+
+type Payload struct {
+	Type  string `json:"type"`
+	Email string `json:"email,omitempty"`
+	Token string `json:"token,omitempty"`
+}
+
+func New(log *slog.Logger, scheduler Scheduler, sender EmailSender, secret string) *Handler {
 	return &Handler{
 		log:       log,
 		scheduler: scheduler,
+		sender:    sender,
 		secret:    secret,
 	}
 }
@@ -37,6 +50,21 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		h.log.Warn("webhook: unauthorized request",
 			slog.String("remote_addr", r.RemoteAddr))
 		w.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	var payload Payload
+
+	_ = json.NewDecoder(r.Body).Decode(&payload)
+
+	if payload.Type == "verification" && payload.Email != "" && payload.Token != "" {
+		h.log.Info("webhook: sending verification email", slog.String("email", payload.Email))
+		go func() {
+			if err := h.sender.SendVerificationEmail(payload.Email, payload.Token); err != nil {
+				h.log.Error("webhook: failed to send verification email", slog.String("error", err.Error()))
+			}
+		}()
+		w.WriteHeader(http.StatusOK)
 		return
 	}
 

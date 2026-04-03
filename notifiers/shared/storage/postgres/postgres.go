@@ -105,6 +105,7 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 	AND t.is_notified = false
 	AND t.reminder_at IS NOT NULL
 	AND t.reminder_at <= NOW()
+	AND u.is_verified = true
 	ORDER BY t.reminder_at ASC
 	`
 

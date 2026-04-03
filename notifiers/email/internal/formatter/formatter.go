@@ -10,31 +10,46 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
 )
 
-//go:embed templates/deadline.html
+//go:embed templates/deadline.html templates/verification.html
 var templatesFS embed.FS
 
-type templateData struct {
+type deadlineTemplateData struct {
 	Task              domain.Task
 	UrgencyText       string
 	BadgeClass        string
 	DeadlineFormatted string
 }
 
-type Formatter struct {
-	tmpl *template.Template
+type verificationTemplateData struct {
+	VerificationLink string
 }
 
-func New() (*Formatter, error) {
-	tmpl, err := template.ParseFS(templatesFS, "templates/deadline.html")
+type Formatter struct {
+	deadlineTmpl     *template.Template
+	verificationTmpl *template.Template
+	appURL           string
+}
+
+func New(appURL string) (*Formatter, error) {
+	deadlineTmpl, err := template.ParseFS(templatesFS, "templates/deadline.html")
 	if err != nil {
-		return nil, fmt.Errorf("formatter.New: failed to parse template: %w", err)
+		return nil, fmt.Errorf("formatter.New: failed to parse deadline template: %w", err)
 	}
 
-	return &Formatter{tmpl: tmpl}, nil
+	verificationTmpl, err := template.ParseFS(templatesFS, "templates/verification.html")
+	if err != nil {
+		return nil, fmt.Errorf("formatter.New: failed to parse verification template: %w", err)
+	}
+
+	return &Formatter{
+		deadlineTmpl:     deadlineTmpl,
+		verificationTmpl: verificationTmpl,
+		appURL:           appURL,
+	}, nil
 }
 
 func (f *Formatter) Format(task domain.Task, interval time.Duration) (string, error) {
-	data := templateData{
+	data := deadlineTemplateData{
 		Task:              task,
 		UrgencyText:       formatUrgencyText(interval),
 		BadgeClass:        formatBadgeClass(interval),
@@ -42,8 +57,24 @@ func (f *Formatter) Format(task domain.Task, interval time.Duration) (string, er
 	}
 
 	var buf bytes.Buffer
-	if err := f.tmpl.Execute(&buf, data); err != nil {
-		return "", fmt.Errorf("formatter.Format: %w", err)
+	if err := f.deadlineTmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("formatter.Format (deadline): %w", err)
+	}
+
+	return buf.String(), nil
+}
+
+// Verification generates the HTML body for the verification email
+func (f *Formatter) Verification(token string) (string, error) {
+	link := fmt.Sprintf("%s/?token=%s", f.appURL, token)
+
+	data := verificationTemplateData{
+		VerificationLink: link,
+	}
+
+	var buf bytes.Buffer
+	if err := f.verificationTmpl.Execute(&buf, data); err != nil {
+		return "", fmt.Errorf("formatter.Verification: %w", err)
 	}
 
 	return buf.String(), nil

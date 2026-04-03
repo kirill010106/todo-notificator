@@ -162,3 +162,22 @@ func (s *Sender) buildMessage(to, subject, body string) []byte {
 
 	return []byte(sb.String())
 }
+
+func (s *Sender) SendVerificationEmail(email, token string) error {
+	const op = "sender.SendVerificationEmail"
+
+	subject := "Подтверждение регистрации ToDoNotificator"
+	body, err := s.formatter.Verification(token)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	if err := s.send(email, subject, body); err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	s.log.Info("verification email sent",
+		slog.String("to", email),
+	)
+	return nil
+}

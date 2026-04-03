@@ -1,5 +1,7 @@
 env: "local"
 
+app_url: "http://localhost:3000"
+
 smtp:
   host: "smtp.mail.ru"
   port: 587

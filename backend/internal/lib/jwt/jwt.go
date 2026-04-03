@@ -12,11 +12,12 @@ import (
 
 func NewAccessToken(user domain.User, secret string, duration time.Duration) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"uid":   user.ID,
-		"email": user.Email,
-		"type":  "access",
-		"exp":   time.Now().Add(duration).Unix(),
-		"iat":   time.Now().Unix(),
+		"uid":         user.ID,
+		"email":       user.Email,
+		"type":        "access",
+		"exp":         time.Now().Add(duration).Unix(),
+		"iat":         time.Now().Unix(),
+		"is_verified": user.IsVerified,
 	})
 
 	return token.SignedString([]byte(secret))

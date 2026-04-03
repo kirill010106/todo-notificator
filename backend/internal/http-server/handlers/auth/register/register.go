@@ -1,10 +1,15 @@
 package register
 
 import (
+	"bytes"
 	"context"
+	"crypto/rand"
+	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
+	"time"
 
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
@@ -26,11 +31,20 @@ type Response struct {
 
 type UserSaver interface {
 	SaveUser(ctx context.Context, email string, passHash []byte) (int64, error)
+	SaveEmailVerificationToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error
+}
+
+func generateToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
 }
 
 var validate = validator.New()
 
-func New(log *slog.Logger, userSaver UserSaver) http.HandlerFunc {
+func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.register.New"
 
@@ -66,6 +80,25 @@ func New(log *slog.Logger, userSaver UserSaver) http.HandlerFunc {
 			render.JSON(w, r, resp.Error("failed to save user"))
 			return
 		}
+
+		token, _ := generateToken()
+		_ = userSaver.SaveEmailVerificationToken(r.Context(), id, token, time.Now().Add(24*time.Hour))
+
+		go func(email, token string) {
+			payload := map[string]string{
+				"type":  "verification",
+				"email": email,
+				"token": token,
+			}
+			body, _ := json.Marshal(payload)
+
+			reqW, _ := http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(body))
+			reqW.Header.Set("Content-Type", "application/json")
+			reqW.Header.Set("X-Webhook-Secret", webhookSecret)
+
+			client := &http.Client{Timeout: 5 * time.Second}
+			client.Do(reqW)
+		}(req.Email, token)
 
 		render.JSON(w, r, Response{
 			Response: resp.OK(),

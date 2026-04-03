@@ -343,12 +343,12 @@ func TestGetUserStats_Error(t *testing.T) {
        `)
 	mock.ExpectQuery(query).
 		WithArgs(userID).
-		WillReturnError(sql.ErrNoRows)
+		WillReturnError(errors.New("some generated error"))
 
 	stats, err := s.GetUserStats(context.Background(), userID)
 	require.Error(t, err)
 	require.Equal(t, int64(0), stats.ID)
-	require.Contains(t, err.Error(), "sql: no rows in result set")
+	require.Contains(t, err.Error(), "some generated error")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

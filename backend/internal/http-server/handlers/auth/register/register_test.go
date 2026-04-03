@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"testing"
+	"time"
 
 	"github.com/kirill010106/todo-notificator/internal/storage"
 	"github.com/stretchr/testify/assert"
@@ -21,6 +22,10 @@ type mockUserSaver struct {
 
 func (m *mockUserSaver) SaveUser(ctx context.Context, email string, passHash []byte) (int64, error) {
 	return m.ID, m.Error
+}
+
+func (m *mockUserSaver) SaveEmailVerificationToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
+	return nil
 }
 
 func TestRegister(t *testing.T) {
@@ -75,18 +80,17 @@ func TestRegister(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			//Arrange
+			// Arrange
 			mock := &mockUserSaver{ID: tt.mockID, Error: tt.mockErr}
-			handler := New(slog.New(slog.DiscardHandler), mock)
+			handler := New(slog.New(slog.DiscardHandler), mock, "http://localhost", "secret")
 			req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
 
-			//Act
+			// Act
 			handler(w, req)
 
-			//Assert
-
+			// Assert
 			var response Response
 			err := json.NewDecoder(w.Body).Decode(&response)
 			assert.NoError(t, err)

@@ -13,4 +13,7 @@ var (
 	ErrSessionActive       = errors.New("session already active")
 	ErrSessionNotFound     = errors.New("session not found")
 	ErrBreakExhausted      = errors.New("breaks exhausted")
+	ErrTokenNotFound       = errors.New("verification token not found")
+	ErrTokenExpired        = errors.New("verification token expired")
+	ErrTokenExists         = errors.New("verification token already exists")
 )

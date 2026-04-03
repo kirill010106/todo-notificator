@@ -15,6 +15,7 @@ type Config struct {
 	Database  Database        `yaml:"database"`
 	Intervals []time.Duration `yaml:"notification_intervals"`
 	Webhook   Webhook         `yaml:"webhook"`
+	AppURL    string          `yaml:"app_url" env:"APP_URL" env-default:"http://localhost:3000"`
 }
 
 type Webhook struct {

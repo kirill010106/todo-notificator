@@ -16,6 +16,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/verify"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
 	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
@@ -98,10 +99,11 @@ func main() {
 
 	router.Route("/api/v1", func(r chi.Router) {
 
-		r.Post("/register", register.New(log, storage))
+		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
 		r.Post("/login", login.New(log, storage, cfg))
 		r.Get("/health", health.New(log, storage.DB))
 		r.Post("/refresh", refresh.New(log, storage, cfg))
+		r.Get("/verify", verify.New(log, storage))
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.New(cfg.AppSecret))

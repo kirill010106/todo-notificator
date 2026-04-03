@@ -229,10 +229,10 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 func (s *Storage) User(ctx context.Context, email string) (domain.User, error) {
 	const op = "storage.postgres.User"
 
-	query := `SELECT id, email, password_hash from users WHERE email = $1`
+	query := `SELECT id, email, password_hash, is_verified FROM users WHERE email = $1`
 
 	var user domain.User
-	err := s.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash)
+	err := s.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash, &user.IsVerified)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.User{}, storage.ErrUserNotFound
@@ -343,14 +343,16 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 
 	var user domain.User
 	query := `
-	SELECT id, email, password_hash FROM users
+	SELECT id, email, password_hash, is_verified FROM users
 	WHERE id = $1
 	`
 
 	err := s.DB.QueryRowContext(ctx, query, userID).Scan(
 		&user.ID,
 		&user.Email,
-		&user.PassHash)
+		&user.PassHash,
+		&user.IsVerified,
+	)
 
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -487,6 +489,13 @@ func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserSt
 	err := s.DB.QueryRowContext(ctx, query, userID).
 		Scan(&uS.ID, &uS.UserID, &uS.Points, &uS.Level, &uS.TotalPomodoros, &uS.TotalBurntTasks, &uS.CurrentStreak, &uS.BestStreak, &uS.UpdatedAt)
 	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			_, errInsert := s.DB.ExecContext(ctx, `INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, userID)
+			if errInsert != nil {
+				return domain.UserStats{}, fmt.Errorf("%s (init): %w", op, errInsert)
+			}
+			return s.GetUserStats(ctx, userID)
+		}
 		return domain.UserStats{}, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -533,5 +542,81 @@ ON CONFLICT (user_id) DO UPDATE SET
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
+	return nil
+}
+
+func (s *Storage) SaveEmailVerificationToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
+	const op = "storage.postgres.SaveEmailVerificationToken"
+
+	query := `
+		INSERT INTO email_verification_tokens (user_id, token, expires_at)
+		VALUES ($1, $2, $3)
+	`
+
+	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt)
+	if err != nil {
+		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == pgerrcode.UniqueViolation {
+			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists) // Либо отдельная ошибка "token already exists"
+		}
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *Storage) GetEmailVerificationToken(ctx context.Context, token string) (domain.EmailVerificationToken, error) {
+	const op = "storage.postgres.GetEmailVerificationToken"
+
+	query := `
+		SELECT id, user_id, token, expires_at, created_at 
+		FROM email_verification_tokens 
+		WHERE token = $1
+	`
+
+	var t domain.EmailVerificationToken
+	err := s.DB.QueryRowContext(ctx, query, token).Scan(&t.ID, &t.UserID, &t.Token, &t.ExpiresAt, &t.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.EmailVerificationToken{}, fmt.Errorf("%s: %w", op, storage.ErrTokenNotFound)
+		}
+		return domain.EmailVerificationToken{}, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return t, nil
+}
+
+func (s *Storage) VerifyUserEmail(ctx context.Context, userID int64) error {
+	const op = "storage.postgres.VerifyUserEmail"
+
+	query := `
+		UPDATE users SET is_verified = true WHERE id = $1
+	`
+
+	res, err := s.DB.ExecContext(ctx, query, userID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	rows, err := res.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%s: %w", op, storage.ErrUserNotFound)
+	}
+
+	return nil
+}
+
+func (s *Storage) DeleteEmailVerificationToken(ctx context.Context, token string) error {
+	const op = "storage.postgres.DeleteEmailVerificationToken"
+
+	query := `
+		DELETE FROM email_verification_tokens WHERE token = $1
+	`
+	_, err := s.DB.ExecContext(ctx, query, token)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
 	return nil
 }

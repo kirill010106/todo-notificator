@@ -9,10 +9,10 @@ import (
 	"os/signal"
 	"syscall"
 
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
-	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/scheduler"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
@@ -32,7 +32,7 @@ func main() {
 	defer storage.Close()
 	logger.Info("database connected")
 
-	fmtr, err := formatter.New()
+	fmtr, err := formatter.New(cfg.AppURL)
 	if err != nil {
 		log.Fatalf("failed to create formatter: %v", err)
 	}
@@ -51,7 +51,7 @@ func main() {
 		cfg.Intervals,
 	)
 
-	webhookHandler := webhook.New(logger, sched, cfg.Webhook.Secret)
+	webhookHandler := webhook.New(logger, sched, sndr, cfg.Webhook.Secret)
 	srv := &http.Server{
 		Addr:    cfg.Webhook.Address,
 		Handler: webhookHandler,
@@ -82,5 +82,3 @@ func main() {
 
 	logger.Info("email notifier stopped")
 }
-
-

@@ -1,5 +1,7 @@
 env: "prod"
 
+app_url: "http://0.0.0.0:3000"
+
 smtp:
   host: "smtp.mail.ru"
   port: 587

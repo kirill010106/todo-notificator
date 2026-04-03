@@ -206,10 +206,14 @@
             <span class="font-bold text-gray-800">ToDo Notificator</span>
           </div>
           <div class="flex items-center gap-3">
-            <span
-              class="text-sm text-gray-500 hidden sm:block"
-              x-text="userEmail"
-            ></span>
+            <div class="flex items-center gap-1 hidden sm:flex">
+              <span
+                class="text-sm text-gray-500"
+                x-text="userEmail"
+              ></span>
+              <span x-show="isVerified" class="text-green-500 text-sm" title="Почта подтверждена">✓</span>
+              <span x-show="!isVerified" class="text-amber-500 text-sm cursor-help" title="Почта не подтверждена. Проверьте ваш email!">⚠️</span>
+            </div>
             <button
               @click="logout()"
               class="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
@@ -223,6 +227,45 @@
 
       <!-- Основной контент -->
       <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+        <!-- Уведомление о неподтвержденной почте -->
+        <div x-cloak x-show="!isVerified" class="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl mb-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">⚠️</span>
+            <span class="text-sm font-medium">Ваша почта не подтверждена! Напоминания отключены. Для получения писем пройдите по ссылке из нашего email.</span>
+          </div>
+        </div>
+
+        <!-- POMODORO WIDGET -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Pomodoro Таймер</h2>
+          
+          <div x-show="!pomodoro.activeSession && !pomodoro.interSessionBreak" class="relative bg-indigo-50/50 border border-indigo-100 rounded-3xl p-8 flex flex-col items-center justify-center gap-5 w-full min-h-[14rem]">
+            <div class="bg-indigo-100 p-4 rounded-full text-indigo-500 mb-2">▶️</div>
+            <h3 class="text-xl font-bold text-indigo-900 mb-1">Готовы сфокусироваться?</h3>
+            <button @click="startPomodoro()" class="bg-indigo-600 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-md hover:-translate-y-0.5 mt-2">
+              Свободный Помодоро
+            </button>
+          </div>
+
+          <div x-show="pomodoro.activeSession || pomodoro.interSessionBreak" class="relative border bg-white rounded-3xl p-8 flex flex-col items-center gap-6 shadow-sm min-h-[16rem]">
+            <div class="absolute top-6 left-6 text-sm font-bold uppercase tracking-wider" :class="pomodoro.mode === 'focus' ? 'text-indigo-600' : 'text-blue-600'" x-text="pomodoro.mode.toUpperCase()"></div>
+            
+            <div class="mt-4 text-[4rem] sm:text-[5rem] font-mono font-bold leading-none" :class="pomodoro.mode === 'focus' ? 'text-indigo-900' : 'text-blue-900'" x-text="formatPomodoroTime()"></div>
+            
+            <div class="flex gap-4">
+              <template x-if="pomodoro.mode === 'focus'">
+                <button @click="completePomodoroAction()" class="bg-green-500 hover:bg-green-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition">Завершить</button>
+              </template>
+              <template x-if="pomodoro.mode === 'focus'">
+                <button @click="pausePomodoroAction()" class="bg-blue-500 hover:bg-blue-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition">Кофе-брейк</button>
+              </template>
+              <template x-if="pomodoro.mode === 'break' || pomodoro.interSessionBreak">
+                <button @click="returnToWork()" class="bg-white text-blue-700 hover:bg-blue-50 px-6 py-2.5 border border-blue-200 rounded-xl font-bold shadow-sm transition">Продолжить работу</button>
+              </template>
+            </div>
+          </div>
+        </div>
+
         <!-- Статистика -->
         <div
           class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
@@ -540,6 +583,8 @@
                 <input
                   type="datetime-local"
                   x-model="newTask.reminder_at"
+                    :disabled="!isVerified"
+                    :title="!isVerified ? 'Подтвердите email для получения напоминаний' : ''"
                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 />
               </div>
@@ -753,6 +798,8 @@
                         <input
                           type="datetime-local"
                           x-model="editForm.reminder_at"
+                            :disabled="!isVerified"
+                            :title="!isVerified ? 'Подтвердите email для получения напоминаний' : ''"
                           class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
                         />
                       </div>
@@ -836,10 +883,107 @@
         return {
           // Состояние аутентификации
           isAuthenticated: false,
+            isVerified: false,
+
           authTab: "login",
           userEmail: "",
 
-          // Формы
+          
+            // POMODORO STATE
+            pomodoro: {
+              activeSession: null,
+              interSessionBreak: null,
+              mode: 'focus',
+              timeLeft: 0,
+              breakStartTime: null,
+              timerInterval: null
+            },
+            
+            async startPomodoro() {
+              try {
+                const response = await this.apiRequest('/pomodoros/start', { method: 'POST' });
+                if (response && response.ok) {
+                  const data = await response.json();
+                  this.pomodoro.activeSession = data.session;
+                  this.pomodoro.mode = 'focus';
+                  this.startPomodoroTimer(data.session.duration_minutes * 60);
+                  this.showToast('Таймер запущен!', 'success');
+                } else if (response && response.status === 409) {
+                  const d = await response.json();
+                  if (d.active_session) {
+                    this.pomodoro.activeSession = d.active_session;
+                    this.pomodoro.mode = 'focus';
+                    this.startPomodoroTimer(d.active_session.duration_minutes * 60);
+                    this.showToast('Таймер восстановлен!', 'success');
+                  } else {
+                    this.showToast('Ошибка запуска: ' + (d.error || 'Conflict'), 'error');
+                  }
+                } else {
+                  this.showToast('Ошибка запуска таймера', 'error');
+                }
+              } catch (e) {
+                this.showToast('Ошибка сети', 'error');
+              }
+            },
+
+            async completePomodoroAction() {
+              if(!this.pomodoro.activeSession) return;
+              try {
+                await this.apiRequest(`/pomodoros/${this.pomodoro.activeSession.id}/stop`, {
+                  method: 'POST',
+                  body: JSON.stringify({ action: 'completed', finish_task: false })
+                });
+                this.clearPomodoroTimer();
+                this.pomodoro.activeSession = null;
+                this.showToast('Помодоро завершен!', 'success');
+                this.loadStats();
+              } catch (e) {
+                 this.showToast('Ошибка', 'error');
+              }
+            },
+
+            async pausePomodoroAction() {
+               if(!this.pomodoro.activeSession) return;
+               try {
+                 await this.apiRequest(`/pomodoros/${this.pomodoro.activeSession.id}/pause`, { method: 'POST' });
+                 this.pomodoro.mode = 'break';
+                 this.startPomodoroTimer(5 * 60); // 5 minutes break
+                 this.showToast('Время для кофе-брейка!', 'success');
+               } catch (e) {
+                 this.showToast('Ошибка паузы', 'error');
+               }
+            },
+
+            returnToWork() {
+               this.pomodoro.mode = 'focus';
+               this.pomodoro.interSessionBreak = null;
+               this.startPomodoroTimer(this.pomodoro.activeSession ? this.pomodoro.activeSession.duration_minutes * 60 : 0);
+            },
+
+            startPomodoroTimer(seconds) {
+              this.clearPomodoroTimer();
+              this.pomodoro.timeLeft = seconds;
+              this.pomodoro.timerInterval = setInterval(() => {
+                if (this.pomodoro.timeLeft > 0) {
+                  this.pomodoro.timeLeft--;
+                } else {
+                  this.clearPomodoroTimer();
+                  this.showToast('Время вышло!', 'info');
+                }
+              }, 1000);
+            },
+
+            clearPomodoroTimer() {
+              if (this.pomodoro.timerInterval) clearInterval(this.pomodoro.timerInterval);
+            },
+
+            formatPomodoroTime() {
+              const mins = Math.floor(this.pomodoro.timeLeft / 60).toString().padStart(2, '0');
+              const secs = (this.pomodoro.timeLeft % 60).toString().padStart(2, '0');
+              return `${mins}:${secs}`;
+            },
+
+            // Формы
           loginForm: { email: "", password: "" },
           registerForm: { email: "", password: "" },
           showLoginPassword: false,
@@ -911,6 +1055,14 @@
 
           // Инициализация
           init() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const verifyToken = urlParams.get("token");
+            if (verifyToken) {
+              const newUrl = window.location.pathname + window.location.hash;
+              window.history.replaceState({}, document.title, newUrl);
+              this.verifyEmail(verifyToken);
+            }
+
             const accessToken = localStorage.getItem("access_token");
             const email = localStorage.getItem("user_email");
             const debugFlag =
@@ -920,6 +1072,7 @@
             this.statsDebugEnabled = debugFlag;
             if (accessToken) {
               this.isAuthenticated = true;
+                this.isVerified = !!this.parseJwt(localStorage.getItem("access_token"))?.is_verified;
               this.userEmail = email || "";
               this.loadCategories().then(() => this.loadTasks());
               this.loadStats();
@@ -999,6 +1152,33 @@
           },
 
           // Аутентификация
+          async verifyEmail(token) {
+            this.loading = true;
+            try {
+              const response = await fetch(`${API_BASE}/verify?token=${token}`, {
+                method: "GET"
+              });
+              
+              const data = await response.json();
+              
+              if (response.ok) {
+                this.showToast("Почта успешно подтверждена! Теперь можно войти.", "success");
+                this.authTab = "login";
+                if (this.isAuthenticated) {
+                    this.isVerified = true;
+                    // Forcing a silent token refresh so the JWT gets the new is_verified=true claim
+                    this.refreshToken().catch(() => {});
+                }
+              } else {
+                this.showToast(data.error || "Ошибка подтверждения почты", "error");
+              }
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу при проверке почты", "error");
+            } finally {
+              this.loading = false;
+            }
+          },
+
           async login() {
             this.loading = true;
             try {
@@ -1024,6 +1204,7 @@
               localStorage.setItem("user_email", this.loginForm.email);
 
               this.userEmail = this.loginForm.email;
+                this.isVerified = !!this.parseJwt(data.access_token || data.token)?.is_verified;
               this.isAuthenticated = true;
               this.loginForm = { email: "", password: "" };
 
@@ -1119,7 +1300,15 @@
             };
           },
 
-          toOptionalInt(v) {
+          parseJwt(token) {
+              try {
+                return JSON.parse(atob((token||'').split('.')[1]));
+              } catch (e) {
+                return null;
+              }
+            },
+
+            toOptionalInt(v) {
             if (v === null || v === undefined) return undefined;
             const s = String(v).trim();
             if (s === "") return undefined;
