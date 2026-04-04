@@ -6,6 +6,8 @@ const (
 	PomodoroStatusActive    = "active"
 	PomodoroStatusCompleted = "completed"
 	PomodoroStatusAbandoned = "abandoned"
+	PomodoroRewardPoints    = 20
+	PomodoroPenaltyPoints   = -30
 )
 
 type PomodoroSession struct {

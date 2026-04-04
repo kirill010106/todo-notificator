@@ -27,6 +27,7 @@ type PomodoroProvider interface {
 	StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
+	UpdateUserScore(ctx context.Context, userID int64, pointsDelta int) error
 }
 
 var validate = validator.New()
@@ -132,6 +133,19 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		}
 
 		log.Info("pomodoro session stopped successfully")
+
+		pointsDelta := domain.PomodoroPenaltyPoints
+		if req.Action == domain.PomodoroStatusCompleted {
+			pointsDelta = domain.PomodoroRewardPoints
+
+		}
+
+		err = provider.UpdateUserScore(r.Context(), userID, pointsDelta)
+		if err != nil {
+			log.Error("failed to update user score", slog.Int("delta", pointsDelta), sl.Err(err))
+		} else {
+			log.Info("user score updated", slog.Int("delta", pointsDelta))
+		}
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, resp.OK())
 	}

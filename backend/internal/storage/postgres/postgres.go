@@ -624,3 +624,20 @@ func (s *Storage) DeleteEmailVerificationToken(ctx context.Context, token string
 
 	return nil
 }
+
+func (s *Storage) UpdateUserScore(ctx context.Context, userID int64, pointsDelta int) error {
+	const op = "storage.postgres.UpdateUserScore"
+
+	query := `
+    UPDATE user_stats 
+    SET 
+		points = points + $1,
+		level = GREATEST(1, ((points + $1) / 100) + 1)
+    WHERE user_id = $2
+`
+	_, err := s.DB.ExecContext(ctx, query, pointsDelta, userID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
