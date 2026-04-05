@@ -10,7 +10,7 @@ import (
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
-// LoggerConfig возвращает настроенный логгер с op, request_id и userID
+// LoggerWithAuth возвращает настроенный логгер с op, request_id и userID
 // Если неавторизовано - пишет в response и возвращает nil, false
 func LoggerWithAuth(w http.ResponseWriter, r *http.Request, log *slog.Logger, op string) (*slog.Logger, int64, bool) {
 	l := log.With(

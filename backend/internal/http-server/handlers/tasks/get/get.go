@@ -7,10 +7,9 @@ import (
 	"net/http"
 	"strconv"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -40,25 +39,14 @@ func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.get.New"
 
-		log := log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
-		)
-
-		userID, ok := auth.GetUserID(r.Context())
+		l, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
 		if !ok {
-			log.Error("user_id not found in context")
-
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, resp.Error("unauthorized"))
 			return
 		}
 
-		log = log.With(slog.Int64("user_id", userID))
-
 		limit, offset, err := parsePagination(r)
 		if err != nil {
-			log.Info("invalid pagination params", sl.Err(err))
+			l.Info("invalid pagination params", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid pagination params"))
 			return
@@ -69,18 +57,18 @@ func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 		if err != nil {
 
 			if errors.Is(err, storage.ErrTaskNotFound) {
-				log.Info("tasks not found")
+				l.Info("tasks not found")
 				render.Status(r, http.StatusNotFound)
 				render.JSON(w, r, resp.Error("tasks not found"))
 				return
 			}
-			log.Error("failed to get tasks", sl.Err(err))
+			l.Error("failed to get tasks", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to get tasks"))
 			return
 		}
 
-		log.Info("tasks retrieved successfully", slog.Int("task_count", len(tasks)))
+		l.Info("tasks retrieved successfully", slog.Int("task_count", len(tasks)))
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{

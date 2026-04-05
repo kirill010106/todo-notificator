@@ -8,11 +8,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -21,9 +20,9 @@ import (
 type Request struct {
 	Title       string     `json:"title" validate:"required,max=255"`
 	Description string     `json:"description" validate:"max=2000"`
-	Deadline           *time.Time `json:"deadline,omitzero"`
-	ReminderAt         *time.Time `json:"reminder_at,omitzero"`
-	CategoryID         *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
+	Deadline    *time.Time `json:"deadline,omitzero"`
+	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
+	CategoryID  *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
 }
 
 type Response struct {
@@ -40,10 +39,10 @@ func (r Request) ToDomain(userID int64) domain.Task {
 		UserID:      userID,
 		Title:       r.Title,
 		Description: r.Description,
-		Deadline:           r.Deadline,
-		ReminderAt:         r.ReminderAt,
-		CategoryID:         r.CategoryID,
-		Status:             domain.TaskStatusPending,
+		Deadline:    r.Deadline,
+		ReminderAt:  r.ReminderAt,
+		CategoryID:  r.CategoryID,
+		Status:      domain.TaskStatusPending,
 	}
 	return task
 }
@@ -55,50 +54,40 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
 
-		log := log.With(
-			slog.String("op", op),
-			slog.String("request_id", middleware.GetReqID(r.Context())),
-		)
-
-		userID, ok := auth.GetUserID(r.Context())
+		l, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
 		if !ok {
-			log.Error("user_id not found in context")
-
-			render.Status(r, http.StatusUnauthorized)
-			render.JSON(w, r, resp.Error("unauthorized"))
 			return
 		}
 
-		log = log.With(slog.Int64("user_id", userID))
 		var req Request
 
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				log.Warn("request body is empty")
+				l.Warn("request body is empty")
 
 				render.Status(r, http.StatusBadRequest)
 				render.JSON(w, r, resp.Error("empty request body"))
 				return
 			}
-			log.Warn("failed to decode request body", sl.Err(err))
+			l.Warn("failed to decode request body", sl.Err(err))
 
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("failed to decode request"))
 			return
 		}
 
-		if err := validate.Struct(req); err != nil {
+		if err = validate.Struct(req); err != nil {
 			var validateErr validator.ValidationErrors
 
 			if errors.As(err, &validateErr) {
-				log.Warn("invalid request", sl.Err(err))
+				l.Warn("invalid request", sl.Err(err))
 
 				render.Status(r, http.StatusBadRequest)
 				render.JSON(w, r, resp.ValidationError(validateErr))
 				return
 			}
-			log.Error("internal validation error", sl.Err(err))
+			l.Error("internal validation error", sl.Err(err))
 
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal server error"))
@@ -111,34 +100,34 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			return
 		}
 
-		log.Debug("request body decoded", slog.Any("request", req))
+		l.Debug("request body decoded", slog.Any("request", req))
 
 		task := req.ToDomain(userID)
 
 		id, err := taskSaver.SaveTask(r.Context(), task)
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskExists) {
-				log.Warn("task already exists", sl.Err(err))
+				l.Warn("task already exists", sl.Err(err))
 
 				render.Status(r, http.StatusConflict)
 				render.JSON(w, r, resp.Error("task already exists"))
 				return
 			}
 			if errors.Is(err, storage.ErrCategoryNotFound) {
-				log.Warn("category not found", sl.Err(err))
+				l.Warn("category not found", sl.Err(err))
 
 				render.Status(r, http.StatusNotFound)
 				render.JSON(w, r, resp.Error("category not found"))
 				return
 			}
-			log.Error("failed to save task", sl.Err(err))
+			l.Error("failed to save task", sl.Err(err))
 
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to save task"))
 			return
 		}
 
-		log.Info("task saved", slog.Int64("id", id))
+		l.Info("task saved", slog.Int64("id", id))
 
 		render.Status(r, http.StatusCreated)
 		render.JSON(w, r, Response{
@@ -147,7 +136,7 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 		})
 
 		if webhookURL != "" {
-			go notifyScheduler(log, webhookURL, webhookSecret)
+			go notifyScheduler(l, webhookURL, webhookSecret)
 		}
 	}
 }

@@ -29,16 +29,17 @@ import (
 	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
 	statsupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
-	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/delete"
-	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/get"
-	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/save"
-	"github.com/kirill010106/todo-notificator/internal/http-server/tasks/update"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/delete"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/get"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/save"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/pressly/goose/v3"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
+	"github.com/go-chi/httprate"
 	"github.com/joho/godotenv"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	slogpretty "github.com/kirill010106/todo-notificator/internal/lib/handlers"
@@ -97,6 +98,7 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
+	router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	router.Route("/api/v1", func(r chi.Router) {
 
