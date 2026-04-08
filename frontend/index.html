@@ -986,7 +986,10 @@
     </div>
 
     <script>
-      const API_BASE = "http://localhost:8082/api/v1";
+      // Automatically target local server or production API based on hostname
+      const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+        ? "http://localhost:8082/api/v1"
+        : "https://todoapi.chkpnk.ru/api/v1";
 
       function app() {
         return {
