@@ -1,6 +1,6 @@
 env: "prod"
 
-app_url: "http://0.0.0.0:3000"
+app_url: "https://todo.chkpnk.ru"
 
 smtp:
   host: "smtp.mail.ru"
