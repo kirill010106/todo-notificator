@@ -1,7 +1,7 @@
 env: "prod"
 
 webhook:
-  url: "http://127.0.0.1:8084"
+  url: "http://email-notifier:8084"
   secret: ""
 http_server:
   address: "0.0.0.0:8082"
