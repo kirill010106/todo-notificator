@@ -22,15 +22,17 @@ services:
 
     labels:
       - "traefik.enable=true"
-      # Настраиваем роутинг на ваш поддомен :
+      # Настраиваем роутинг:
       - "traefik.http.routers.todobackend.rule=Host(`todoapi.chkpnk.ru`)"
-      # Включаем HTTPS (в Matrix-инсталляциях обычно точка входа называется websecure)
-      - "traefik.http.routers.todobackend.entrypoints=websecure"
-      # Указываем Traefik, что наш контейнер слушает внутри на 8082 порту (как у вас было настроено изначально)
+      # ВАЖНО: точка входа называется web-secure, а не websecure
+      - "traefik.http.routers.todobackend.entrypoints=web-secure"
+      # ВАЖНО: обязательно включаем TLS явно
+      - "traefik.http.routers.todobackend.tls=true"
+      # ВАЖНО: certResolver пишется с большой буквой R в конфигурации Matrix
+      - "traefik.http.routers.todobackend.tls.certResolver=default"
+      # Указываем правильный порт из prod.yaml
       - "traefik.http.services.todobackend.loadbalancer.server.port=8082"
-      # Говорим Traefik попытаться получить SSL-сертификат
-      - "traefik.http.routers.todobackend.tls.certresolver=default"
-      # Так как проектов может быть много, явно указываем, через какую сеть маршрутизировать
+      # Явно указываем сеть:
       - "traefik.docker.network=traefik"
 
   email-notifier:
@@ -52,12 +54,11 @@ services:
       - matrix-traefik-net
     labels:
       - "traefik.enable=true"
-      # Настраиваем роутинг на поддомен ВАШЕГО фронтенда:
       - "traefik.http.routers.todofrontend.rule=Host(`todo.chkpnk.ru`)"
-      - "traefik.http.routers.todofrontend.entrypoints=websecure"
-      # Nginx внутри контейнера слушает стандартный порт 80
+      - "traefik.http.routers.todofrontend.entrypoints=web-secure"
+      - "traefik.http.routers.todofrontend.tls=true"
+      - "traefik.http.routers.todofrontend.tls.certResolver=default"
       - "traefik.http.services.todofrontend.loadbalancer.server.port=80"
-      - "traefik.http.routers.todofrontend.tls.certresolver=default"
       - "traefik.docker.network=traefik"
 
 # Регистрируем внешнюю сеть Traefik
