@@ -30,15 +30,6 @@
         group: "{{ ansible_user }}"
         mode: '0600'      
 
-    - name: Ensure Docker is installed
-      apt:
-        name: 
-          - docker.io
-          - docker-compose-v2
-        state: present
-        update_cache: yes
-      ignore_errors: yes
-
     # Авторизуемся в реестре GitHub пакетов (необходим для приватных репозиториев)
     - name: Log in to GitHub Container Registry
       command: "docker login ghcr.io -u {{ github_username }} -p {{ github_token }}"

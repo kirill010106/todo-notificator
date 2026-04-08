@@ -2,18 +2,36 @@ version: '3.8'
 
 services:
   backend:
-    # Вместо локальной сборки указываем путь к образу в GitHub
     image: ${IMAGE_BASE}-backend:latest
     restart: always
     environment:
-      - DATABASE_URL=${DATABASE_URL} 
+      - DATABASE_URL=${DATABASE_URL}
       - CONFIG_PATH=/app/config/prod.yaml
     env_file:
       - .env
-    ports:
-      - "8082:8082"
     volumes:
       - ./backend/config:/app/config:ro
+    # Подключаем к внешней сети Traefik:
+    networks:
+      - default
+      - matrix-traefik-net
+
+    # Убедитесь, что вы убрали секцию ports, так как Traefik всё берет на себя
+    # ports:
+    #  - "8082:8082" 
+
+    labels:
+      - "traefik.enable=true"
+      # Настраиваем роутинг на ваш поддомен :
+      - "traefik.http.routers.todobackend.rule=Host(`todoapi.chkpnk.ru`)"
+      # Включаем HTTPS (в Matrix-инсталляциях обычно точка входа называется websecure)
+      - "traefik.http.routers.todobackend.entrypoints=websecure"
+      # Указываем Traefik, что наш контейнер слушает внутри на 8082 порту (как у вас было настроено изначально)
+      - "traefik.http.services.todobackend.loadbalancer.server.port=8082"
+      # Говорим Traefik попытаться получить SSL-сертификат
+      - "traefik.http.routers.todobackend.tls.certresolver=default"
+      # Так как проектов может быть много, явно указываем, через какую сеть маршрутизировать
+      - "traefik.docker.network=traefik"
 
   email-notifier:
     image: ${IMAGE_BASE}-email:latest
@@ -25,7 +43,25 @@ services:
       - CONFIG_PATH=/app/config/prod.yaml
     env_file:
       - .env
-    ports:
-      - "8084:8084"
-    volumes:
-      - ./notifiers/email/config:/app/config:ro
+
+  frontend:
+    image: ${IMAGE_BASE}-frontend:latest
+    restart: always
+    networks:
+      - default
+      - matrix-traefik-net
+    labels:
+      - "traefik.enable=true"
+      # Настраиваем роутинг на поддомен ВАШЕГО фронтенда:
+      - "traefik.http.routers.todofrontend.rule=Host(`todo.chkpnk.ru`)"
+      - "traefik.http.routers.todofrontend.entrypoints=websecure"
+      # Nginx внутри контейнера слушает стандартный порт 80
+      - "traefik.http.services.todofrontend.loadbalancer.server.port=80"
+      - "traefik.http.routers.todofrontend.tls.certresolver=default"
+      - "traefik.docker.network=traefik"
+
+# Регистрируем внешнюю сеть Traefik
+networks:
+  matrix-traefik-net:
+    external: true
+    name: traefik

@@ -49,6 +49,15 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_BASE }}-email:latest
 
+      # Сборка и отправка Frontend
+      - name: Build and push Frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          file: ./frontend/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_BASE }}-frontend:latest
+
   deploy:
     name: Deploy to Production
     needs: build-and-push # Запускаем только после успешной сборки
