@@ -1,0 +1,60 @@
+name: CI Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  # 1. Проверка Backend (Go)
+  backend-ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./backend
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: ./backend/go.sum
+
+      - name: Download Go modules
+        run: go mod download
+
+      - name: Run Tests
+        run: go test -v ./...
+
+  # 2. Проверка Notifiers (Go микросервисы)
+  notifiers-ci:
+    name: Notifiers CI
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.24'
+          cache-dependency-path: |
+            ./notifiers/go.sum
+            ./notifiers/email/go.sum
+
+      - name: Run Notifiers Shared Tests
+        working-directory: ./notifiers
+        run: |
+          go mod download
+          go test -v ./...
+
+      - name: Run Email Notifier Tests
+        working-directory: ./notifiers/email
+        run: |
+          go mod download
+          go test -v ./...

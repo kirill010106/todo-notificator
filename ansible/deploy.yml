@@ -1,0 +1,63 @@
+---
+- name: Deploy ToDo Notificator
+  hosts: webservers
+  become: yes
+
+  vars:
+    app_dir: "/opt/todo-notificator"
+    branch: "main"
+
+  tasks:
+    - name: Ensure app directory exists
+      file:
+        path: "{{ app_dir }}"
+        state: directory
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+
+    - name: Clone/Pull repository
+      git:
+        repo: "https://github.com/kirill010106/todo-notificator.git" 
+        dest: "{{ app_dir }}"
+        version: "{{ branch }}"
+        force: yes
+    
+    - name: Copy .env file to server
+      copy:
+        src: "../.env"      # Откуда: корень проекта в GitHub Actions
+        dest: "{{ app_dir }}/.env" # Куда: на ваш сервер
+        owner: "{{ ansible_user }}"
+        group: "{{ ansible_user }}"
+        mode: '0600'      
+
+    - name: Ensure Docker is installed
+      apt:
+        name: 
+          - docker.io
+          - docker-compose-v2
+        state: present
+        update_cache: yes
+      ignore_errors: yes
+
+    # Авторизуемся в реестре GitHub пакетов (необходим для приватных репозиториев)
+    - name: Log in to GitHub Container Registry
+      command: "docker login ghcr.io -u {{ github_username }} -p {{ github_token }}"
+
+    # Скачиваем новые версии образов (заметьте, мы передаем переменную IMAGE_BASE)
+    - name: Pull updated Docker images
+      command: docker compose pull
+      args:
+        chdir: "{{ app_dir }}"
+      environment:
+        IMAGE_BASE: "{{ image_base }}"
+
+    # Перезапускаем контейнеры 
+    - name: Restart services with new images
+      command: docker compose up -d
+      args:
+        chdir: "{{ app_dir }}"
+      environment:
+        IMAGE_BASE: "{{ image_base }}"
+
+    - name: Prune old Docker images to save space
+      command: docker image prune -a -f

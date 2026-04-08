@@ -1,0 +1,31 @@
+version: '3.8'
+
+services:
+  backend:
+    # Вместо локальной сборки указываем путь к образу в GitHub
+    image: ${IMAGE_BASE}-backend:latest
+    restart: always
+    environment:
+      - DATABASE_URL=${DATABASE_URL} 
+      - CONFIG_PATH=/app/config/prod.yaml
+    env_file:
+      - .env
+    ports:
+      - "8082:8082"
+    volumes:
+      - ./backend/config:/app/config:ro
+
+  email-notifier:
+    image: ${IMAGE_BASE}-email:latest
+    restart: always
+    depends_on:
+      - backend
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+      - CONFIG_PATH=/app/config/prod.yaml
+    env_file:
+      - .env
+    ports:
+      - "8084:8084"
+    volumes:
+      - ./notifiers/email/config:/app/config:ro

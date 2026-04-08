@@ -1,0 +1,29 @@
+  deploy:
+    name: Deploy to Production
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup SSH key
+        uses: webfactory/ssh-agent@v0.9.0
+        with:
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
+
+      - name: Install Ansible
+        run: sudo apt-get update && sudo apt-get install -y ansible
+
+      - name: Add server to known_hosts
+        run: ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+
+      - name: Generate .env file
+        run: |
+          echo "${{ secrets.PROD_ENV_FILE }}" > .env
+
+      - name: Run Ansible Playbook
+        run: |
+          ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
+          --extra-vars "ansible_host=${{ secrets.SERVER_IP }} ansible_user=${{ secrets.SERVER_USER }} github_username=${{ github.actor }} github_token=${{ secrets.GITHUB_TOKEN }} image_base=${{ env.IMAGE_BASE }}"
+        env:
+          ANSIBLE_HOST_KEY_CHECKING: "False"

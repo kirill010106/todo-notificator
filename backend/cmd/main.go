@@ -28,11 +28,11 @@ import (
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
 	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
 	statsupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/update"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/delete"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/get"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/save"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/pressly/goose/v3"
 
@@ -54,7 +54,8 @@ const (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Error while loading .env file: %v", err)
+		// log.Fatalf("Error while loading .env file: %v", err)
+		log.Println("info: .env file not found, trying to read from system environment")
 	}
 	cfg := config.MustLoad()
 
