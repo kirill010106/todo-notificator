@@ -1,6 +1,57 @@
+name: CD Pipeline (Build & Deploy)
+
+on:
+  push:
+    branches: [ "main" ]
+
+env:
+  REGISTRY: ghcr.io
+  # Формируем базовое имя образа в нижнем регистре (требование Docker)
+  IMAGE_BASE: ghcr.io/${{ github.repository }}
+
+jobs:
+  build-and-push:
+    name: Build Docker Images
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    permissions:
+      contents: read
+      packages: write # Разрешаем Actions загружать образы в GHCR
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Log in to the Container registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }} # Этот токен GitHub создает автоматически
+
+      # Сборка и отправка Backend
+      - name: Build and push Backend
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ${{ env.IMAGE_BASE }}-backend:latest
+            ${{ env.IMAGE_BASE }}-backend:${{ github.sha }}
+
+      # Сборка и отправка Email Notifier
+      - name: Build and push Email Notifier
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./notifiers/email/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_BASE }}-email:latest
+
   deploy:
     name: Deploy to Production
-    needs: build-and-push
+    needs: build-and-push # Запускаем только после успешной сборки
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
@@ -17,11 +68,13 @@
       - name: Add server to known_hosts
         run: ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
 
+      # Создаем файл .env из секрета GitHub
       - name: Generate .env file
         run: |
           echo "${{ secrets.PROD_ENV_FILE }}" > .env
 
       - name: Run Ansible Playbook
+        # Передаем IP и пользователя через переменные
         run: |
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
           --extra-vars "ansible_host=${{ secrets.SERVER_IP }} ansible_user=${{ secrets.SERVER_USER }} github_username=${{ github.actor }} github_token=${{ secrets.GITHUB_TOKEN }} image_base=${{ env.IMAGE_BASE }}"
