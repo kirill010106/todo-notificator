@@ -22,11 +22,28 @@ type mockUpdater struct {
 	err error
 
 	called bool
+
+	getTaskFunc         func(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
+	applyStatsDeltaFunc func(ctx context.Context, userID int64, delta domain.StatsDelta) error
 }
 
 func (m *mockUpdater) UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error {
 	m.called = true
 	return m.err
+}
+
+func (m *mockUpdater) GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
+	if m.getTaskFunc != nil {
+		return m.getTaskFunc(ctx, userID, taskID)
+	}
+	return domain.Task{Status: domain.TaskStatusPending, RewardClaimed: false}, nil
+}
+
+func (m *mockUpdater) ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error {
+	if m.applyStatsDeltaFunc != nil {
+		return m.applyStatsDeltaFunc(ctx, userID, delta)
+	}
+	return nil
 }
 
 func TestUpdate_Unauthorized(t *testing.T) {
@@ -150,3 +167,5 @@ func TestUpdate_WithCategory(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, updater.called)
 }
+
+

@@ -24,10 +24,11 @@ type Request struct {
 }
 
 type PomodoroProvider interface {
+	storage.Provider
 	StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
-	UpdateUserScore(ctx context.Context, userID int64, pointsDelta int) error
+	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
 }
 
 var validate = validator.New()
@@ -134,18 +135,27 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 
 		log.Info("pomodoro session stopped successfully")
 
-		pointsDelta := domain.PomodoroPenaltyPoints
+		statsDelta := domain.StatsDelta{}
+
 		if req.Action == domain.PomodoroStatusCompleted {
-			pointsDelta = domain.PomodoroRewardPoints
-
-		}
-
-		err = provider.UpdateUserScore(r.Context(), userID, pointsDelta)
-		if err != nil {
-			log.Error("failed to update user score", slog.Int("delta", pointsDelta), sl.Err(err))
+			statsDelta.PointsDelta = domain.PomodoroRewardPoints
+			statsDelta.PomodorosDelta = 1
 		} else {
-			log.Info("user score updated", slog.Int("delta", pointsDelta))
+			statsDelta.PointsDelta = domain.PomodoroPenaltyPoints
+
+			if req.FinishTask {
+				statsDelta.BurntTasksDelta = 1
+				statsDelta.ResetStreak = true
+			}
 		}
+
+		err = provider.ApplyStatsDelta(r.Context(), userID, statsDelta)
+		if err != nil {
+			log.Error("failed to apply stats delta", slog.Any("delta", statsDelta), sl.Err(err))
+		} else {
+			log.Info("user stats updated successfully", slog.Any("delta", statsDelta))
+		}
+
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, resp.OK())
 	}

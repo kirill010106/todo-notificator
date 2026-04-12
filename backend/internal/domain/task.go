@@ -3,9 +3,10 @@ package domain
 import "time"
 
 const (
-	TaskStatusPending = "pending"
-	TaskStatusDone    = "done"
-	TaskStatusBurnt   = "burnt"
+	TaskStatusPending  = "pending"
+	TaskStatusDone     = "done"
+	TaskStatusBurnt    = "burnt"
+	TaskCompleteReward = 10
 )
 
 type Task struct {
@@ -19,6 +20,7 @@ type Task struct {
 	IsNotified     bool       `json:"is_notified"`
 	PomodorosTaken int64      `json:"pomodoros_taken,omitempty"`
 	ReminderAt     *time.Time `json:"reminder_at,omitzero"`
+	RewardClaimed  bool       `json:"reward_claimed"`
 }
 
 type TaskUpdate struct {
@@ -29,4 +31,5 @@ type TaskUpdate struct {
 	Deadline                *time.Time
 	CategoryID              *int64
 	IncrementPomodorosTaken bool
+	RewardClaimed           bool
 }

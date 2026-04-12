@@ -1,6 +1,11 @@
 package storage
 
-import "errors"
+import (
+	"context"
+	"errors"
+
+	"github.com/kirill010106/todo-notificator/internal/domain"
+)
 
 var (
 	ErrTaskNotFound        = errors.New("task not found")
@@ -17,3 +22,7 @@ var (
 	ErrTokenExpired        = errors.New("verification token expired")
 	ErrTokenExists         = errors.New("verification token already exists")
 )
+
+type Provider interface {
+	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
+}

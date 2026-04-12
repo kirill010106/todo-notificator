@@ -22,12 +22,12 @@ func TestStartPomodoroSession_Success(t *testing.T) {
 	userID := int64(42)
 	taskID := int64(10)
 
-	// 1. Проверка на отсутствие активной сессии
+	// 1. Check for absence of active session
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2`)).
 		WithArgs(userID, domain.PomodoroStatusActive).
-		WillReturnError(sql.ErrNoRows) // Имитируем, что сессия не найдена
+		WillReturnError(sql.ErrNoRows) // Simulate that session is not found
 
-	// 2. Создание
+	// 2. Creation
 	now := time.Now()
 	query := regexp.QuoteMeta(`
         INSERT INTO pomodoro_sessions (user_id, task_id, status, started_at, duration_minutes, breaks_used, created_at)
@@ -41,7 +41,7 @@ func TestStartPomodoroSession_Success(t *testing.T) {
 			AddRow(1, userID, taskID, domain.PomodoroStatusActive, now, 25, 0, now))
 
 	session, err := s.StartPomodoroSession(context.Background(), userID, &taskID)
-	
+
 	require.NoError(t, err)
 	require.NotNil(t, session)
 	require.Equal(t, int64(1), session.ID)
@@ -62,10 +62,10 @@ func TestStartPomodoroSession_AlreadyActive(t *testing.T) {
 
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2`)).
 		WithArgs(userID, domain.PomodoroStatusActive).
-		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(99)) // Активная сессия найдена
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(99)) // Active session found
 
 	session, err := s.StartPomodoroSession(context.Background(), userID, nil)
-	
+
 	require.ErrorIs(t, err, storage.ErrSessionActive)
 	require.Nil(t, session)
 

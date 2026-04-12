@@ -84,6 +84,36 @@ RETURNING id`
 	return id, nil
 }
 
+func (s *Storage) GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
+	const op = "storage.postgres.GetTask"
+
+	query := `
+		SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
+		FROM tasks
+		WHERE user_id = $1 AND id = $2
+	`
+	var t domain.Task
+	err := s.DB.QueryRowContext(ctx, query, userID, taskID).Scan(
+		&t.ID,
+		&t.UserID,
+		&t.Title,
+		&t.Description,
+		&t.Deadline,
+		&t.ReminderAt,
+		&t.Status,
+		&t.IsNotified,
+		&t.CategoryID,
+		&t.PomodorosTaken,
+		&t.RewardClaimed)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Task{}, fmt.Errorf("%s: %w", op, storage.ErrTaskNotFound)
+		}
+		return domain.Task{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return t, nil
+}
+
 func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error) {
 	const op = "storage.postgres.GetTasks"
 
@@ -97,7 +127,7 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int)
 	}
 
 	dataQuery := `
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`
@@ -106,13 +136,13 @@ LIMIT $2 OFFSET $3`
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	tasks := make([]domain.Task, 0, limit)
 
 	for rows.Next() {
 		var t domain.Task
-		err = rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID, &t.PomodorosTaken)
+		err = rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID, &t.PomodorosTaken, &t.RewardClaimed)
 		if err != nil {
 			return nil, 0, fmt.Errorf("%s: %w", op, err)
 		}
@@ -205,15 +235,15 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 		setValues = append(setValues, "pomodoro_taken = pomodoro_taken + 1")
 	}
 
+	if t.RewardClaimed {
+		setValues = append(setValues, "reward_claimed = true")
+	}
+
 	if len(setValues) == 0 {
 		return nil
 	}
 
-	query := fmt.Sprintf(`
-			UPDATE tasks
-			SET %s
-			WHERE user_id = $%d AND id = $%d
-`, strings.Join(setValues, ", "), argID, argID+1)
+	query := fmt.Sprintf(`UPDATE tasks SET %s WHERE user_id = $%d AND id = $%d`, strings.Join(setValues, ", "), argID, argID+1) //nolint:gosec
 
 	args = append(args, userID, taskID)
 
@@ -304,7 +334,6 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	return &rt, nil
 }
 
-// TODO: delete expired tokens
 func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 	const op = "storage.postgres.DeleteRefreshToken"
 
@@ -342,6 +371,31 @@ func (s *Storage) DeleteUserRefreshTokens(ctx context.Context, userID int64) err
 	return nil
 }
 
+func (s *Storage) DeleteExpiredRefreshTokens(ctx context.Context) error {
+	const op = "storage.postgres.DeleteExpiredRefreshTokens"
+
+	query := `DELETE FROM refresh_tokens WHERE expires_at < NOW()`
+
+	_, err := s.DB.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+}
+
+func (s *Storage) DeleteExpiredEmailVerificationTokens(ctx context.Context) error {
+	const op = "storage.postgres.DeleteExpiredEmailVerificationTokens"
+
+	query := `DELETE FROM email_verification_tokens WHERE expires_at < NOW()`
+	_, err := s.DB.ExecContext(ctx, query)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+
+	return nil
+
+}
 func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, error) {
 	const op = "storage.postgres.GetUserByID"
 
@@ -406,13 +460,13 @@ func (s *Storage) GetCategories(ctx context.Context, userID int64) ([]domain.Cat
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
-	defer rows.Close()
+	defer rows.Close() //nolint:errcheck
 
 	categories := make([]domain.Category, 0)
 
 	for rows.Next() {
 		var c domain.Category
-		err := rows.Scan(&c.ID, &c.UserID, &c.Name)
+		err = rows.Scan(&c.ID, &c.UserID, &c.Name)
 		if err != nil {
 			return nil, fmt.Errorf("%s: %w", op, err)
 		}
@@ -459,11 +513,7 @@ func (s *Storage) UpdateCategory(ctx context.Context, userID int64, categoryID i
 		return nil
 	}
 
-	query := fmt.Sprintf(`
-			UPDATE categories
-			SET %s
-			WHERE user_id = $%d AND id = $%d
-`, strings.Join(setValues, ", "), argID, argID+1)
+	query := fmt.Sprintf(`UPDATE categories SET %s WHERE user_id = $%d AND id = $%d`, strings.Join(setValues, ", "), argID, argID+1) //nolint:gosec
 
 	args = append(args, userID, categoryID)
 
@@ -560,7 +610,7 @@ func (s *Storage) SaveEmailVerificationToken(ctx context.Context, userID int64, 
 	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt)
 	if err != nil {
 		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == pgerrcode.UniqueViolation {
-			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists) // Либо отдельная ошибка "token already exists"
+			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists) // Or distinct error "token already exists"
 		}
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -636,6 +686,43 @@ func (s *Storage) UpdateUserScore(ctx context.Context, userID int64, pointsDelta
     WHERE user_id = $2
 `
 	_, err := s.DB.ExecContext(ctx, query, pointsDelta, userID)
+	if err != nil {
+		return fmt.Errorf("%s: %w", op, err)
+	}
+	return nil
+}
+
+func (s *Storage) ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error {
+	const op = "storage.postgres.ApplyStatsDelta"
+
+	query := `
+		UPDATE user_stats
+		SET
+			points = points + $1
+			level = GREATEST(1, ((points + $1) / 100) + 1)
+			total_pomodoros = total_pomodoros + $2
+			total_burnt_tasks = total_burnt_tasks + $3
+
+			current_streak = CASE
+			WHEN $4 = true THEN 0
+			WHEN $5 = TRUE THEN curent_streak +1
+			ELSE current_streak
+		END,
+		best_streak = GREATEST(best_streak, CASE
+			WHEN $5 = TRUE THEN current_streak + 1
+			ELSE current_streak
+		END)
+		WHERE user_id = $6
+	`
+
+	_, err := s.DB.ExecContext(ctx, query,
+		delta.PointsDelta,
+		delta.PomodorosDelta,
+		delta.BurntTasksDelta,
+		delta.ResetStreak,
+		delta.IncrementStreak,
+		userID,
+	)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

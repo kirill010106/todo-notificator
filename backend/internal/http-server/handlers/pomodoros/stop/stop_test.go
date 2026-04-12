@@ -21,7 +21,7 @@ type mockPomodoroProvider struct {
 	stopErr            error
 	getActiveErr       error
 	updateTaskErr      error
-	updateUserScoreErr error
+	applyStatsDeltaErr error
 
 	activeSession *domain.PomodoroSession
 
@@ -36,8 +36,8 @@ type mockPomodoroProvider struct {
 	updatedTaskID    int64
 	updatedUpdate    domain.TaskUpdate
 
-	updateScoreCalled bool
-	scoreDelta        int
+	applyStatsDeltaCalled bool
+	statsDelta            domain.StatsDelta
 }
 
 func (m *mockPomodoroProvider) StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error {
@@ -60,10 +60,10 @@ func (m *mockPomodoroProvider) UpdateTask(ctx context.Context, userID int64, tas
 	return m.updateTaskErr
 }
 
-func (m *mockPomodoroProvider) UpdateUserScore(ctx context.Context, userID int64, pointsDelta int) error {
-	m.updateScoreCalled = true
-	m.scoreDelta = pointsDelta
-	return m.updateUserScoreErr
+func (m *mockPomodoroProvider) ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error {
+	m.applyStatsDeltaCalled = true
+	m.statsDelta = delta
+	return m.applyStatsDeltaErr
 }
 
 func setupTestRouter(h http.HandlerFunc, secret string) *chi.Mux {

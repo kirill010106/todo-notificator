@@ -10,8 +10,8 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
-// StartPomodoroSession создает новую активную сессию Помодоро.
-// Если у пользователя уже есть активная сессия, возвращается storage.ErrSessionActive.
+// StartPomodoroSession creates a new active Pomodoro session.
+// If the user already has an active session, storage.ErrSessionActive is returned.
 func (s *Storage) StartPomodoroSession(ctx context.Context, userID int64, taskID *int64) (*domain.PomodoroSession, error) {
 	const op = "storage.postgres.StartPomodoroSession"
 

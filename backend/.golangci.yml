@@ -27,6 +27,10 @@ linters-settings:
     enable-all: true
     disable:
       - fieldalignment # Слишком шумный, можно включить позже
+    errcheck:
+      exclude-functions:
+         - io.Closer.Close
+         - (*sql.Rows).Close
   
   staticcheck:
     checks: ["all", "-SA1019", "-ST1000"] # Игнорировать предупреждения об устаревших функциях, если используете легаси

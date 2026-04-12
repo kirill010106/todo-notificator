@@ -35,7 +35,7 @@ func TestGetTasks_SuccessWithPagination(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(5))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)
@@ -44,9 +44,9 @@ LIMIT $2 OFFSET $3`)
 	mock.ExpectQuery(dataQuery).
 		WithArgs(userID, limit, offset).
 		WillReturnRows(
-			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified", "category_id", "pomodoro_taken"}).
-				AddRow(int64(10), userID, "T1", "D1", now, now, "pending", false, int64(0), int64(0)).
-				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true, int64(3), int64(2)),
+			sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified", "category_id", "pomodoro_taken", "reward_claimed"}).
+				AddRow(int64(10), userID, "T1", "D1", now, now, "pending", false, int64(0), int64(0), false).
+				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true, int64(3), int64(2), true),
 		)
 
 	tasks, total, err := s.GetTasks(context.Background(), userID, limit, offset)
@@ -101,7 +101,7 @@ func TestGetTasks_DataQueryError(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
 	dataQuery := regexp.QuoteMeta(`
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken
+SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
 FROM tasks
 	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
 LIMIT $2 OFFSET $3`)
@@ -1003,4 +1003,54 @@ func TestVerifyUserEmail_Success(t *testing.T) {
 	err = s.VerifyUserEmail(context.Background(), userID)
 	require.NoError(t, err)
 	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestStorage_GetTask(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(1)
+	taskID := int64(1)
+
+	now := time.Now()
+	description := "Some description"
+	expectedTask := domain.Task{
+		ID:            taskID,
+		Title:         "Test Task",
+		Description:   description,
+		UserID:        userID,
+		Status:        domain.TaskStatusPending,
+		ReminderAt:    &now,
+		RewardClaimed: true,
+	}
+
+	t.Run("success", func(t *testing.T) {
+		rows := sqlmock.NewRows([]string{"id", "user_id", "title", "description", "deadline", "reminder_at", "status", "is_notified", "category_id", "pomodoro_taken", "reward_claimed"}).
+			AddRow(
+				expectedTask.ID, expectedTask.UserID, expectedTask.Title, expectedTask.Description, expectedTask.Deadline, expectedTask.ReminderAt, expectedTask.Status, false, expectedTask.CategoryID, expectedTask.PomodorosTaken, expectedTask.RewardClaimed,
+			)
+
+		mock.ExpectQuery("SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed FROM tasks WHERE user_id = \\$1 AND id = \\$2").
+			WithArgs(userID, taskID).
+			WillReturnRows(rows)
+
+		task, err := s.GetTask(context.Background(), userID, taskID)
+
+		require.NoError(t, err)
+		require.Equal(t, expectedTask.ID, task.ID)
+		require.Equal(t, expectedTask.Title, task.Title)
+		require.Equal(t, expectedTask.RewardClaimed, task.RewardClaimed)
+	})
+
+	t.Run("not found", func(t *testing.T) {
+		mock.ExpectQuery("SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed FROM tasks WHERE user_id = \\$1 AND id = \\$2").
+			WithArgs(userID, taskID).
+			WillReturnError(sql.ErrNoRows)
+
+		_, err := s.GetTask(context.Background(), userID, taskID)
+
+		require.ErrorIs(t, err, storage.ErrTaskNotFound)
+	})
 }

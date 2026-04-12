@@ -77,16 +77,16 @@ func New(log *slog.Logger, userStatsUpdater UserStatsUpdater) http.HandlerFunc {
 			return
 		}
 
-		// 4. Маппинг в доменную модель
+		// 4. Map to domain model
 		stats := req.ToDomain()
 
 		log.Debug("updating stats", slog.Any("payload", stats))
 
-		// 5. Вызов репозитория/сервиса
+		// 5. Call repository/service
 		if err := userStatsUpdater.UpdateUserStats(r.Context(), userID, stats); err != nil {
 			log.Error("failed to update stats", sl.Err(err))
 
-			// Можно добавить обработку специфичных ошибок БД, если нужно
+			// Can add specific DB error handling if needed
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to update stats"))
 			return
@@ -94,11 +94,11 @@ func New(log *slog.Logger, userStatsUpdater UserStatsUpdater) http.HandlerFunc {
 
 		log.Info("stats updated successfully")
 
-		// 6. Ответ
-		// Возвращаем 204 No Content (успешно, но тела нет)
-		// или 200 OK с сообщением. Для UPDATE часто используют 204.
+		// 6. Response
+		// Return 204 No Content (success, but no body)
+		// or 200 OK with message. For UPDATE, 204 is often used.
 		render.Status(r, http.StatusNoContent)
-		// Если нужно тело:
+		// If body is needed:
 		// render.JSON(w, r, resp.OK())
 
 	}

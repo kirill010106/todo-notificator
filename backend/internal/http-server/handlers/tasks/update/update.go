@@ -23,12 +23,12 @@ import (
 )
 
 type Request struct {
-	Title              *string    `json:"title" validate:"omitempty,max=255"`
-	Description        *string    `json:"description" validate:"omitempty,max=2000"`
-	Deadline           *time.Time `json:"deadline,omitzero"`
-	ReminderAt         *time.Time `json:"reminder_at,omitzero"`
-	Status             *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
-	CategoryID         *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	Title       *string    `json:"title" validate:"omitempty,max=255"`
+	Description *string    `json:"description" validate:"omitempty,max=2000"`
+	Deadline    *time.Time `json:"deadline,omitzero"`
+	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
+	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
+	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
 }
 
 type Response struct {
@@ -37,7 +37,9 @@ type Response struct {
 }
 
 type TaskUpdater interface {
+	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error
+	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
 }
 
 var validate = validator.New()
@@ -63,12 +65,12 @@ func formatValidationError(err validator.FieldError) string {
 
 func (r Request) ToDomain() domain.TaskUpdate {
 	return domain.TaskUpdate{
-		Title:              r.Title,
-		Description:        r.Description,
-		Deadline:           r.Deadline,
-		ReminderAt:         r.ReminderAt,
-		Status:             r.Status,
-		CategoryID:         r.CategoryID,
+		Title:       r.Title,
+		Description: r.Description,
+		Deadline:    r.Deadline,
+		ReminderAt:  r.ReminderAt,
+		Status:      r.Status,
+		CategoryID:  r.CategoryID,
 	}
 }
 
@@ -134,7 +136,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 			return
 		}
 
-		if err := validate.Struct(req); err != nil {
+		if err = validate.Struct(req); err != nil {
 			var validateErr validator.ValidationErrors
 
 			if errors.As(err, &validateErr) {
@@ -164,6 +166,35 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 		log.Debug("request body decoded", slog.Any("request", req))
 
 		taskUpdate := req.ToDomain()
+		existingTask, err := taskUpdater.GetTask(r.Context(), userID, taskID)
+		if err != nil {
+			if errors.Is(err, storage.ErrTaskNotFound) {
+				log.Info("task not found or access denied")
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("task not found"))
+				return
+			}
+			log.Error("failed to get existing task", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("failed to get task"))
+			return
+		}
+		if req.Status != nil && *req.Status == domain.TaskStatusDone && existingTask.Status != domain.TaskStatusDone {
+			if !existingTask.RewardClaimed {
+				statsDelta := domain.StatsDelta{
+					PointsDelta: domain.TaskCompleteReward,
+				}
+
+				err := taskUpdater.ApplyStatsDelta(r.Context(), userID, statsDelta)
+				if err != nil {
+					log.Error("failed to apply return reward", sl.Err(err))
+				} else {
+					log.Info("reward granted for task completion", slog.Int("points", domain.TaskCompleteReward))
+				}
+
+				taskUpdate.RewardClaimed = true
+			}
+		}
 		err = taskUpdater.UpdateTask(r.Context(), userID, taskID, taskUpdate)
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskNotFound) {

@@ -34,6 +34,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
+	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
 	"github.com/pressly/goose/v3"
 
 	"github.com/go-chi/chi/v5"
@@ -70,7 +71,12 @@ func main() {
 		log.Error("failed to init db", sl.Err(err))
 		os.Exit(1)
 	}
-	defer storage.Close()
+	defer storage.Close() //nolint:errcheck
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	cleanup.StartTokenCleanup(ctx, log, storage, 24*time.Hour)
 
 	goose.SetBaseFS(todonotificator.MigrationsFS)
 
@@ -158,7 +164,7 @@ func main() {
 
 	log.Info("shutdown signal received", slog.String("signal", sig.String()))
 
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
