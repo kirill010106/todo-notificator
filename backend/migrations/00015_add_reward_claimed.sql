@@ -1,4 +1,4 @@
 -- +gooseUp
-ALTER TABLE rewards ADD COLUMN reward_claimed BOOLEAN NOT NULL DEFAULT FALSE;
+ALTER TABLE tasks ADD COLUMN reward_claimed BOOLEAN NOT NULL DEFAULT FALSE;
 -- +gooseDown
-ALTER TABLE rewards DROP COLUMN IF EXISTS reward_claimed;
+ALTER TABLE tasks DROP COLUMN IF EXISTS reward_claimed;

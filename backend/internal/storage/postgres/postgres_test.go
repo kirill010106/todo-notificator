@@ -745,6 +745,32 @@ func TestUpdateTask_NotFound(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
+func TestUpdateTask_ReminderAtResetsNotificationFlag(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(42)
+	taskID := int64(10)
+	reminderAt := time.Now().Add(30 * time.Minute).UTC()
+
+	query := regexp.QuoteMeta(`
+			UPDATE tasks
+			SET reminder_at = $1, is_notified = false
+			WHERE user_id = $2 AND id = $3
+`)
+	mock.ExpectExec(query).
+		WithArgs(reminderAt, userID, taskID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	err = s.UpdateTask(context.Background(), userID, taskID, domain.TaskUpdate{
+		ReminderAt: &reminderAt,
+	})
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
 // Tests for DeleteTask
 func TestDeleteTask_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
@@ -909,6 +935,113 @@ func TestDeleteRefreshToken_NotFound(t *testing.T) {
 	err = s.DeleteRefreshToken(context.Background(), token)
 	require.Error(t, err)
 	require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRotateRefreshToken_Success(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+
+	oldToken := "old_refresh_token"
+	newToken := "new_refresh_token"
+	expiresAt := time.Now().Add(24 * time.Hour)
+	passHash := []byte("hashed_password")
+
+	query := regexp.QuoteMeta(`
+		WITH rotated AS (
+			UPDATE refresh_tokens
+			SET token = $2, expires_at = $3
+			WHERE token = $1 AND expires_at > NOW()
+			RETURNING user_id
+		)
+		SELECT u.id, u.email, u.password_hash, u.is_verified
+		FROM rotated r
+		JOIN users u ON u.id = r.user_id
+	`)
+
+	mock.ExpectQuery(query).
+		WithArgs(oldToken, newToken, expiresAt).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified"}).
+			AddRow(int64(42), "user@example.com", passHash, true))
+
+	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
+	require.NoError(t, err)
+	require.NotNil(t, user)
+	require.Equal(t, int64(42), user.ID)
+	require.Equal(t, "user@example.com", user.Email)
+	require.Equal(t, passHash, user.PassHash)
+	require.True(t, user.IsVerified)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRotateRefreshToken_Invalid(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+
+	oldToken := "old_refresh_token"
+	newToken := "new_refresh_token"
+	expiresAt := time.Now().Add(24 * time.Hour)
+
+	query := regexp.QuoteMeta(`
+		WITH rotated AS (
+			UPDATE refresh_tokens
+			SET token = $2, expires_at = $3
+			WHERE token = $1 AND expires_at > NOW()
+			RETURNING user_id
+		)
+		SELECT u.id, u.email, u.password_hash, u.is_verified
+		FROM rotated r
+		JOIN users u ON u.id = r.user_id
+	`)
+
+	mock.ExpectQuery(query).
+		WithArgs(oldToken, newToken, expiresAt).
+		WillReturnError(sql.ErrNoRows)
+
+	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
+	require.Error(t, err)
+	require.Nil(t, user)
+	require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestRotateRefreshToken_DBError(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+
+	oldToken := "old_refresh_token"
+	newToken := "new_refresh_token"
+	expiresAt := time.Now().Add(24 * time.Hour)
+
+	query := regexp.QuoteMeta(`
+		WITH rotated AS (
+			UPDATE refresh_tokens
+			SET token = $2, expires_at = $3
+			WHERE token = $1 AND expires_at > NOW()
+			RETURNING user_id
+		)
+		SELECT u.id, u.email, u.password_hash, u.is_verified
+		FROM rotated r
+		JOIN users u ON u.id = r.user_id
+	`)
+
+	mock.ExpectQuery(query).
+		WithArgs(oldToken, newToken, expiresAt).
+		WillReturnError(errors.New("db error"))
+
+	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
+	require.Error(t, err)
+	require.Nil(t, user)
+	require.Contains(t, err.Error(), "db error")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 

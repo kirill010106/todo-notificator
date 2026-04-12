@@ -68,7 +68,16 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.log.Info("webhook: task created, triggering reschedule")
+	switch payload.Type {
+	case "task_created":
+		h.log.Info("webhook: task created, triggering reschedule")
+	case "task_updated":
+		h.log.Info("webhook: task updated, triggering reschedule")
+	case "":
+		h.log.Info("webhook: task event received (legacy payload), triggering reschedule")
+	default:
+		h.log.Info("webhook: task event received, triggering reschedule", slog.String("type", payload.Type))
+	}
 	h.scheduler.Reschedule()
 
 	w.WriteHeader(http.StatusOK)

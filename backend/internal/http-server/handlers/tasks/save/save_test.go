@@ -2,6 +2,7 @@ package save
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -69,6 +70,52 @@ func TestSave_Created(t *testing.T) {
 	require.True(t, saver.called)
 	require.Equal(t, int64(5), saver.task.UserID)
 	require.Contains(t, w.Body.String(), `"id":99`)
+}
+
+func TestSave_Created_NotifiesScheduler(t *testing.T) {
+	secret := "secret"
+	webhookSecret := "webhook-secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com"}, secret, time.Hour)
+	require.NoError(t, err)
+
+	triggered := make(chan struct{}, 1)
+	webhookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		var payload struct {
+			Type string `json:"type"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&payload)
+
+		if r.Method == http.MethodPost &&
+			r.URL.Path == "/webhook/task-created" &&
+			r.Header.Get("X-Webhook-Secret") == webhookSecret &&
+			payload.Type == "task_created" {
+			triggered <- struct{}{}
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer webhookSrv.Close()
+
+	saver := &mockTaskSaver{id: 99}
+	h := New(slog.New(slog.DiscardHandler), saver, webhookSrv.URL, webhookSecret)
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/tasks", h)
+
+	req := httptest.NewRequest(http.MethodPost, "/tasks", strings.NewReader(`{"title":"task"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.True(t, saver.called)
+
+	select {
+	case <-triggered:
+	case <-time.After(1500 * time.Millisecond):
+		t.Fatal("expected scheduler webhook to be called after task save")
+	}
 }
 
 func TestSave_Conflict(t *testing.T) {

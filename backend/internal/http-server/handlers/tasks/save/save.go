@@ -1,7 +1,9 @@
 package save
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -48,6 +50,10 @@ func (r Request) ToDomain(userID int64) domain.Task {
 }
 
 var validate = validator.New()
+
+type schedulerWebhookPayload struct {
+	Type string `json:"type"`
+}
 
 func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string) http.HandlerFunc {
 
@@ -136,18 +142,25 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 		})
 
 		if webhookURL != "" {
-			go notifyScheduler(l, webhookURL, webhookSecret)
+			go notifyScheduler(l, webhookURL, webhookSecret, "task_created")
 		}
 	}
 }
 
-func notifyScheduler(log *slog.Logger, url, secret string) {
-	req, err := http.NewRequest(http.MethodPost, url+"/webhook/task-created", nil)
+func notifyScheduler(log *slog.Logger, url, secret, eventType string) {
+	body, err := json.Marshal(schedulerWebhookPayload{Type: eventType})
+	if err != nil {
+		log.Warn("webhook: failed to marshal payload", sl.Err(err))
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url+"/webhook/task-created", bytes.NewReader(body))
 	if err != nil {
 		log.Warn("webhook: failed to build request", sl.Err(err))
 		return
 	}
 	req.Header.Set("X-Webhook-Secret", secret)
+	req.Header.Set("Content-Type", "application/json")
 
 	client := &http.Client{Timeout: 2 * time.Second}
 	res, err := client.Do(req)
@@ -157,5 +170,5 @@ func notifyScheduler(log *slog.Logger, url, secret string) {
 	}
 	defer res.Body.Close()
 
-	log.Debug("webhook: notifier signaled", slog.Int("status", res.StatusCode))
+	log.Debug("webhook: notifier signaled", slog.Int("status", res.StatusCode), slog.String("type", eventType))
 }

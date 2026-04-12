@@ -26,6 +26,7 @@ type mockPomodoroProvider struct {
 	activeSession *domain.PomodoroSession
 
 	stopCalled    bool
+	stoppedUserID int64
 	stoppedID     int64
 	stoppedStatus string
 
@@ -40,8 +41,9 @@ type mockPomodoroProvider struct {
 	statsDelta            domain.StatsDelta
 }
 
-func (m *mockPomodoroProvider) StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error {
+func (m *mockPomodoroProvider) StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error {
 	m.stopCalled = true
+	m.stoppedUserID = userID
 	m.stoppedID = sessionID
 	m.stoppedStatus = finalStatus
 	return m.stopErr
@@ -100,6 +102,7 @@ func TestStop_SuccessWithoutTaskFinish(t *testing.T) {
 
 	require.True(t, provider.getActiveCalled)
 	require.True(t, provider.stopCalled)
+	require.Equal(t, int64(5), provider.stoppedUserID)
 	require.Equal(t, int64(10), provider.stoppedID)
 	require.Equal(t, domain.PomodoroStatusAbandoned, provider.stoppedStatus)
 
@@ -179,6 +182,32 @@ func TestStop_NotFoundSession(t *testing.T) {
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.False(t, provider.stopCalled)
+}
+
+func TestStop_StopSessionNotFound(t *testing.T) {
+	secret := "secret"
+	tok := getTestToken(5, "u@test.com", secret)
+
+	taskID := int64(42)
+	provider := &mockPomodoroProvider{
+		activeSession: &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID},
+		stopErr:       storage.ErrSessionNotFound,
+	}
+	h := New(slog.New(slog.DiscardHandler), provider)
+
+	router := setupTestRouter(h, secret)
+
+	req := httptest.NewRequest(http.MethodPost, "/pomodoros/10/stop", strings.NewReader(`{"action":"completed"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusNotFound, w.Code)
+	require.True(t, provider.getActiveCalled)
+	require.True(t, provider.stopCalled)
+	require.False(t, provider.updateTaskCalled)
+	require.False(t, provider.applyStatsDeltaCalled)
 }
 
 func TestStop_InvalidAction(t *testing.T) {

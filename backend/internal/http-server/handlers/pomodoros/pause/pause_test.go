@@ -18,14 +18,16 @@ import (
 )
 
 type mockPomodoroProvider struct {
-	addBreakErr    error
-	
-	addBreakCalled bool
+	addBreakErr error
+
+	addBreakCalled  bool
+	calledUserID    int64
 	calledSessionID int64
 }
 
-func (m *mockPomodoroProvider) AddPomodoroBreak(ctx context.Context, sessionID int64) error {
+func (m *mockPomodoroProvider) AddPomodoroBreak(ctx context.Context, userID int64, sessionID int64) error {
 	m.addBreakCalled = true
+	m.calledUserID = userID
 	m.calledSessionID = sessionID
 	return m.addBreakErr
 }
@@ -63,6 +65,7 @@ func TestPause_Success(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, provider.addBreakCalled)
+	require.Equal(t, int64(5), provider.calledUserID)
 	require.Equal(t, int64(10), provider.calledSessionID)
 }
 

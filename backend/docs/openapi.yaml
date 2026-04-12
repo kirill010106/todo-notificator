@@ -1,7 +1,7 @@
 openapi: 3.0.3
 info:
   title: ToDo Notificator API
-  description: API для управления задачами, категориями и уведомлениями
+  description: API для управления задачами, категориями, статистикой и помодоро-сессиями
   version: 1.1.0
 servers:
   - url: http://localhost:8082/api/v1
@@ -14,6 +14,10 @@ tags:
     description: CRUD задач
   - name: Categories
     description: CRUD категорий пользователя
+  - name: Stats
+    description: Статистика пользователя
+  - name: Pomodoros
+    description: Управление pomodoro-сессиями
   - name: System
     description: Системные ручки
 
@@ -23,6 +27,7 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+
   schemas:
     StatusResponse:
       type: object
@@ -41,16 +46,6 @@ components:
           type: string
           example: invalid request
 
-    ValidationErrorResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          example: Error
-        error:
-          type: string
-          example: validation failed
-
     TokensResponse:
       type: object
       properties:
@@ -63,7 +58,41 @@ components:
           type: string
         expires_in:
           type: integer
+          format: int64
           example: 3600
+
+    RegisterResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        user_id:
+          type: integer
+          format: int64
+
+    LogoutRequest:
+      type: object
+      required: [refresh_token]
+      properties:
+        refresh_token:
+          type: string
+        all_devices:
+          type: boolean
+          default: false
+
+    Pagination:
+      type: object
+      properties:
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        total:
+          type: integer
+          example: 42
 
     Task:
       type: object
@@ -92,9 +121,47 @@ components:
           nullable: true
         status:
           type: string
-          enum: [pending, done]
+          enum: [pending, done, burnt]
         is_notified:
           type: boolean
+        pomodoros_taken:
+          type: integer
+          format: int64
+        reward_claimed:
+          type: boolean
+
+    TaskListResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        tasks:
+          type: array
+          items:
+            $ref: '#/components/schemas/Task'
+        pagination:
+          $ref: '#/components/schemas/Pagination'
+
+    TaskCreatedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        id:
+          type: integer
+          format: int64
+
+    TaskUpdatedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        task_id:
+          type: integer
+          format: int64
 
     Category:
       type: object
@@ -108,15 +175,167 @@ components:
         name:
           type: string
 
-    Pagination:
+    CategoriesResponse:
       type: object
       properties:
-        limit:
+        status:
+          type: string
+          example: OK
+        categories:
+          type: array
+          items:
+            $ref: '#/components/schemas/Category'
+
+    CategoryCreatedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        id:
           type: integer
-        offset:
+          format: int64
+
+    CategoryUpdatedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        category_id:
           type: integer
-        total:
+          format: int64
+
+    UserStats:
+      type: object
+      properties:
+        id:
           type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        points:
+          type: integer
+          format: int64
+          nullable: true
+        level:
+          type: integer
+          format: int64
+          nullable: true
+        total_pomodoros:
+          type: integer
+          format: int64
+          nullable: true
+        total_burnt_tasks:
+          type: integer
+          format: int64
+          nullable: true
+        current_streak:
+          type: integer
+          format: int64
+          nullable: true
+        best_streak:
+          type: integer
+          format: int64
+          nullable: true
+        updated_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    UserStatsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        user_stats:
+          $ref: '#/components/schemas/UserStats'
+
+    UserStatsUpdate:
+      type: object
+      properties:
+        points:
+          type: integer
+          format: int64
+          nullable: true
+        level:
+          type: integer
+          format: int64
+          nullable: true
+        total_pomodoros:
+          type: integer
+          format: int64
+          nullable: true
+        total_burnt_tasks:
+          type: integer
+          format: int64
+          nullable: true
+        current_streak:
+          type: integer
+          format: int64
+          nullable: true
+        best_streak:
+          type: integer
+          format: int64
+          nullable: true
+
+    PomodoroSession:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        task_id:
+          type: integer
+          format: int64
+          nullable: true
+        status:
+          type: string
+          enum: [active, completed, abandoned]
+        started_at:
+          type: string
+          format: date-time
+          nullable: true
+        completed_at:
+          type: string
+          format: date-time
+          nullable: true
+        duration_minutes:
+          type: integer
+          format: int64
+        breaks_used:
+          type: integer
+          format: int64
+        created_at:
+          type: string
+          format: date-time
+          nullable: true
+
+    PomodoroStartResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        session:
+          $ref: '#/components/schemas/PomodoroSession'
+
+    PomodoroActiveSessionConflictResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: Error
+        error:
+          type: string
+          example: pomodoro session is already active
+        active_session:
+          $ref: '#/components/schemas/PomodoroSession'
 
 security:
   - bearerAuth: []
@@ -147,9 +366,21 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                $ref: '#/components/schemas/RegisterResponse'
         "400":
           description: Ошибка валидации
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Пользователь уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -180,8 +411,20 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokensResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "401":
           description: Неверные учетные данные
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -204,13 +447,56 @@ paths:
                   type: string
       responses:
         "200":
-          description: Токен обновлен
+          description: Токены обновлены
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/TokensResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "401":
           description: Невалидный refresh token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /verify:
+    get:
+      tags: [Auth]
+      summary: Подтверждение email
+      security: []
+      parameters:
+        - in: query
+          name: token
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: Email подтвержден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        "400":
+          description: Неверный или просроченный токен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -220,15 +506,33 @@ paths:
     post:
       tags: [Auth]
       summary: Выход из системы
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LogoutRequest'
       responses:
-        "200":
+        "204":
           description: Успешный logout
+        "400":
+          description: Ошибка запроса
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                $ref: '#/components/schemas/ErrorResponse'
         "401":
           description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
 
   /tasks:
     get:
@@ -252,17 +556,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  tasks:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Task'
-                  pagination:
-                    $ref: '#/components/schemas/Pagination'
+                $ref: '#/components/schemas/TaskListResponse'
         "400":
           description: Ошибка параметров пагинации
           content:
@@ -271,8 +565,18 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
         "401":
           description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "404":
           description: Задачи не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -313,22 +617,33 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  id:
-                    type: integer
-                    format: int64
+                $ref: '#/components/schemas/TaskCreatedResponse'
         "400":
           description: Ошибка валидации
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Категория не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "409":
           description: Конфликт
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -351,6 +666,7 @@ paths:
           application/json:
             schema:
               type: object
+              minProperties: 1
               properties:
                 title:
                   type: string
@@ -366,35 +682,40 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
-                status:
-                  type: string
-                  enum: [pending, done]
                 category_id:
                   type: integer
                   format: int64
                   nullable: true
+                status:
+                  type: string
+                  enum: [pending, done, burnt]
       responses:
         "200":
           description: Задача обновлена
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  task_id:
-                    type: integer
-                    format: int64
+                $ref: '#/components/schemas/TaskUpdatedResponse'
         "400":
           description: Ошибка запроса
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "404":
           description: Задача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -413,8 +734,26 @@ paths:
       responses:
         "204":
           description: Задача удалена
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "404":
           description: Задача не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -430,17 +769,26 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  categories:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Category'
+                $ref: '#/components/schemas/CategoriesResponse'
         "401":
           description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Категории не найдены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     post:
       tags: [Categories]
       summary: Создать категорию
@@ -461,22 +809,27 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  id:
-                    type: integer
-                    format: int64
+                $ref: '#/components/schemas/CategoryCreatedResponse'
         "400":
           description: Ошибка валидации
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "409":
           description: Категория уже существует
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -510,16 +863,27 @@ paths:
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  category_id:
-                    type: integer
-                    format: int64
+                $ref: '#/components/schemas/CategoryUpdatedResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "404":
           description: Категория не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -538,8 +902,265 @@ paths:
       responses:
         "204":
           description: Категория удалена
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
         "404":
           description: Категория не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /me/stats:
+    get:
+      tags: [Stats]
+      summary: Получить статистику пользователя
+      responses:
+        "200":
+          description: Статистика пользователя
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserStatsResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    patch:
+      tags: [Stats]
+      summary: Обновить статистику пользователя
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserStatsUpdate'
+      responses:
+        "204":
+          description: Статистика обновлена
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pomodoros/start:
+    post:
+      tags: [Pomodoros]
+      summary: Запустить pomodoro-сессию
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        "201":
+          description: Сессия запущена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PomodoroStartResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: У пользователя уже есть активная сессия
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: '#/components/schemas/PomodoroActiveSessionConflictResponse'
+                  - $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pomodoros/{id}/pause:
+    post:
+      tags: [Pomodoros]
+      summary: Добавить перерыв в активной pomodoro-сессии
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Перерыв добавлен
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Активная сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "409":
+          description: Дополнительный перерыв уже использован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /pomodoros/{id}/stop:
+    post:
+      tags: [Pomodoros]
+      summary: Остановить pomodoro-сессию
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              properties:
+                action:
+                  type: string
+                  enum: [abandoned, completed]
+                finish_task:
+                  type: boolean
+      responses:
+        "200":
+          description: Сессия завершена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        "400":
+          description: Ошибка запроса
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Активная сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /verify/resend:
+    post:
+      tags: [Auth]
+      summary: Повторная отправка письма подтверждения
+      responses:
+        "200":
+          description: Письмо успешно отправлено
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/StatusResponse'
+        "400":
+          description: Пользователь уже подтвержден
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
           content:
             application/json:
               schema:
@@ -557,3 +1178,9 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/StatusResponse'
+        "503":
+          description: База данных недоступна
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'

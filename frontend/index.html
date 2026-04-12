@@ -849,6 +849,13 @@
                         <span x-text="task.pomodoros_taken"></span> 🍅
                       </span>
                       <span
+                        x-show="task.reward_claimed"
+                        class="text-xs font-semibold px-2 py-0.5 rounded-full bg-yellow-50 text-yellow-600"
+                        title="Награда получена"
+                      >
+                        🏆
+                      </span>
+                      <span
                         x-show="task.category_id > 0"
                         class="text-xs text-indigo-700 bg-indigo-100 px-2 py-0.5 rounded-full"
                         x-text="categoryNameById(task.category_id)"
@@ -1894,7 +1901,8 @@
 
           async toggleTaskStatus(task) {
             const newStatus = task.status === "done" ? "pending" : "done";
-            await this.updateTask(task.id, { status: newStatus });
+            const oldClaimed = !!task.reward_claimed;
+            await this.updateTask(task.id, { status: newStatus }, oldClaimed);
           },
 
           startEdit(task) {
@@ -1928,11 +1936,12 @@
             if (this.editForm.category_id) {
               body.category_id = Number(this.editForm.category_id);
             }
-            await this.updateTask(taskId, body);
+            const oldClaimed = this.tasks.find(t => t.id === taskId)?.reward_claimed;
+            await this.updateTask(taskId, body, oldClaimed);
             this.editingTaskId = null;
           },
 
-          async updateTask(taskId, fields) {
+          async updateTask(taskId, fields, oldClaimed = true) {
             try {
               const response = await this.apiRequest(`/tasks/${taskId}`, {
                 method: "PATCH",
@@ -1949,6 +1958,19 @@
 
               this.showToast("Задача обновлена", "success");
               await this.loadTasks();
+
+              if (fields.status === "done" && !oldClaimed) {
+                await this.loadStats();
+                this.spawnParticles('success', '+10 🏆');
+              }
+              
+              // Загружаем статистику, чтобы очки и прочие показатели обновились,
+              // если статус был изменен на done
+              if (fields.status === 'done') {
+                await this.loadStats();
+                // Также можно показать анимацию прибавки очков при желании
+                this.spawnParticles('success', '+10 🏆');
+              }
             } catch (err) {
               this.showToast("Ошибка подключения к серверу", "error");
             }

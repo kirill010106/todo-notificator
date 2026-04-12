@@ -148,7 +148,7 @@ func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []
 	return nil
 }
 
-// buildMessage собирает raw email сообщение
+// buildMessage builds raw email message
 func (s *Sender) buildMessage(to, subject, body string) []byte {
 	var sb strings.Builder
 
@@ -166,7 +166,7 @@ func (s *Sender) buildMessage(to, subject, body string) []byte {
 func (s *Sender) SendVerificationEmail(email, token string) error {
 	const op = "sender.SendVerificationEmail"
 
-	subject := "Подтверждение регистрации ToDoNotificator"
+	subject := "Registration Confirmation ToDoNotificator"
 	body, err := s.formatter.Verification(token)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)

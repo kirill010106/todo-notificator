@@ -79,19 +79,20 @@ func TestAddPomodoroBreak_Success(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET breaks_used = 1 
-        WHERE id = $1 AND breaks_used = 0 AND status = $2
+        WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(sessionID, domain.PomodoroStatusActive).
+		WithArgs(sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnResult(sqlmock.NewResult(0, 1)) // 1 affected row
 
-	err = s.AddPomodoroBreak(context.Background(), sessionID)
+	err = s.AddPomodoroBreak(context.Background(), userID, sessionID)
 	require.NoError(t, err)
 
 	err = mock.ExpectationsWereMet()
@@ -104,19 +105,20 @@ func TestAddPomodoroBreak_Exhausted(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET breaks_used = 1 
-        WHERE id = $1 AND breaks_used = 0 AND status = $2
+        WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(sessionID, domain.PomodoroStatusActive).
+		WithArgs(sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnResult(sqlmock.NewResult(0, 0)) // 0 affected rows
 
-	err = s.AddPomodoroBreak(context.Background(), sessionID)
+	err = s.AddPomodoroBreak(context.Background(), userID, sessionID)
 	require.ErrorIs(t, err, storage.ErrBreakExhausted)
 
 	err = mock.ExpectationsWereMet()
@@ -129,19 +131,20 @@ func TestStopPomodoroSession_Success(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET status = $1, completed_at = NOW() 
-        WHERE id = $2 AND status = $3
+        WHERE id = $2 AND status = $3 AND user_id = $4
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive).
+		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	err = s.StopPomodoroSession(context.Background(), sessionID, domain.PomodoroStatusCompleted)
+	err = s.StopPomodoroSession(context.Background(), userID, sessionID, domain.PomodoroStatusCompleted)
 	require.NoError(t, err)
 
 	err = mock.ExpectationsWereMet()
@@ -154,19 +157,20 @@ func TestStopPomodoroSession_NotActive(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET status = $1, completed_at = NOW() 
-        WHERE id = $2 AND status = $3
+        WHERE id = $2 AND status = $3 AND user_id = $4
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive).
+		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnResult(sqlmock.NewResult(0, 0)) // 0 affected rows
 
-	err = s.StopPomodoroSession(context.Background(), sessionID, domain.PomodoroStatusCompleted)
+	err = s.StopPomodoroSession(context.Background(), userID, sessionID, domain.PomodoroStatusCompleted)
 	require.ErrorIs(t, err, storage.ErrSessionNotFound)
 
 	err = mock.ExpectationsWereMet()
@@ -179,19 +183,20 @@ func TestStopPomodoroSession_Error(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET status = $1, completed_at = NOW() 
-        WHERE id = $2 AND status = $3
+        WHERE id = $2 AND status = $3 AND user_id = $4
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive).
+		WithArgs(domain.PomodoroStatusCompleted, sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnError(sql.ErrConnDone)
 
-	err = s.StopPomodoroSession(context.Background(), sessionID, domain.PomodoroStatusCompleted)
+	err = s.StopPomodoroSession(context.Background(), userID, sessionID, domain.PomodoroStatusCompleted)
 	require.Error(t, err)
 
 	err = mock.ExpectationsWereMet()
@@ -263,19 +268,20 @@ func TestAddPomodoroBreak_Error(t *testing.T) {
 	defer db.Close()
 
 	s := &Storage{DB: db}
+	userID := int64(42)
 	sessionID := int64(1)
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
         SET breaks_used = 1 
-        WHERE id = $1 AND breaks_used = 0 AND status = $2
+        WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 
 	mock.ExpectExec(query).
-		WithArgs(sessionID, domain.PomodoroStatusActive).
+		WithArgs(sessionID, domain.PomodoroStatusActive, userID).
 		WillReturnError(sql.ErrConnDone)
 
-	err = s.AddPomodoroBreak(context.Background(), sessionID)
+	err = s.AddPomodoroBreak(context.Background(), userID, sessionID)
 	require.Error(t, err)
 
 	err = mock.ExpectationsWereMet()

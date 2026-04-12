@@ -21,6 +21,8 @@ type Scheduler struct {
 	reschedule chan struct{}
 }
 
+const fallbackPollInterval = 5 * time.Minute
+
 func New(
 	log *slog.Logger,
 	storage storage.Storage,
@@ -45,24 +47,51 @@ func (s *Scheduler) Reschedule() {
 func (s *Scheduler) Start(ctx context.Context) {
 	s.log.Info("polling scheduler started")
 
-	s.poll(ctx)
-
-	ticker := time.NewTicker(5 * time.Minute)
-	defer ticker.Stop()
+	nextDelay := s.pollAndComputeNextDelay(ctx)
+	timer := time.NewTimer(nextDelay)
+	defer timer.Stop()
 
 	for {
 		select {
-		case <-ticker.C:
-			s.log.Debug("ticker poll tick")
-			s.poll(ctx)
+		case <-timer.C:
+			nextDelay = s.pollAndComputeNextDelay(ctx)
+			timer.Reset(nextDelay)
 		case <-s.reschedule:
 			s.log.Info("reschedule polling triggered via webhook")
-			s.poll(ctx)
+			if !timer.Stop() {
+				select {
+				case <-timer.C:
+				default:
+				}
+			}
+			nextDelay = s.pollAndComputeNextDelay(ctx)
+			timer.Reset(nextDelay)
 		case <-ctx.Done():
 			s.log.Info("scheduler stopped")
 			return
 		}
 	}
+}
+
+func (s *Scheduler) pollAndComputeNextDelay(ctx context.Context) time.Duration {
+	s.poll(ctx)
+
+	nextReminderAt, err := s.storage.GetNearestPendingReminderAt(ctx)
+	if err != nil {
+		s.log.Error("failed to load nearest reminder", sl.Err(err))
+		return fallbackPollInterval
+	}
+
+	if nextReminderAt == nil {
+		return fallbackPollInterval
+	}
+
+	delay := time.Until(*nextReminderAt)
+	if delay < 0 {
+		return 0
+	}
+
+	return delay
 }
 
 func (s *Scheduler) poll(ctx context.Context) {

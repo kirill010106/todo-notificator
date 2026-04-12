@@ -79,16 +79,16 @@ func (s *Storage) GetActivePomodoroSession(ctx context.Context, userID int64) (*
 	return session, nil
 }
 
-func (s *Storage) AddPomodoroBreak(ctx context.Context, sessionID int64) error {
+func (s *Storage) AddPomodoroBreak(ctx context.Context, userID int64, sessionID int64) error {
 	const op = "storage.postgres.AddPomodoroBreak"
 
 	query := `
         UPDATE pomodoro_sessions 
         SET breaks_used = 1 
-        WHERE id = $1 AND breaks_used = 0 AND status = $2
+        WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `
 
-	res, err := s.DB.ExecContext(ctx, query, sessionID, domain.PomodoroStatusActive)
+	res, err := s.DB.ExecContext(ctx, query, sessionID, domain.PomodoroStatusActive, userID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -104,16 +104,16 @@ func (s *Storage) AddPomodoroBreak(ctx context.Context, sessionID int64) error {
 	return nil
 }
 
-func (s *Storage) StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error {
+func (s *Storage) StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error {
 	const op = "storage.postgres.StopPomodoroSession"
 
 	query := `
         UPDATE pomodoro_sessions 
         SET status = $1, completed_at = NOW() 
-        WHERE id = $2 AND status = $3
+        WHERE id = $2 AND status = $3 AND user_id = $4
     `
 
-	res, err := s.DB.ExecContext(ctx, query, finalStatus, sessionID, domain.PomodoroStatusActive)
+	res, err := s.DB.ExecContext(ctx, query, finalStatus, sessionID, domain.PomodoroStatusActive, userID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

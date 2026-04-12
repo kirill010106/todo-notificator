@@ -102,7 +102,7 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 	FROM tasks t
 	JOIN users u ON u.id = t.user_id
 	WHERE t.status = 'pending'
-	AND t.is_notified = false
+	AND COALESCE(t.is_notified, false) = false
 	AND t.reminder_at IS NOT NULL
 	AND t.reminder_at <= NOW()
 	AND u.is_verified = true
@@ -134,6 +134,33 @@ func (s *Storage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWi
 		res = append(res, tw)
 	}
 	return res, rows.Err()
+}
+
+func (s *Storage) GetNearestPendingReminderAt(ctx context.Context) (*time.Time, error) {
+	const op = "storage.postgres.GetNearestPendingReminderAt"
+
+	query := `
+	SELECT MIN(t.reminder_at)
+	FROM tasks t
+	JOIN users u ON u.id = t.user_id
+	WHERE t.status = 'pending'
+		AND COALESCE(t.is_notified, false) = false
+		AND t.reminder_at IS NOT NULL
+		AND t.reminder_at > NOW()
+		AND u.is_verified = true
+	`
+
+	var nearest sql.NullTime
+	if err := s.DB.QueryRowContext(ctx, query).Scan(&nearest); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	if !nearest.Valid {
+		return nil, nil
+	}
+
+	t := nearest.Time
+	return &t, nil
 }
 
 func (s *Storage) GetTasksDueBetween(ctx context.Context, from, to time.Time) ([]domain.Task, error) {

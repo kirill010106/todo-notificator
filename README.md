@@ -1,336 +1,214 @@
-# 📋 To-Do Notificator
+# ToDo Notificator
 
-> **Умная система управления задачами с интеллектуальными уведомлениями**
+Monorepo-проект для управления задачами с email-уведомлениями, Pomodoro-таймером и JWT-аутентификацией.
 
-A full-stack application for task management with smart multi-channel notifications (Email, Telegram, Matrix/Element). Built with **Go** backend, **Alpine.js** frontend, and **PostgreSQL** database.
+## Что в репозитории сейчас
 
-![Status](https://img.shields.io/badge/status-active-success)
-![Go](https://img.shields.io/badge/Go-1.24-blue)
-![License](https://img.shields.io/badge/license-MIT-green)
+- Backend API на Go (chi + pgx + goose): задачи, категории, статистика, pomodoro, auth.
+- Веб-клиент на Alpine.js в папке frontend.
+- Дополнительный React-клиент (Vite + React + TS) в папке frontend-react.
+- Email notifier (Go) с webhook-триггером и периодическим polling.
+- Telegram bot присутствует как заготовка, но не интегрирован в основной flow.
+- OpenAPI/Swagger документация синхронизирована с backend.
 
----
+## Структура
 
-## ✨ Features
-
-### 📌 Task Management
-- ✅ Create, read, update, delete tasks
-- 📂 **Organize tasks by categories** (user-defined)
-- 🏷️ Task statuses: Pending, Done
-- 📅 Deadline tracking
-- ⏰ Custom reminder times for each task
-- 📝 Detailed task descriptions
-
-### 🔔 Notifications
-- 📧 **Email notifications** with HTML templates
-- 🤖 ~~**Telegram bot** integration for instant notifications~~ (to be done)
-- 💬 ~~**Matrix/Element messenger** integration~~ (to be done)
-- 🎯 **Flexible scheduling**: Set custom reminder time for each task
-- 🔄 Automated polling scheduler for timely delivery
-
-### 👤 Authentication & Security
-- 🔐 JWT-based authentication (Access & Refresh tokens)
-- 🔒 Password hashing with security best practices
-- 🛡️ Protected endpoints with middleware
-
-### 📚 API Documentation
-- 📖 Full **OpenAPI/Swagger** documentation
-- 🎨 Interactive Swagger UI for testing endpoints
-- 📊 Well-structured RESTful API
-
----
-
-## 🏗️ Architecture
-
-```
-┌─────────────────────────────────────────────────────────┐
-│                    Frontend (Alpine.js)                 │
-│              HTML/CSS with JavaScript logic             │
-└────────────────┬────────────────────────────────────────┘
-                 │ HTTP
-┌────────────────┴────────────────────────────────────────┐
-│                  Backend (Go + Chi Router)              │
-│  • Authentication (JWT)                                 │
-│  • Task CRUD handlers                                   │
-│  • Category management                                  │
-│  • Category handlers                                    │
-└────────────────┬────────────────────────────────────────┘
-                 │ SQL
-┌────────────────┴────────────────────────────────────────┐
-│              Database (PostgreSQL)                      │
-│  • users, tasks, categories, notifications              │
-└─────────────────────────────────────────────────────────┘
-
-┌─────────────────────────────────────────────────────────┐
-│         Notification Services (Separate Apps)           │
-│  • Email Notifier (Go)                                  │
-│  • Telegram Bot (Go)                                    │
-│  • Matrix Bot (Go)                                      │
-│  • Shared Scheduler & Storage Layer                     │
-└─────────────────────────────────────────────────────────┘
+```text
+backend/           REST API (основной сервис)
+frontend/          Основной статический веб-клиент (Alpine.js)
+frontend-react/    Альтернативный React-клиент
+notifiers/email/   Email-нотификатор
+notifiers/shared/  Общие доменные модели/хранилище для нотификаторов
+docs/              Swagger UI + openapi.yaml
 ```
 
----
+## Текущий API
 
-## 🛠️ Tech Stack
+Базовый префикс: /api/v1
 
-### Backend
-- **Language**: Go 1.24
-- **Web Framework**: Chi Router (chi/v5)
-- **Database**: PostgreSQL with pgx driver
-- **Authentication**: JWT (golang-jwt)
-- **Config**: cleanenv (environment-based config)
-- **Migrations**: goose/v3
-- **Logging**: slog (structured logging)
+### Public endpoints
 
-### Frontend
-- **Framework**: Alpine.js
-- **Styling**: Tailwind CSS (implied)
-- **Template Engine**: HTML5
+- POST /register
+- POST /login
+- POST /refresh
+- GET /verify
+- GET /health
 
-### Notification Services
-- **Email**: Go with HTML templates
-- **Telegram**: Go Telegram Bot API
-- **Matrix**: Go Matrix API (gomatrix)
-- **Scheduler**: Shared polling engine
+### Protected endpoints
 
-### DevOps & Documentation
-- **API Docs**: OpenAPI/Swagger
-- **Version Control**: Git
-- **Container**: Docker-ready
+- POST /logout
+- POST /verify/resend
+- GET /tasks
+- POST /tasks
+- PATCH /tasks/{task_id}
+- DELETE /tasks/{task_id}
+- GET /categories
+- POST /categories
+- PATCH /categories/{category_id}
+- DELETE /categories/{category_id}
+- GET /me/stats
+- PATCH /me/stats
+- POST /pomodoros/start
+- POST /pomodoros/{id}/pause
+- POST /pomodoros/{id}/stop
 
----
+Полная спецификация: docs/openapi.yaml
+Синхронная копия для backend-модуля: backend/docs/openapi.yaml
 
-## 🚀 Quick Start
+## Требования
 
-### Prerequisites
-- Go 1.24+
-- PostgreSQL 13+
-- Node.js (for Swagger UI)
-- Git
+- Go 1.25+
+- Node.js 20+
+- PostgreSQL 14+
+- (опционально) Docker для e2e и/или локальной БД
+- (опционально) air для hot reload
 
-### Installation
+## Быстрый старт (локальная разработка)
 
-1. **Clone the repository**
+### 1. Клонирование
+
 ```bash
 git clone https://github.com/kirill010106/todo-notificator.git
 cd toDoNotificator
 ```
 
-2. **Setup database**
-```bash
-# Create PostgreSQL database
-createdb todo_notificator
+### 2. Подготовка БД
 
-# Run migrations
-cd backend
-go run cmd/main.go  # Migrations run automatically on startup
-```
+Вариант с локальным PostgreSQL: создайте БД и пользователя вручную.
 
-3. **Configure environment**
-```bash
-# Copy example config
-cp backend/config/local.yaml backend/config/local.yaml
-
-# Edit local.yaml with your settings:
-# - Database credentials
-# - JWT secret
-# - Email/Telegram/Matrix API keys
-```
-
-4. **Start backend server**
-```bash
-cd backend
-go run cmd/main.go
-# Server runs on http://localhost:8080
-```
-
-5. **Start notification services**
-```bash
-# Email notifier
-cd notifiers/email
-go run cmd/main.go
-
-# Telegram bot
-cd notifiers/telegram-bot
-go run cmd/main.go
-```
-
-6. **View API documentation**
-```bash
-cd docs
-node server.js
-# Swagger UI runs on http://localhost:3000
-```
-
-7. **Access frontend**
-```
-Open http://localhost:8080 in your browser
-```
-
----
-
-## 📖 API Endpoints
-
-### Authentication
-- `POST /auth/register` - Register new user
-- `POST /auth/login` - Login user
-- `POST /auth/logout` - Logout user
-- `POST /auth/refresh` - Refresh access token
-
-### Tasks
-- `GET /tasks` - Get all user tasks
-- `POST /tasks` - Create new task
-- `GET /tasks/:id` - Get task by ID
-- `PUT /tasks/:id` - Update task
-- `DELETE /tasks/:id` - Delete task
-
-### Categories
-- `POST /categories` - Create category
-- `GET /categories` - List categories (planned)
-- `PUT /categories/:id` - Update category (planned)
-- `DELETE /categories/:id` - Delete category (planned)
-
-### Health
-- `GET /health` - Health check endpoint
-
-**Full API documentation**: See `docs/openapi.yaml` or open Swagger UI at `/docs`
-
----
-
-## 🔐 Authentication
-
-The application uses JWT (JSON Web Tokens) for stateless authentication:
-
-1. **Register/Login** → Get access token & refresh token
-2. **Access Token** → Valid for 1 hour, used for API requests
-3. **Refresh Token** → Used to get new access token
-4. **Protected Endpoints** → Require valid JWT in `Authorization: Bearer <token>` header
-
----
-
-## 🔔 Notification System
-
-### How It Works
-1. **User creates task** with custom `reminder_at` time
-2. **Scheduler polls** database every minute
-3. **When reminder_at time arrives** → Task marked for notification
-4. **Notification service** sends via Email/Telegram/Matrix
-5. **Status updated** → Task marked as notified
-
-### Configuration
-Set notification channels in `config/local.yaml`:
-
-```yaml
-email:
-  enabled: true
-  smtp_host: smtp.gmail.com
-  smtp_port: 587
-
-telegram:
-  enabled: true
-  bot_token: "YOUR_BOT_TOKEN"
-
-matrix:
-  enabled: true
-  homeserver: "https://matrix.org"
-  bot_token: "YOUR_BOT_TOKEN"
-```
-
----
-
-## 🧪 Testing
-
-Run tests for backend:
+Вариант с Docker:
 
 ```bash
-cd backend
-go test ./...
-go test ./... -v  # Verbose output
+docker run --name todo-pg \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=todo \
+  -p 5432:5432 \
+  -d postgres:16-alpine
 ```
 
-Unit tests include:
-- ✅ Authentication handler tests
-- ✅ Task CRUD tests
-- ✅ Category creation tests
-- ✅ Email formatting tests
-- ✅ Storage layer tests
+### 3. Настройка backend env
 
----
+Скопируйте шаблон в backend/.env (backend читает .env из своей рабочей директории):
 
-## 📋 Development Workflow
+```powershell
+Copy-Item .env.example backend/.env
+```
 
-### Development Script
-```bash
+Проверьте backend/.env:
+
+```dotenv
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/todo?sslmode=disable
+CONFIG_PATH=./config/local.yaml
+APP_SECRET=replace-with-random-secret
+```
+
+Важно: backend/internal/config/config.go требует CONFIG_PATH и APP_SECRET.
+
+### 4. Настройка email notifier env
+
+Создайте notifiers/email/.env на базе шаблона:
+
+```powershell
+Copy-Item notifiers/email/deploy/.env.notifier.example notifiers/email/.env
+```
+
+Минимально заполните:
+
+```dotenv
+DATABASE_URL=postgres://postgres:postgres@localhost:5432/todo?sslmode=disable
+SMTP_USERNAME=your-email@example.com
+SMTP_PASSWORD=your-password
+WEBHOOK_SECRET=same-secret-as-backend-webhook
+```
+
+Примечание: WEBHOOK_SECRET обязателен для email-нотификатора.
+
+### 5. Запуск сервисов
+
+#### Вариант A: через dev.ps1 (backend + email notifier)
+
+```powershell
 ./dev.ps1
 ```
 
-This PowerShell script helps with:
-- Running migrations
-- Starting backend server
-- Running notification services
-- Monitoring logs
+Скрипт использует air в обоих сервисах. Если air не установлен:
 
-### Code Style
-- Go: Follow `go fmt` and `go vet`
-- Structured logging with `slog`
-- Error handling with context
-- Tests for new features
+```bash
+go install github.com/air-verse/air@latest
+```
 
----
+#### Вариант B: вручную в двух терминалах
 
-## 🤝 Contributing
+Backend:
 
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add amazing feature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+```bash
+cd backend
+go run ./cmd/main.go
+```
 
----
+Email notifier:
 
-## 📝 License
+```bash
+cd notifiers/email
+go run ./cmd/main.go
+```
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+Миграции backend выполняет автоматически при старте.
 
----
+### 6. Запуск фронтенда
 
-## 👨‍💻 Author
+#### Основной Alpine.js клиент
 
-**Kirill** - [GitHub](https://github.com/kirill010106)
+```bash
+npx --yes http-server . -p 3030
+```
 
----
+Откройте: http://localhost:3030/frontend/
 
-## 🗺️ Roadmap
+#### React-клиент (альтернативный)
 
-- [ ] Complete category CRUD endpoints (READ, UPDATE, DELETE)
-- [ ] Category filtering for tasks
-- [ ] Notification history & retry logic
-- [ ] Task sharing between users
-- [ ] Recurring tasks
-- [ ] Mobile app
-- [ ] Docker compose setup
-- [ ] CI/CD pipeline
+```bash
+cd frontend-react
+npm install
+npm run dev
+```
 
----
+По умолчанию React-клиент обращается к http://localhost:8082/api/v1 (см. frontend-react/src/api/client.ts).
 
-## ❓ FAQ
+## Swagger UI
 
-**Q: How do I change the database?**  
-A: Edit the connection string in `config/local.yaml` and run migrations with `goose up`
+```bash
+cd docs
+npm install
+node server.js
+```
 
-**Q: Can I self-host?**  
-A: Yes! Deploy backend, frontend, and notifier services on your own server or Docker container
+UI будет доступен на http://localhost:8080
 
-**Q: How do I add a new notification channel?**  
-A: Create a new service in `notifiers/` implementing the `Sender` interface in `shared/domain/domain.go`
+## Тестирование
 
----
+### Backend unit/integration
 
-## 📞 Support
+```bash
+cd backend
+go test ./... -count=1
+```
 
-For issues and questions:
-🐛 [Open an issue](https://github.com/kirill010106/todo-notificator/issues)
+### E2E (build tag e2e)
 
----
+```bash
+cd backend
+go test -tags=e2e ./tests/e2e -count=1 -v
+```
 
-**Made with ❤️ by Kirill**
+E2E используют testcontainers. Если Docker недоступен в окружении, можно передать внешний DSN:
+
+```powershell
+$env:E2E_POSTGRES_DSN = "postgres://postgres:postgres@localhost:5432/todo_e2e?sslmode=disable"
+go test -tags=e2e ./tests/e2e -count=1 -v
+```
+
+## Лицензия
+
+MIT, см. LICENSE.

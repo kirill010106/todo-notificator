@@ -19,7 +19,7 @@ func StartTokenCleanup(ctx context.Context, log *slog.Logger, st *postgres.Stora
 		for {
 			select {
 			case <-ctx.Done():
-				log.Info("stopiing background token cleanup worker")
+				log.Info("stoping background token cleanup worker")
 				return
 			case <-ticker.C:
 				log.Debug("running expired tokens cleanup")

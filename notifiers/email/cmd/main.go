@@ -75,7 +75,7 @@ func main() {
 	logger.Info("starting email notifier")
 	sched.Start(ctx)
 
-	// Graceful shutdown webhook сервера
+	// Graceful shutdown webhook server
 	if err := srv.Shutdown(context.Background()); err != nil {
 		logger.Error("webhook server shutdown error", sl.Err(err))
 	}

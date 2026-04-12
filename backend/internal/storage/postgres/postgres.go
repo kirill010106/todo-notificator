@@ -210,6 +210,8 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 		setValues = append(setValues, fmt.Sprintf("reminder_at = $%d", argID))
 		args = append(args, *t.ReminderAt)
 		argID++
+
+		setValues = append(setValues, "is_notified = false")
 	}
 
 	if t.CategoryID != nil {
@@ -293,10 +295,11 @@ func (s *Storage) SaveUser(ctx context.Context, email string, passHash []byte) (
 	return id, nil
 }
 
+// SaveRefreshToken is DEPRECATED: WILL BE DELETED SOON, REPLACED BY RotateRefreshToken due to security problems
 func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
 	const op = "storage.postgres.SaveRefreshToken"
 
-	query := ` 
+	query := `
 		INSERT INTO refresh_tokens (user_id, token, expires_at)
 		VALUES ($1, $2, $3)
 	`
@@ -308,6 +311,7 @@ func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token stri
 	return nil
 }
 
+// GetRefreshToken is DEPRECATED: WILL BE DELETED SOON, REPLACED BY RotateRefreshToken due to security problems
 func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
 	const op = "storage.postgres.GetRefreshToken"
 
@@ -334,6 +338,7 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	return &rt, nil
 }
 
+// DeleteRefreshToken is DEPRECATED: WILL BE DELETED SOON, REPLACED BY RotateRefreshToken due to security problems
 func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 	const op = "storage.postgres.DeleteRefreshToken"
 
@@ -356,6 +361,38 @@ func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 	}
 
 	return nil
+}
+
+func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newToken string, expiresAt time.Time) (*domain.User, error) {
+	const op = "storage.postgres.RotateRefreshToken"
+
+	query := `
+		WITH rotated AS (
+			UPDATE refresh_tokens
+			SET token = $2, expires_at = $3
+			WHERE token = $1 AND expires_at > NOW()
+			RETURNING user_id
+		)
+		SELECT u.id, u.email, u.password_hash, u.is_verified
+		FROM rotated r
+		JOIN users u ON u.id = r.user_id
+	`
+
+	var user domain.User
+	err := s.DB.QueryRowContext(ctx, query, oldToken, newToken, expiresAt).Scan(
+		&user.ID,
+		&user.Email,
+		&user.PassHash,
+		&user.IsVerified,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%s: %w", op, storage.ErrRefreshTokenInvalid)
+		}
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+
+	return &user, nil
 }
 
 func (s *Storage) DeleteUserRefreshTokens(ctx context.Context, userID int64) error {
@@ -698,14 +735,14 @@ func (s *Storage) ApplyStatsDelta(ctx context.Context, userID int64, delta domai
 	query := `
 		UPDATE user_stats
 		SET
-			points = points + $1
-			level = GREATEST(1, ((points + $1) / 100) + 1)
-			total_pomodoros = total_pomodoros + $2
-			total_burnt_tasks = total_burnt_tasks + $3
+			points = points + $1,
+			level = GREATEST(1, ((points + $1) / 100) + 1),
+			total_pomodoros = total_pomodoros + $2,
+			total_burnt_tasks = total_burnt_tasks + $3,
 
 			current_streak = CASE
 			WHEN $4 = true THEN 0
-			WHEN $5 = TRUE THEN curent_streak +1
+			WHEN $5 = TRUE THEN current_streak + 1
 			ELSE current_streak
 		END,
 		best_streak = GREATEST(best_streak, CASE

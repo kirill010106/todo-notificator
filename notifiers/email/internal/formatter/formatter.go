@@ -88,13 +88,13 @@ func formatUrgencyText(interval time.Duration) string {
 	switch {
 	case interval >= 24*time.Hour:
 		days := int(interval.Hours() / 24)
-		return fmt.Sprintf("До дедлайна %d %s", days, pluralDay(days))
+		return fmt.Sprintf("Deadline in %d %s", days, pluralDay(days))
 	case interval >= time.Hour:
 		hours := int(interval.Hours())
-		return fmt.Sprintf("До дедлайна %d %s", hours, pluralHour(hours))
+		return fmt.Sprintf("Deadline in %d %s", hours, pluralHour(hours))
 	default:
 		minutes := int(interval.Minutes())
-		return fmt.Sprintf("До дедлайна %d %s!", minutes, pluralMinute(minutes))
+		return fmt.Sprintf("Deadline in %d %s!", minutes, pluralMinute(minutes))
 	}
 }
 
@@ -111,40 +111,40 @@ func formatBadgeClass(interval time.Duration) string {
 
 func formatDeadline(deadline *time.Time) string {
 	if deadline == nil {
-		return "не указан"
+		return "not specified"
 	}
-	return deadline.Format("02.01.2006 в 15:04")
+	return deadline.Format("02.01.2006 at 15:04")
 }
 
 func pluralDay(n int) string {
 	switch {
 	case n%10 == 1 && n%100 != 11:
-		return "день"
+		return "day"
 	case n%10 >= 2 && n%10 <= 4 && (n%100 < 10 || n%100 >= 20):
-		return "дня"
+		return "days"
 	default:
-		return "дней"
+		return "days"
 	}
 }
 
 func pluralHour(n int) string {
 	switch {
 	case n%10 == 1 && n%100 != 11:
-		return "час"
+		return "hour"
 	case n%10 >= 2 && n%10 <= 4 && (n%100 < 10 || n%100 >= 20):
-		return "часа"
+		return "hours"
 	default:
-		return "часов"
+		return "hours"
 	}
 }
 
 func pluralMinute(n int) string {
 	switch {
 	case n%10 == 1 && n%100 != 11:
-		return "минута"
+		return "minute"
 	case n%10 >= 2 && n%10 <= 4 && (n%100 < 10 || n%100 >= 20):
-		return "минуты"
+		return "minutes"
 	default:
-		return "минут"
+		return "minutes"
 	}
 }

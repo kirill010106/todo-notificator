@@ -17,7 +17,7 @@ import (
 )
 
 type PomodoroProvider interface {
-	AddPomodoroBreak(ctx context.Context, sessionID int64) error
+	AddPomodoroBreak(ctx context.Context, userID int64, sessionID int64) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 }
 
@@ -25,7 +25,7 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.pause.New"
 
-		log, _, ok := helpers.LoggerWithAuth(w, r, log, op)
+		log, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
 		if !ok {
 			return
 		}
@@ -41,7 +41,7 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 
 		log = log.With(slog.Int64("session_id", sessionID))
 
-		err = provider.AddPomodoroBreak(r.Context(), sessionID)
+		err = provider.AddPomodoroBreak(r.Context(), userID, sessionID)
 		if err != nil {
 			if errors.Is(err, storage.ErrBreakExhausted) {
 				log.Info("user tried to take break but it is exhausted")
@@ -49,7 +49,7 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 				render.JSON(w, r, resp.Error("extra break is already used"))
 				return
 			}
-			
+
 			if errors.Is(err, storage.ErrSessionNotFound) {
 				log.Warn("session not found or not active")
 				render.Status(r, http.StatusNotFound)

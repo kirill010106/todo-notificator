@@ -17,38 +17,20 @@ import (
 )
 
 type mockRefresher struct {
-	rt      *domain.RefreshToken
-	rtErr   error
-	user    *domain.User
-	userErr error
-	saveErr error
+	user      *domain.User
+	rotateErr error
 }
 
-func (m mockRefresher) GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error) {
-	if m.rtErr != nil {
-		return nil, m.rtErr
-	}
-	return m.rt, nil
-}
-
-func (m mockRefresher) GetUserByID(ctx context.Context, userID int64) (*domain.User, error) {
-	if m.userErr != nil {
-		return nil, m.userErr
+func (m mockRefresher) RotateRefreshToken(ctx context.Context, oldToken string, newToken string, expiresAt time.Time) (*domain.User, error) {
+	if m.rotateErr != nil {
+		return nil, m.rotateErr
 	}
 	return m.user, nil
 }
 
-func (m mockRefresher) SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
-	return m.saveErr
-}
-
-func (m mockRefresher) DeleteRefreshToken(ctx context.Context, token string) error {
-	return nil
-}
-
 func TestRefresh_InvalidRefreshToken(t *testing.T) {
 	cfg := &config.Config{AppSecret: "secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}
-	h := New(slog.New(slog.DiscardHandler), mockRefresher{rtErr: storage.ErrRefreshTokenInvalid}, cfg)
+	h := New(slog.New(slog.DiscardHandler), mockRefresher{rotateErr: storage.ErrRefreshTokenInvalid}, cfg)
 
 	req := httptest.NewRequest(http.MethodPost, "/refresh", strings.NewReader(`{"refresh_token":"bad"}`))
 	w := httptest.NewRecorder()
@@ -61,7 +43,6 @@ func TestRefresh_InvalidRefreshToken(t *testing.T) {
 func TestRefresh_Success(t *testing.T) {
 	cfg := &config.Config{AppSecret: "secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}
 	h := New(slog.New(slog.DiscardHandler), mockRefresher{
-		rt:   &domain.RefreshToken{UserID: 11},
 		user: &domain.User{ID: 11, Email: "u@test.com"},
 	}, cfg)
 
@@ -75,12 +56,10 @@ func TestRefresh_Success(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"refresh_token"`)
 }
 
-func TestRefresh_SaveError(t *testing.T) {
+func TestRefresh_RotateError(t *testing.T) {
 	cfg := &config.Config{AppSecret: "secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: time.Hour}
 	h := New(slog.New(slog.DiscardHandler), mockRefresher{
-		rt:      &domain.RefreshToken{UserID: 11},
-		user:    &domain.User{ID: 11, Email: "u@test.com"},
-		saveErr: errors.New("save failed"),
+		rotateErr: errors.New("rotate failed"),
 	}, cfg)
 
 	req := httptest.NewRequest(http.MethodPost, "/refresh", strings.NewReader(`{"refresh_token":"good"}`))

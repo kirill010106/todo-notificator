@@ -31,10 +31,7 @@ type Response struct {
 }
 
 type TokenRefresher interface {
-	GetRefreshToken(ctx context.Context, token string) (*domain.RefreshToken, error)
-	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
-	SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error
-	DeleteRefreshToken(ctx context.Context, token string) error
+	RotateRefreshToken(ctx context.Context, oldToken string, newToken string, expiresAt time.Time) (*domain.User, error)
 }
 
 var validate = validator.New()
@@ -70,7 +67,17 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			return
 		}
 
-		refreshTokenData, err := tokenRefresher.GetRefreshToken(r.Context(), req.RefreshToken)
+		newRefreshToken, err := jwt.NewRefreshToken()
+		if err != nil {
+			log.Error("failed to generate new refresh token", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("failed to generate token"))
+			return
+		}
+
+		expiresAt := time.Now().Add(cfg.RefreshTokenTTL)
+
+		user, err := tokenRefresher.RotateRefreshToken(r.Context(), req.RefreshToken, newRefreshToken, expiresAt)
 		if err != nil {
 			if errors.Is(err, storage.ErrRefreshTokenInvalid) {
 				log.Info("invalid refresh token")
@@ -78,55 +85,19 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 				render.JSON(w, r, resp.Error("invalid or expired refresh token"))
 				return
 			}
-			log.Error("failed to get refresh token", sl.Err(err))
+			log.Error("failed to rotate refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal server error"))
 			return
 		}
 
-		log = log.With(slog.Int64("user_ID", refreshTokenData.UserID))
-
-		user, err := tokenRefresher.GetUserByID(r.Context(), refreshTokenData.UserID)
-		if err != nil {
-			if errors.Is(err, storage.ErrUserNotFound) {
-				log.Warn("user not found")
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("user not found"))
-				return
-			}
-			log.Error("failed to get user", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
-			return
-		}
-
-		err = tokenRefresher.DeleteRefreshToken(r.Context(), req.RefreshToken)
-		if err != nil {
-			log.Error("failed to delete old refresh token", sl.Err(err))
-		}
+		log = log.With(slog.Int64("user_id", user.ID))
 
 		accessToken, err := jwt.NewAccessToken(*user, cfg.AppSecret, cfg.AccessTokenTTL)
 		if err != nil {
 			log.Error("failed to generate access token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to generate token"))
-			return
-		}
-
-		newRefreshToken, err := jwt.NewRefreshToken()
-		if err != nil {
-			log.Error("failed to generate refresh token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to generate token"))
-			return
-		}
-
-		expiresAt := time.Now().Add(cfg.RefreshTokenTTL)
-		err = tokenRefresher.SaveRefreshToken(r.Context(), user.ID, newRefreshToken, expiresAt)
-		if err != nil {
-			log.Error("failed to save refresh token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to save token"))
 			return
 		}
 
@@ -141,4 +112,3 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		})
 	}
 }
-

@@ -25,7 +25,7 @@ type Request struct {
 
 type PomodoroProvider interface {
 	storage.Provider
-	StopPomodoroSession(ctx context.Context, sessionID int64, finalStatus string) error
+	StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
 	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
@@ -94,8 +94,14 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			return
 		}
 
-		err = provider.StopPomodoroSession(r.Context(), sessionID, req.Action)
+		err = provider.StopPomodoroSession(r.Context(), userID, sessionID, req.Action)
 		if err != nil {
+			if errors.Is(err, storage.ErrSessionNotFound) {
+				log.Warn("session not found or access denied")
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("session not found"))
+				return
+			}
 			log.Error("failed to stop pomodoro session", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to stop pomodoro session"))

@@ -1,7 +1,9 @@
 package update
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -44,6 +46,10 @@ type TaskUpdater interface {
 
 var validate = validator.New()
 
+type schedulerWebhookPayload struct {
+	Type string `json:"type"`
+}
+
 func formatValidationError(err validator.FieldError) string {
 	field := strings.ToLower(err.Field())
 
@@ -83,7 +89,7 @@ func (r Request) IsEmpty() bool {
 		r.CategoryID == nil
 }
 
-func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
+func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret string) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.update.New"
@@ -221,5 +227,35 @@ func New(log *slog.Logger, taskUpdater TaskUpdater) http.HandlerFunc {
 			Response: resp.OK(),
 			TaskID:   taskID,
 		})
+
+		if webhookURL != "" {
+			go notifyScheduler(log, webhookURL, webhookSecret, "task_updated")
+		}
 	}
+}
+
+func notifyScheduler(log *slog.Logger, url, secret, eventType string) {
+	body, err := json.Marshal(schedulerWebhookPayload{Type: eventType})
+	if err != nil {
+		log.Warn("webhook: failed to marshal payload", sl.Err(err))
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url+"/webhook/task-created", bytes.NewReader(body))
+	if err != nil {
+		log.Warn("webhook: failed to build request", sl.Err(err))
+		return
+	}
+	req.Header.Set("X-Webhook-Secret", secret)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Warn("webhook: notifier unavailable, scheduler will catch up via ticker", sl.Err(err))
+		return
+	}
+	defer res.Body.Close()
+
+	log.Debug("webhook: notifier signaled", slog.Int("status", res.StatusCode), slog.String("type", eventType))
 }

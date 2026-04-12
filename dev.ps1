@@ -1,11 +1,98 @@
-Write-Host "Starting all services..." -ForegroundColor Green
+$ErrorActionPreference = "Stop"
+
+$localDbContainer = "todo-local-pg-alt"
+$localDbPort = 55432
+$localDbName = "todo"
+$localDbUser = "postgres"
+$localDbPassword = "postgres"
+$localDbURL = "postgres://{0}:{1}@127.0.0.1:{2}/{3}?sslmode=disable" -f $localDbUser, $localDbPassword, $localDbPort, $localDbName
+
+function Ensure-LocalPostgres {
+    param(
+        [string]$Container,
+        [int]$Port,
+        [string]$Database,
+        [string]$User,
+        [string]$Password
+    )
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "docker is not available in PATH"
+    }
+
+    $containerId = docker ps -aq --filter "name=^/$Container$"
+    if ($LASTEXITCODE -ne 0) {
+        throw "failed to query docker containers"
+    }
+
+    if (-not $containerId) {
+        Write-Host "Creating local Postgres container '$Container' on port $Port..." -ForegroundColor Yellow
+        docker run --name $Container `
+            -e "POSTGRES_USER=$User" `
+            -e "POSTGRES_PASSWORD=$Password" `
+            -e "POSTGRES_DB=$Database" `
+            -p "${Port}:5432" `
+            -d postgres:16-alpine | Out-Null
+
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to create local postgres container. Port $Port may be in use"
+        }
+    } else {
+        $isRunning = docker inspect -f "{{.State.Running}}" $Container 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to inspect docker container '$Container'"
+        }
+
+        if ($isRunning -ne "true") {
+            Write-Host "Starting local Postgres container '$Container'..." -ForegroundColor Yellow
+            docker start $Container | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "failed to start local postgres container '$Container'"
+            }
+        }
+    }
+
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        docker exec $Container pg_isready -U $User -d $Database | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Local Postgres is ready on 127.0.0.1:$Port" -ForegroundColor Green
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+
+    throw "local postgres container '$Container' did not become ready in time"
+}
+
+Write-Host "Preparing local database..." -ForegroundColor Green
+Ensure-LocalPostgres -Container $localDbContainer -Port $localDbPort -Database $localDbName -User $localDbUser -Password $localDbPassword
+
+Write-Host "Starting all services on local DB..." -ForegroundColor Green
+Write-Host "DATABASE_URL=$localDbURL" -ForegroundColor DarkGray
+
+$backendDir = Join-Path $PSScriptRoot "backend"
+$emailDir = Join-Path $PSScriptRoot "notifiers\email"
+
+$backendCommand = @"
+`$env:DATABASE_URL = '$localDbURL'
+`$env:CONFIG_PATH = '.\config\local.yaml'
+Set-Location '$backendDir'
+air -c .air.toml
+"@
+
+$emailCommand = @"
+`$env:DATABASE_URL = '$localDbURL'
+`$env:EMAIL_CONFIG_PATH = '.\config\local.yaml'
+Set-Location '$emailDir'
+air -c .air.toml
+"@
 
 $backend = Start-Process powershell `
-    -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\backend'; air -c .air.toml" `
+    -ArgumentList "-NoExit", "-Command", $backendCommand `
     -PassThru
 
 $email = Start-Process powershell `
-    -ArgumentList "-NoExit", "-Command", "cd '$PSScriptRoot\notifiers\email'; air -c .air.toml" `
+    -ArgumentList "-NoExit", "-Command", $emailCommand `
     -PassThru
 
 Write-Host "Backend PID:        $($backend.Id)" -ForegroundColor Cyan
