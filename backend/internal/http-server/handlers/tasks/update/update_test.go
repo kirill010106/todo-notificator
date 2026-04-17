@@ -211,5 +211,3 @@ func TestUpdate_WithCategory(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, updater.called)
 }
-
-

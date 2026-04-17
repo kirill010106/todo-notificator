@@ -15,7 +15,7 @@
       }
     </style>
   </head>
-  <body class="bg-gray-100 min-h-screen" x-data="app()" x-init="init()">
+  <body class="bg-gray-100 min-h-screen overflow-x-hidden" x-data="app()" x-init="init()">
     <!-- TOAST уведомления -->
     <div class="fixed top-4 right-4 z-50 flex flex-col gap-2" x-cloak>
       <template x-for="toast in toasts" :key="toast.id">
@@ -28,7 +28,7 @@
           x-transition:leave-start="opacity-100 translate-x-0 scale-100"
           x-transition:leave-end="opacity-0 translate-y-[-100%] scale-90"
           :class="toast.type === 'error' ? 'bg-red-500' : toast.type === 'success' ? 'bg-green-500' : 'bg-blue-500'"
-          class="text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 min-w-64 transform origin-center transition-transform hover:scale-[1.02]"
+          class="text-white px-4 py-3 rounded-lg shadow-xl flex items-center gap-2 w-[calc(100vw-2rem)] sm:min-w-64 sm:w-auto transform origin-center transition-transform hover:scale-[1.02]"
         >
           <span
             x-text="toast.type === 'error' ? '✕' : '✓'"
@@ -228,7 +228,7 @@
       <!-- Основной контент -->
       <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
         <!-- Уведомление о неподтвержденной почте -->
-        <div x-cloak x-show="!isVerified" class="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl mb-6 shadow-sm flex flex-col sm:flex-row items-center justify-between gap-3">
+        <div x-cloak x-show="!isVerified" class="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl mb-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
   <div class="flex items-center gap-2">
     <span class="text-xl">⚠️</span>
     <span class="text-sm font-medium">Ваша почта не подтверждена! Напоминания отключены. Для получения писем пройдите по ссылке из нашего email.</span>
@@ -236,7 +236,7 @@
   <button 
     @click="resendVerificationEmail()" 
     :disabled="resendLoading || resendCooldown > 0"
-    class="bg-amber-100 hover:bg-amber-200 text-amber-800 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap">
+    class="w-full sm:w-auto bg-amber-100 hover:bg-amber-200 text-amber-800 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap">
     <span x-show="!resendLoading && resendCooldown === 0">Отправить письмо еще раз</span>
     <span x-show="resendLoading">Отправка...</span>
     <span x-show="resendCooldown > 0" x-text="`Отправить через ${resendCooldown}с`"></span>
@@ -283,18 +283,18 @@
             
             <div class="mt-4 text-[4rem] sm:text-[5rem] font-mono font-bold leading-none" :class="pomodoro.mode === 'focus' ? 'text-red-600' : 'text-blue-600'" x-text="formatPomodoroTime()"></div>
             
-            <div class="flex gap-4">
+            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
               <template x-if="pomodoro.mode === 'focus'">
-                <button @click="clickStopPomodoro()" class="bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition block">
+                <button @click="clickStopPomodoro()" class="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition block">
                   Остановить
                 </button>
               </template>
               <template x-if="pomodoro.mode === 'break'">
-                 <div class="flex gap-3">
-                   <button @click="returnToWork()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 border border-transparent rounded-xl font-bold shadow-sm transition block">
+                 <div class="flex flex-col sm:flex-row gap-3 w-full">
+                   <button @click="returnToWork()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 border border-transparent rounded-xl font-bold shadow-sm transition block">
                      Продолжить работу
                    </button>
-                   <button @click="finishPomodoroSession('completed', false)" class="bg-white text-gray-500 hover:bg-gray-100 px-4 py-2.5 border border-gray-200 rounded-xl font-bold shadow-sm transition block">
+                   <button @click="finishPomodoroSession('completed', false)" class="w-full sm:w-auto bg-white text-gray-500 hover:bg-gray-100 px-4 py-2.5 border border-gray-200 rounded-xl font-bold shadow-sm transition block">
                      Закончить
                    </button>
                  </div>
@@ -340,14 +340,14 @@
         <div
           class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
         >
-          <div class="flex items-start justify-between gap-4">
+          <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
             <div>
               <h2 class="text-lg font-semibold text-gray-800">Статистика</h2>
               <p class="text-xs text-gray-500 mt-1">
                 Данные подтягиваются из профиля пользователя
               </p>
             </div>
-            <div class="flex items-center gap-2">
+            <div class="flex items-center gap-2 self-start sm:self-auto">
               <button
                 @click="loadStats()"
                 class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
@@ -429,7 +429,7 @@
             x-cloak
             class="mt-5 border-t border-gray-200 pt-5"
           >
-            <div class="flex items-start justify-between gap-4">
+            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
               <div>
                 <h3 class="text-sm font-semibold text-gray-800">
                   Debug: обновление статистики
@@ -586,10 +586,10 @@
                 x-transition:leave="transition ease-in duration-200"
                 x-transition:leave-start="opacity-100 scale-100"
                 x-transition:leave-end="opacity-0 scale-75"
-                class="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 text-sm px-3 py-1.5 rounded-full"
+                class="inline-flex items-center gap-2 bg-indigo-50 text-indigo-700 text-sm px-3 py-1.5 rounded-full max-w-full"
               >
                 <template x-if="editingCategoryId !== category.id">
-                  <span x-text="category.name"></span>
+                  <span x-text="category.name" class="truncate max-w-[12rem]"></span>
                 </template>
                 <template x-if="editingCategoryId === category.id">
                   <input
@@ -637,14 +637,14 @@
         >
           <h2 class="text-lg font-semibold text-gray-800 mb-4">Новая задача</h2>
           <form @submit.prevent="createTask()" class="space-y-3">
-            <div class="flex flex-col sm:flex-row gap-3 items-end">
+            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
               <input
                 type="text"
                 x-model="newTask.title"
                 placeholder="Название задачи *"
                 required
                 maxlength="255"
-                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                class="w-full sm:flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
               />
               <div class="flex flex-col gap-1 w-full sm:w-52">
                 <label class="text-xs text-gray-500">Дедлайн</label>
@@ -665,19 +665,19 @@
                 />
               </div>
             </div>
-            <div class="flex gap-3">
+            <div class="flex flex-col sm:flex-row gap-3">
               <textarea
                 x-model="newTask.description"
                 placeholder="Описание (необязательно)"
                 maxlength="2000"
                 rows="2"
-                class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
+                class="w-full sm:flex-1 min-w-0 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
               ></textarea>
-              <div class="flex flex-col gap-1 self-end">
+              <div class="flex flex-col gap-1 w-full sm:w-auto sm:self-end">
                 <label class="text-xs text-gray-500">Категория</label>
                 <select
                   x-model="newTask.category_id"
-                  class="px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                  class="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
                 >
                   <option :value="null">Без категории</option>
                   <template x-for="cat in categories" :key="cat.id">
@@ -688,7 +688,7 @@
               <button
                 type="submit"
                 :disabled="loadingCreate"
-                class="self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
+                class="w-full sm:w-auto self-stretch sm:self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
               >
                 <span x-show="!loadingCreate">+ Добавить</span>
                 <span x-show="loadingCreate">...</span>
@@ -699,7 +699,7 @@
 
         <!-- Фильтры и статистика -->
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div class="flex gap-2">
+          <div class="flex flex-wrap gap-2">
             <button
               @click="filter = 'all'"
               :class="filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
@@ -807,7 +807,7 @@
                     <div class="flex items-start justify-between gap-2">
                       <h3
                         :class="task.status === 'done' ? 'line-through text-gray-400' : (task.status === 'burnt' ? 'text-red-800 line-through decoration-red-300' : 'text-gray-800')"
-                        class="font-medium text-sm transition-colors"
+                        class="font-medium text-sm transition-colors break-words"
                         x-text="task.title"
                       ></h3>
                       <div class="flex items-center gap-1 flex-shrink-0">
@@ -838,9 +838,9 @@
                     <p
                       x-show="task.description"
                       x-text="task.description"
-                      class="text-xs text-gray-500 mt-1"
+                      class="text-xs text-gray-500 mt-1 break-words"
                     ></p>
-                    <div class="flex items-center gap-3 mt-2">
+                    <div class="flex flex-wrap items-center gap-2 mt-2">
                       <span
                         x-show="task.pomodoros_taken > 0"
                         class="text-xs font-semibold px-2 py-0.5 rounded-full bg-red-50 text-red-600"
@@ -899,7 +899,7 @@
                       placeholder="Описание"
                       class="w-full px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
                     ></textarea>
-                    <div class="flex items-center gap-2">
+                    <div class="flex flex-col sm:flex-row sm:items-end gap-2">
                       <div class="flex flex-col gap-1 flex-1">
                         <label class="text-xs text-gray-500">Дедлайн</label>
                         <input
@@ -932,14 +932,14 @@
                       </div>
                       <select
                         x-model="editForm.status"
-                        class="px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
+                        class="w-full sm:w-auto px-3 py-1.5 border border-blue-300 rounded-lg focus:outline-none text-sm"
                       >
                         <option value="pending">В работе</option>
                         <option value="done">Готово</option>
                         <option value="burnt">Сгорела</option>
                       </select>
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2">
                       <button
                         @click="saveEdit(task.id)"
                         class="px-3 py-1 bg-blue-600 text-white text-xs rounded-lg hover:bg-blue-700"

@@ -15,13 +15,13 @@ import (
 
 // mockStorage implements storage.Storage for tests
 type mockStorage struct {
-	tasks               []domain.TaskWithUser
-	getTasksErr         error
-	markedAsNotified    []int64
-	markedSet           map[int64]struct{}
-	markTaskErr         error
-	nearestReminderAt   *time.Time
-	nearestReminderErr  error
+	tasks              []domain.TaskWithUser
+	getTasksErr        error
+	markedAsNotified   []int64
+	markedSet          map[int64]struct{}
+	markTaskErr        error
+	nearestReminderAt  *time.Time
+	nearestReminderErr error
 }
 
 func (m *mockStorage) GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error) {
@@ -120,7 +120,7 @@ func (m *mockSender) Send(user domain.User, task domain.Task, interval time.Dura
 func TestScheduler_Poll(t *testing.T) {
 	// Create logger that will not flood console
 	log := slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelError}))
-	
+
 	now := time.Now()
 	intervals := []time.Duration{1 * time.Hour}
 
@@ -139,8 +139,8 @@ func TestScheduler_Poll(t *testing.T) {
 				{
 					User: domain.User{ID: 1, Email: "test@test.com"},
 					Task: domain.Task{
-						ID:       1,
-						Title:    "Burning task",
+						ID:         1,
+						Title:      "Burning task",
 						ReminderAt: func() *time.Time { t := now; return &t }(), // Deadline is now
 					},
 				},
@@ -154,8 +154,8 @@ func TestScheduler_Poll(t *testing.T) {
 				{
 					User: domain.User{ID: 2, Email: "test@test.com"},
 					Task: domain.Task{
-						ID:       2,
-						Title:    "Task in future",
+						ID:         2,
+						Title:      "Task in future",
 						ReminderAt: func() *time.Time { t := now.Add(2 * time.Hour); return &t }(), // Deadline in 2 hours, interval 1 hour - send early
 					},
 				},
@@ -169,8 +169,8 @@ func TestScheduler_Poll(t *testing.T) {
 				{
 					User: domain.User{ID: 3, Email: "test@test.com"},
 					Task: domain.Task{
-						ID:       3,
-						Title:    "Task with sending error",
+						ID:         3,
+						Title:      "Task with sending error",
 						ReminderAt: func() *time.Time { t := now; return &t }(),
 					},
 				},
@@ -185,8 +185,8 @@ func TestScheduler_Poll(t *testing.T) {
 				{
 					User: domain.User{ID: 4, Email: "test@test.com"},
 					Task: domain.Task{
-						ID:       4,
-						Title:    "Without deadline",
+						ID:         4,
+						Title:      "Without deadline",
 						ReminderAt: nil,
 					},
 				},
@@ -209,13 +209,13 @@ func TestScheduler_Poll(t *testing.T) {
 
 			// Instead of exporting Poll method, we can just put helper-function in scheduler package or create alias.
 			// But since s.poll() is private, we will use the fact that it is called by reschedule trigger via channel
-			
+
 			// Create scheduler
 			s := scheduler.New(log, storageMock, senderMock, intervals)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
 			defer cancel()
-			
+
 			// Start scheduler in background - it will call s.poll(ctx) on start!
 			go s.Start(ctx)
 
@@ -268,4 +268,3 @@ func TestScheduler_RescheduleTriggersSendAtReminderTime(t *testing.T) {
 	assert.Len(t, senderMock.sentTasks, 1, "task should be sent around reminder time without waiting 5m ticker")
 	assert.Equal(t, []int64{10}, storageMock.markedAsNotified)
 }
-
