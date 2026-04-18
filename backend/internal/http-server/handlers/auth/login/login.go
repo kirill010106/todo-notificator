@@ -22,7 +22,7 @@ import (
 
 type Request struct {
 	Email    string `json:"email" validate:"required,email"`
-	Password string `json:"password" validate:"required"`
+	Password string `json:"password" validate:"required,min=8"`
 }
 
 type Response struct {
@@ -68,7 +68,7 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 			if errors.As(err, &validateErrs) {
 				log.Info("validation failed", sl.Err(err))
 				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("validation failed"))
+				render.JSON(w, r, resp.ValidationError(validateErrs))
 				return
 			}
 			log.Error("internal validation error", sl.Err(err))

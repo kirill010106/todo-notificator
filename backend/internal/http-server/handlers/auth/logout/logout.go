@@ -58,7 +58,14 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 		}
 
 		if err := validate.Struct(req); err != nil {
-			log.Warn("invalid request", sl.Err(err))
+			var validateErrs validator.ValidationErrors
+			if errors.As(err, &validateErrs) {
+				log.Warn("invalid request", sl.Err(err))
+				render.Status(r, http.StatusBadRequest)
+				render.JSON(w, r, resp.ValidationError(validateErrs))
+				return
+			}
+			log.Error("internal validation error", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("validation error"))
 			return

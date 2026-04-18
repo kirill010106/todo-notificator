@@ -93,6 +93,13 @@ func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string
 		}
 
 		if err := validate.Struct(req); err != nil {
+			var validateErrs validator.ValidationErrors
+			if errors.As(err, &validateErrs) {
+				log.Info("validation failed", sl.Err(err))
+				render.Status(r, http.StatusBadRequest)
+				render.JSON(w, r, resp.ValidationError(validateErrs))
+				return
+			}
 			render.Status(r, http.StatusBadRequest)
 			render.JSON(w, r, resp.Error("invalid request data"))
 			return
