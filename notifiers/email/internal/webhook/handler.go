@@ -55,7 +55,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	var payload Payload
 
-	_ = json.NewDecoder(r.Body).Decode(&payload)
+	err := json.NewDecoder(r.Body).Decode(&payload)
+	if err != nil {
+		h.log.Error("webhook: failed to decode request body", slog.String("error", err.Error()))
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
 
 	if payload.Type == "verification" && payload.Email != "" && payload.Token != "" {
 		h.log.Info("webhook: sending verification email", slog.String("email", payload.Email))
