@@ -15,6 +15,12 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
 
+    - name: Prune stale remote branches
+      command: git remote prune origin
+      args:
+        chdir: "{{ app_dir }}"
+      ignore_errors: yes
+
     - name: Clone/Pull repository
       git:
         repo: "https://github.com/kirill010106/todo-notificator.git" 

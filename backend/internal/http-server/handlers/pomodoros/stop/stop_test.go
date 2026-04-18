@@ -18,9 +18,9 @@ import (
 )
 
 type mockPomodoroProvider struct {
-	stopErr            error
-	getActiveErr       error
-	updateTaskErr      error
+	stopErr       error
+	getActiveErr  error
+	updateTaskErr error
 
 	activeSession *domain.PomodoroSession
 
