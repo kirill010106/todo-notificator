@@ -48,7 +48,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
 				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty response body"))
+				render.JSON(w, r, resp.Error("empty request body"))
 				return
 			}
 			log.Warn("failed to decode request body")
@@ -91,4 +91,3 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 		w.WriteHeader(http.StatusNoContent)
 	}
 }
-

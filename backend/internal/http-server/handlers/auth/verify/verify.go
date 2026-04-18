@@ -47,7 +47,7 @@ func New(log *slog.Logger, emailVerifier EmailVerifier) http.HandlerFunc {
 		tokenInfo, err := emailVerifier.GetEmailVerificationToken(r.Context(), token)
 		if err != nil {
 			if errors.Is(err, storage.ErrTokenNotFound) {
-				log.Warn("token not found", slog.String("token", token))
+				log.Warn("token not found")
 				render.Status(r, http.StatusBadRequest)
 				render.JSON(w, r, resp.Error("invalid or expired token"))
 				return
@@ -59,10 +59,13 @@ func New(log *slog.Logger, emailVerifier EmailVerifier) http.HandlerFunc {
 		}
 
 		if time.Now().After(tokenInfo.ExpiresAt) {
-			log.Warn("token expired", slog.String("token", token))
-			emailVerifier.DeleteEmailVerificationToken(r.Context(), token)
+			log.Warn("token not found")
+			err := emailVerifier.DeleteEmailVerificationToken(r.Context(), token)
+			if err != nil {
+				log.Error("failed to delete expired token", sl.Err(err))
+			}
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("token expired"))
+			render.JSON(w, r, resp.Error("invalid or expired token"))
 			return
 		}
 

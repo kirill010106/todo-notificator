@@ -63,7 +63,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		if err := validate.Struct(req); err != nil {
 			log.Warn("invalid request", sl.Err(err))
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("validation error"))
+			render.JSON(w, r, resp.Error("validation error: refresh token is required"))
 			return
 		}
 

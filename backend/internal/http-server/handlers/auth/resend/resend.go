@@ -6,6 +6,7 @@ import (
 	"crypto/rand"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -28,6 +29,42 @@ func generateToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func sendVerificationWebhook(ctx context.Context, webhookURL, webhookSecret, email, token string) error {
+	const op = "handlers.auth.resend.sendVerificationWebhook"
+
+	payload := map[string]string{
+		"type":  "verification",
+		"email": email,
+		"token": token,
+	}
+
+	body, err := json.Marshal(payload)
+	if err != nil {
+		return fmt.Errorf("%s: marshal payload: %w", op, err)
+	}
+
+	reqW, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(body))
+	if err != nil {
+		return fmt.Errorf("%s: create request: %w", op, err)
+	}
+
+	reqW.Header.Set("Content-Type", "application/json")
+	reqW.Header.Set("X-Webhook-Secret", webhookSecret)
+
+	client := &http.Client{Timeout: 5 * time.Second}
+	respW, err := client.Do(reqW)
+	if err != nil {
+		return fmt.Errorf("%s: send request: %w", op, err)
+	}
+	defer respW.Body.Close()
+
+	if respW.StatusCode < http.StatusOK || respW.StatusCode >= http.StatusMultipleChoices {
+		return fmt.Errorf("%s: unexpected status code: %d", op, respW.StatusCode)
+	}
+
+	return nil
 }
 
 func New(log *slog.Logger, resender TokenResender, webhookURL, webhookSecret string) http.HandlerFunc {
@@ -53,7 +90,12 @@ func New(log *slog.Logger, resender TokenResender, webhookURL, webhookSecret str
 			return
 		}
 
-		token, _ := generateToken()
+		token, err := generateToken()
+		if err != nil {
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("failed to generate token"))
+			return
+		}
 		err = resender.SaveEmailVerificationToken(r.Context(), userID, token, time.Now().Add(24*time.Hour))
 		if err != nil {
 			log.Error("failed to save token", sl.Err(err))
@@ -62,21 +104,15 @@ func New(log *slog.Logger, resender TokenResender, webhookURL, webhookSecret str
 			return
 		}
 
-		go func(email, token string) {
-			payload := map[string]string{
-				"type":  "verification",
-				"email": email,
-				"token": token,
-			}
-			body, _ := json.Marshal(payload)
+		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+		defer cancel()
 
-			reqW, _ := http.NewRequest(http.MethodPost, webhookURL, bytes.NewBuffer(body))
-			reqW.Header.Set("Content-Type", "application/json")
-			reqW.Header.Set("X-Webhook-Secret", webhookSecret)
-
-			client := &http.Client{Timeout: 5 * time.Second}
-			client.Do(reqW)
-		}(user.Email, token)
+		if err := sendVerificationWebhook(ctx, webhookURL, webhookSecret, user.Email, token); err != nil {
+			log.Error("failed to send verification webhook", sl.Err(err))
+			render.Status(r, http.StatusBadGateway)
+			render.JSON(w, r, resp.Error("failed to send verification email"))
+			return
+		}
 
 		render.JSON(w, r, resp.OK())
 	}

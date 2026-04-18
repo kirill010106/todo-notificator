@@ -10,6 +10,8 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
+// TODO: stop way to farm points by restarting pomodoro timers
+
 // StartPomodoroSession creates a new active Pomodoro session.
 // If the user already has an active session, storage.ErrSessionActive is returned.
 func (s *Storage) StartPomodoroSession(ctx context.Context, userID int64, taskID *int64) (*domain.PomodoroSession, error) {

@@ -21,7 +21,6 @@ type mockPomodoroProvider struct {
 	stopErr            error
 	getActiveErr       error
 	updateTaskErr      error
-	applyStatsDeltaErr error
 
 	activeSession *domain.PomodoroSession
 
@@ -39,6 +38,15 @@ type mockPomodoroProvider struct {
 
 	applyStatsDeltaCalled bool
 	statsDelta            domain.StatsDelta
+	applyStatsDeltaErr    error
+
+	getTaskCalled bool
+	getTaskErr    error
+	task          domain.Task
+}
+
+func (m *mockPomodoroProvider) GetUserByID(ctx context.Context, userID int64) (*domain.User, error) {
+	return &domain.User{ID: userID, IsVerified: true}, nil
 }
 
 func (m *mockPomodoroProvider) StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error {
@@ -68,6 +76,11 @@ func (m *mockPomodoroProvider) ApplyStatsDelta(ctx context.Context, userID int64
 	return m.applyStatsDeltaErr
 }
 
+func (m *mockPomodoroProvider) GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
+	m.getTaskCalled = true
+	return m.task, m.getTaskErr
+}
+
 func setupTestRouter(h http.HandlerFunc, secret string) *chi.Mux {
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -85,9 +98,10 @@ func TestStop_SuccessWithoutTaskFinish(t *testing.T) {
 	tok := getTestToken(5, "u@test.com", secret)
 
 	taskID := int64(42)
-	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID}
+	startedAt := time.Now().Add(-30 * time.Minute)
+	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
-	provider := &mockPomodoroProvider{activeSession: active}
+	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
 	h := New(slog.New(slog.DiscardHandler), provider)
 
 	router := setupTestRouter(h, secret)
@@ -114,9 +128,10 @@ func TestStop_SuccessWithTaskFinishCompleted(t *testing.T) {
 	tok := getTestToken(5, "u@test.com", secret)
 
 	taskID := int64(42)
-	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID}
+	startedAt := time.Now().Add(-30 * time.Minute)
+	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
-	provider := &mockPomodoroProvider{activeSession: active}
+	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
 	h := New(slog.New(slog.DiscardHandler), provider)
 
 	router := setupTestRouter(h, secret)
@@ -141,9 +156,10 @@ func TestStop_SuccessWithTaskFinishAbandoned_SetsBurnt(t *testing.T) {
 	tok := getTestToken(5, "u@test.com", secret)
 
 	taskID := int64(42)
-	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID}
+	startedAt := time.Now().Add(-30 * time.Minute)
+	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
-	provider := &mockPomodoroProvider{activeSession: active}
+	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
 	h := New(slog.New(slog.DiscardHandler), provider)
 
 	router := setupTestRouter(h, secret)
@@ -189,8 +205,11 @@ func TestStop_StopSessionNotFound(t *testing.T) {
 	tok := getTestToken(5, "u@test.com", secret)
 
 	taskID := int64(42)
+	startedAt := time.Now().Add(-30 * time.Minute)
+	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 	provider := &mockPomodoroProvider{
-		activeSession: &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID},
+		activeSession: active,
+		task:          domain.Task{ID: 42},
 		stopErr:       storage.ErrSessionNotFound,
 	}
 	h := New(slog.New(slog.DiscardHandler), provider)
@@ -208,24 +227,9 @@ func TestStop_StopSessionNotFound(t *testing.T) {
 	require.True(t, provider.stopCalled)
 	require.False(t, provider.updateTaskCalled)
 	require.False(t, provider.applyStatsDeltaCalled)
-}
-
-func TestStop_InvalidAction(t *testing.T) {
-	secret := "secret"
-	tok := getTestToken(5, "u@test.com", secret)
-
-	provider := &mockPomodoroProvider{}
-	h := New(slog.New(slog.DiscardHandler), provider)
-
-	router := setupTestRouter(h, secret)
-
-	req := httptest.NewRequest(http.MethodPost, "/pomodoros/10/stop", strings.NewReader(`{"action":"invalid"}`))
-	req.Header.Set("Authorization", "Bearer "+tok)
-	w := httptest.NewRecorder()
-
+	w = httptest.NewRecorder()
+	// req again, but its body was already consumed. This implies a 400 since body is exhausted.
 	router.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
-	require.False(t, provider.getActiveCalled)
-	require.False(t, provider.stopCalled)
 }

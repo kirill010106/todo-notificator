@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
@@ -27,8 +28,10 @@ type PomodoroProvider interface {
 	storage.Provider
 	StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
+	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
 	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
+	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 }
 
 var validate = validator.New()
@@ -80,6 +83,22 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			slog.Bool("finish_task", req.FinishTask),
 		)
 
+		user, err := provider.GetUserByID(r.Context(), userID)
+		if err != nil {
+			if errors.Is(err, storage.ErrUserNotFound) {
+				log.Warn("user not found")
+				render.Status(r, http.StatusUnauthorized)
+				render.JSON(w, r, resp.Error("unauthorized"))
+				return
+			}
+			log.Error("failed to get user", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("internal error"))
+			return
+		}
+
+		log = log.With(slog.Bool("is_verified", user.IsVerified))
+
 		session, err := provider.GetActivePomodoroSession(r.Context(), userID)
 		if err != nil {
 			if errors.Is(err, storage.ErrSessionNotFound) {
@@ -108,9 +127,38 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			return
 		}
 
+		statsDelta := domain.StatsDelta{}
+
+		if req.Action == domain.PomodoroStatusCompleted {
+			statsDelta.PointsDelta = domain.PomodoroRewardPoints
+			statsDelta.PomodorosDelta = 1
+
+			if session.StartedAt != nil && time.Since(*session.StartedAt) < 24*time.Minute {
+				log.Info("session duration is too short for rewards", slog.Duration("elapsed", time.Since(*session.StartedAt)))
+				statsDelta.PointsDelta = 0
+				statsDelta.PomodorosDelta = 0
+			}
+		} else {
+			statsDelta.PointsDelta = domain.PomodoroPenaltyPoints
+			if req.FinishTask {
+				statsDelta.BurntTasksDelta = 1
+				statsDelta.ResetStreak = true
+			}
+		}
+
 		if session.TaskID != nil && *session.TaskID > 0 {
 			updatePayload := domain.TaskUpdate{}
 			shouldUpdate := false
+			
+			task, err := provider.GetTask(r.Context(), userID, *session.TaskID)
+			if err == nil {
+				if req.Action == domain.PomodoroStatusCompleted && task.RewardClaimed {
+					log.Info("task reward already claimed, resetting points delta for this session")
+					statsDelta.PointsDelta = 0
+				}
+			} else {
+				log.Error("failed to get task to check rewards", sl.Err(err))
+			}
 
 			// Increment pomodoros taken if the session successfully completed
 			if req.Action == domain.PomodoroStatusCompleted {
@@ -141,18 +189,11 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 
 		log.Info("pomodoro session stopped successfully")
 
-		statsDelta := domain.StatsDelta{}
-
-		if req.Action == domain.PomodoroStatusCompleted {
-			statsDelta.PointsDelta = domain.PomodoroRewardPoints
-			statsDelta.PomodorosDelta = 1
-		} else {
-			statsDelta.PointsDelta = domain.PomodoroPenaltyPoints
-
-			if req.FinishTask {
-				statsDelta.BurntTasksDelta = 1
-				statsDelta.ResetStreak = true
-			}
+		if statsDelta.PointsDelta == 0 && statsDelta.PomodorosDelta == 0 && statsDelta.BurntTasksDelta == 0 && !statsDelta.ResetStreak {
+			log.Info("no stats delta to apply")
+			render.Status(r, http.StatusOK)
+			render.JSON(w, r, resp.OK())
+			return
 		}
 
 		err = provider.ApplyStatsDelta(r.Context(), userID, statsDelta)
