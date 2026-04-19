@@ -49,7 +49,15 @@ jobs:
           push: true
           tags: ${{ env.IMAGE_BASE }}-email:latest
 
-      # РЎР±РѕСЂРєР° Рё РѕС‚РїСЂР°РІРєР° Frontend
+      - name: Build and push Activity Logger
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./activity-logger/Dockerfile
+          push: true
+          tags: ${{ env.IMAGE_BASE }}-activity-logger:latest
+
+      # Сборка и отправка Frontend
       - name: Build and push Frontend
         uses: docker/build-push-action@v5
         with:

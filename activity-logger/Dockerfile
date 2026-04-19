@@ -1,4 +1,4 @@
-# backend/Dockerfile
+# activity-logger/Dockerfile
 FROM golang:1.25-alpine AS builder
 
 RUN apk add --no-cache git ca-certificates tzdata
@@ -12,12 +12,12 @@ COPY backend/go.mod backend/go.sum* ./backend/
 COPY notifiers/go.mod notifiers/go.sum* ./notifiers/
 COPY notifiers/email/go.mod notifiers/email/go.sum* ./notifiers/email/
 
-RUN cd backend && go mod download
+RUN cd activity-logger && go mod download
 
 COPY . .
 
-WORKDIR /app/backend
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/backend ./cmd/main.go
+WORKDIR /app/activity-logger
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/activity-logger ./cmd/main.go
 
 FROM alpine:3.19
 
@@ -26,8 +26,8 @@ COPY --from=builder /usr/share/zoneinfo/ /usr/share/zoneinfo/
 
 WORKDIR /app
 
-COPY --from=builder /go/bin/backend /usr/local/bin/backend
+COPY --from=builder /go/bin/activity-logger /usr/local/bin/activity-logger
 
-EXPOSE 8082
+EXPOSE 50051
 
-CMD ["backend"]
+CMD ["activity-logger"]
