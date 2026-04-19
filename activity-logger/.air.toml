@@ -1,0 +1,15 @@
+root = "."
+tmp_dir = "../../tmp/activity-logger"
+
+[build]
+  cmd        = "go build -o ../../tmp/activity-logger/app.exe ./cmd"
+  bin        = "../../tmp/activity-logger/app.exe"
+  include_ext = ["go", "yaml"]
+  exclude_dir = ["tmp", "vendor"]
+  delay      = 500
+
+[log]
+  time = true
+
+[color]
+  app = "blue"

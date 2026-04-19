@@ -7,6 +7,10 @@ $localDbUser = "postgres"
 $localDbPassword = "postgres"
 $localDbURL = "postgres://{0}:{1}@127.0.0.1:{2}/{3}?sslmode=disable" -f $localDbUser, $localDbPassword, $localDbPort, $localDbName
 
+$localMongoContainer = "todo-mongodb"
+$localMongoPort = 27017
+$localMongoURL = "mongodb://127.0.0.1:{0}" -f $localMongoPort
+
 function Ensure-LocalPostgres {
     param(
         [string]$Container,
@@ -64,11 +68,60 @@ function Ensure-LocalPostgres {
     throw "local postgres container '$Container' did not become ready in time"
 }
 
+function Ensure-LocalMongo {
+    param(
+        [string]$Container,
+        [int]$Port
+    )
+
+    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+        throw "docker is not available in PATH"
+    }
+
+    $containerId = docker ps -aq --filter "name=^/$Container$"
+    if ($LASTEXITCODE -ne 0) {
+        throw "failed to query docker containers"
+    }
+
+    if (-not $containerId) {
+        Write-Host "Creating local Mongo container '$Container' on port $Port..." -ForegroundColor Yellow
+        docker run --name $Container -p "${Port}:27017" -d mongo:7 | Out-Null
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to create local mongo container. Port $Port may be in use"
+        }
+    } else {
+        $isRunning = docker inspect -f "{{.State.Running}}" $Container 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "failed to inspect docker container '$Container'"
+        }
+        if ($isRunning -ne "true") {
+            Write-Host "Starting local Mongo container '$Container'..." -ForegroundColor Yellow
+            docker start $Container | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                throw "failed to start local mongo container '$Container'"
+            }
+        }
+    }
+    
+    # Simple wait
+    for ($attempt = 1; $attempt -le 20; $attempt++) {
+        docker exec $Container mongosh --eval "db.adminCommand('ping')" --quiet | Out-Null
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "Local Mongo is ready on 127.0.0.1:$Port" -ForegroundColor Green
+            return
+        }
+        Start-Sleep -Milliseconds 500
+    }
+    throw "local mongo container '$Container' did not become ready in time"
+}
+
 Write-Host "Preparing local database..." -ForegroundColor Green
 Ensure-LocalPostgres -Container $localDbContainer -Port $localDbPort -Database $localDbName -User $localDbUser -Password $localDbPassword
+Ensure-LocalMongo -Container $localMongoContainer -Port $localMongoPort
 
 Write-Host "Starting all services on local DB..." -ForegroundColor Green
 Write-Host "DATABASE_URL=$localDbURL" -ForegroundColor DarkGray
+Write-Host "MONGO_URL=$localMongoURL" -ForegroundColor DarkGray
 
 $backendDir = Join-Path $PSScriptRoot "backend"
 $emailDir = Join-Path $PSScriptRoot "notifiers\email"
@@ -89,8 +142,9 @@ air -c .air.toml
 "@
 
 $activityLoggerCommand = @"
+`$env:MONGO_URL = '$localMongoURL'
 Set-Location '$activityLoggerDir'
-go run cmd/main.go
+air -c .air.toml
 "@
 
 $backend = Start-Process powershell `

@@ -27,6 +27,7 @@ type Request struct {
 type PomodoroProvider interface {
 	storage.Provider
 	StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error
+	DeletePomodoroSession(ctx context.Context, userID int64, sessionID int64) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
@@ -114,6 +115,26 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 			log.Error("failed to verify active session", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("internal error"))
+			return
+		}
+
+		if req.Action == domain.PomodoroStatusAbandoned && (session.TaskID == nil || *session.TaskID <= 0) {
+			err = provider.DeletePomodoroSession(r.Context(), userID, sessionID)
+			if err != nil {
+				log.Error("failed to delete abandoned free session", sl.Err(err))
+				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, resp.Error("failed to delete free session"))
+				return
+			}
+			
+			log.Info("free pomodoro session abandoned without penalty")
+			
+			if eventLogger != nil {
+				eventLogger.LogEvent(userID, "POMODORO_ABANDONED_FREE", sessionID, map[string]any{})
+			}
+
+			render.Status(r, http.StatusOK)
+			render.JSON(w, r, resp.OK())
 			return
 		}
 

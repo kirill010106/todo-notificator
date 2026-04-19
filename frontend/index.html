@@ -701,14 +701,14 @@
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div class="flex flex-wrap gap-2">
             <button
-              @click="filter = 'all'"
+              @click="setFilter('all')"
               :class="filter === 'all' ? 'bg-blue-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             >
               Все <span class="ml-1 opacity-70" x-text="tasks.length"></span>
             </button>
             <button
-              @click="filter = 'pending'"
+              @click="setFilter('pending')"
               :class="filter === 'pending' ? 'bg-yellow-500 text-white' : 'bg-white text-gray-600 border border-gray-300'"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             >
@@ -719,7 +719,7 @@
               ></span>
             </button>
             <button
-              @click="filter = 'done'"
+              @click="setFilter('done')"
               :class="filter === 'done' ? 'bg-green-500 text-white' : 'bg-white text-gray-600 border border-gray-300'"
               class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
             >
@@ -729,19 +729,26 @@
                 x-text="tasks.filter(t => t.status === 'done').length"
               ></span>
             </button>
+            <button
+              @click="setFilter('logs')"
+              :class="filter === 'logs' ? 'bg-purple-600 text-white' : 'bg-white text-gray-600 border border-gray-300'"
+              class="px-3 py-1.5 rounded-lg text-sm font-medium transition-colors"
+            >
+              Активность
+            </button>
           </div>
           <button
-            @click="loadTasks()"
+            @click="filter === 'logs' ? loadLogs(true) : loadTasks()"
             class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
           >
-            <span :class="loadingTasks ? 'animate-spin' : ''">↻</span>
+            <span :class="(filter === 'logs' ? loadingLogs : loadingTasks) ? 'animate-spin' : ''">↻</span>
             Обновить
           </button>
         </div>
 
         <!-- Список задач -->
         <div
-          x-show="loadingTasks && tasks.length === 0"
+          x-show="loadingTasks && tasks.length === 0 && filter !== 'logs'"
           class="text-center py-12 text-gray-400"
         >
           <div class="text-3xl mb-2 animate-pulse">⏳</div>
@@ -749,14 +756,32 @@
         </div>
 
         <div
-          x-show="!loadingTasks && filteredTasks.length === 0"
+          x-show="!loadingTasks && filteredTasks.length === 0 && filter !== 'logs'"
           class="text-center py-12 text-gray-400"
         >
           <div class="text-3xl mb-2">📭</div>
           <p>Задач нет. Создайте первую!</p>
         </div>
 
-        <div class="space-y-3 relative">
+        <!-- Список логов -->
+        <div
+          x-show="loadingLogs && logs.length === 0 && filter === 'logs'"
+          class="text-center py-12 text-gray-400"
+        >
+          <div class="text-3xl mb-2 animate-pulse">⏳</div>
+          <p>Загрузка активности...</p>
+        </div>
+
+        <div
+          x-show="!loadingLogs && logs.length === 0 && filter === 'logs'"
+          class="text-center py-12 text-gray-400"
+        >
+          <div class="text-3xl mb-2">📭</div>
+          <p>Нет истории активности.</p>
+        </div>
+
+        <!-- Контейнер для задач -->
+        <div class="space-y-3 relative" x-show="filter !== 'logs'">
           <template x-for="task in filteredTasks" :key="task.id">
             <div
               x-transition:enter="transition-all ease-out duration-500"
@@ -960,9 +985,9 @@
           </template>
         </div>
 
-        <!-- Пагинация -->
+        <!-- Пагинация задач -->
         <div
-          x-show="pagination.total > pagination.limit"
+          x-show="filter !== 'logs' && pagination.total > pagination.limit"
           class="flex items-center justify-center gap-2 mt-6"
         >
           <button
@@ -989,6 +1014,44 @@
             Вперёд →
           </button>
         </div>
+
+        <!-- Контейнер для истории активности -->
+        <div class="space-y-4 relative" x-show="filter === 'logs'">
+          <div class="relative border-l-2 border-indigo-200 ml-4 pl-6 pb-2" x-init="$watch('logs', () => {})">
+            <template x-for="log in logs" :key="log.id">
+              <div class="mb-6 relative">
+                <div class="absolute -left-[35px] top-1 bg-white rounded-full border-2 border-indigo-400 p-1 flex items-center justify-center">
+                  <!-- Иконка зависит от типа action, упрощенный вариант: -->
+                  <div class="w-3 h-3 bg-indigo-500 rounded-full"></div>
+                </div>
+                <div class="bg-white p-4 rounded-xl border border-gray-100 shadow-sm hover:shadow-md transition">
+                  <div class="flex justify-between items-start mb-2">
+                    <span class="text-sm font-bold text-gray-700" x-text="formatAction(log.action)"></span>
+                    <span class="text-xs text-gray-400" x-text="new Date(log.timestamp).toLocaleString()"></span>
+                  </div>
+                  <!-- Детали (парсинг JSON-details) -->
+                  <template x-if="log.details && Object.keys(log.details).length > 0">
+                    <div class="text-xs text-gray-500 mt-2 bg-gray-50 p-2 rounded-lg whitespace-pre-wrap break-words border border-gray-100" x-text="JSON.stringify(log.details, null, 2)">
+                    </div>
+                  </template>
+                </div>
+              </div>
+            </template>
+          </div>
+
+          <!-- Кнопка "Загрузить ещё" логов -->
+          <div class="text-center mt-4">
+            <button
+              x-show="logs.length > 0 && !logsPagination.endReached"
+              @click="loadLogs(false)"
+              :disabled="loadingLogs"
+              class="px-4 py-2 border border-gray-300 rounded-xl text-sm font-medium hover:bg-gray-50 transition"
+            >
+              <span x-show="!loadingLogs">Загрузить ещё</span>
+              <span x-show="loadingLogs">Загрузка...</span>
+            </button>
+          </div>
+        </div>
       </main>
     </div>
 
@@ -1000,6 +1063,65 @@
 
       function app() {
         return {
+          // Состояние активности (логов)
+          logs: [],
+          loadingLogs: false,
+          logsPagination: { limit: 20, offset: 0, endReached: false },
+
+          // Функция форматирования операций
+          formatAction(action) {
+            const map = {
+              'TASK_CREATED': 'Создана задача',
+              'TASK_UPDATED': 'Задача обновлена',
+              'TASK_DELETED': 'Задача удалена',
+              'POMODORO_STARTED': 'Запущен Помодоро',
+              'POMODORO_COMPLETED': 'Завершен Помодоро',
+              'POMODORO_ABANDONED': 'Помодоро прерван',
+              'STATS_UPDATED': 'Статистика обновлена',
+            };
+            return map[action] || action;
+          },
+
+          // Загрузка логов
+          async loadLogs(reset = false) {
+            if (reset) {
+              this.logs = [];
+              this.logsPagination.offset = 0;
+              this.logsPagination.endReached = false;
+            }
+            if (this.logsPagination.endReached) return;
+            this.loadingLogs = true;
+
+            try {
+              const response = await this.apiRequest(
+                `/me/logs?limit=${this.logsPagination.limit}&offset=${this.logsPagination.offset}`,
+                { method: "GET" }
+              );
+              if (response && response.ok) {
+                const data = await response.json();
+                const fetched = data.logs || [];
+                if (fetched.length < this.logsPagination.limit) {
+                  this.logsPagination.endReached = true;
+                }
+                this.logs = reset ? fetched : [...this.logs, ...fetched];
+                this.logsPagination.offset += fetched.length;
+              } else {
+                this.showToast('Ошибка загрузки логов', 'error');
+              }
+            } catch (e) {
+              this.showToast('Ошибка сети при загрузке логов', 'error');
+            } finally {
+              this.loadingLogs = false;
+            }
+          },
+
+          setFilter(newFilter) {
+            this.filter = newFilter;
+            if (newFilter === 'logs') {
+              this.loadLogs(true);
+            }
+          },
+
           // Состояние аутентификации
           isAuthenticated: false,
           isVerified: false,
@@ -1119,19 +1241,19 @@
             },
 
             returnToWork() {
-               this.pomodoro.mode = 'focus';
-               this.startPomodoroTimer(this.pomodoro.activeSession ? this.pomodoro.activeSession.duration_minutes * 60 : 0);
-            },
+             if (!this.pomodoro.activeSession) return;
+             this.pomodoro.mode = 'focus';
+             this.startPomodoroTimer(this.pomodoro.activeSession.duration_minutes * 60);
+          },
 
-            startPomodoroTimer(seconds) {
-              this.clearPomodoroTimer();
-              if (seconds === undefined) return;
-              this.pomodoro.timeLeft = seconds;
-              this.pomodoro.timerInterval = setInterval(() => {
-                if (this.pomodoro.timeLeft > 0) {
-                  this.pomodoro.timeLeft--;
-                } else {
-                  this.clearPomodoroTimer();
+          startPomodoroTimer(seconds) {
+            this.clearPomodoroTimer();
+            if (seconds === undefined) return;
+            this.pomodoro.timeLeft = seconds;
+            this.pomodoro.timerInterval = setInterval(() => {
+              if (this.pomodoro.timeLeft > 0) {
+                this.pomodoro.timeLeft--;
+              } else if (this.pomodoro.timeLeft === 0) {
                   this.handlePomodoroTimerEnd();
                 }
               }, 1000);
@@ -1322,6 +1444,7 @@
           showToast(message, type = "success") {
             const id = Date.now();
             this.toasts.push({ id, message, type, visible: true });
+            if (this.toasts.length > 5) this.toasts.shift();
             setTimeout(() => {
               const toast = this.toasts.find((t) => t.id === id);
               if (toast) toast.visible = false;
@@ -1528,6 +1651,7 @@
           },
 
           handleLogout() {
+            this.clearPomodoroTimer();
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
             localStorage.removeItem("user_email");
@@ -1570,7 +1694,9 @@
 
           parseJwt(token) {
               try {
-                return JSON.parse(atob((token||'').split('.')[1]));
+                const parts = (token || '').split('.');
+                if (parts.length !== 3) return null;
+                return JSON.parse(atob(parts[1]));
               } catch (e) {
                 return null;
               }
@@ -1961,14 +2087,6 @@
 
               if (fields.status === "done" && !oldClaimed) {
                 await this.loadStats();
-                this.spawnParticles('success', '+10 🏆');
-              }
-              
-              // Загружаем статистику, чтобы очки и прочие показатели обновились,
-              // если статус был изменен на done
-              if (fields.status === 'done') {
-                await this.loadStats();
-                // Также можно показать анимацию прибавки очков при желании
                 this.spawnParticles('success', '+10 🏆');
               }
             } catch (err) {

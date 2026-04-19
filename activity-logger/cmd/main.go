@@ -4,8 +4,8 @@ import (
 	"context"
 	"log"
 	"net"
+    "os"
 	"time"
-
 	pb "github.com/kirill010106/todo-notificator/root/pkg/activity_logger/v1"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
@@ -114,8 +114,11 @@ func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLo
 }
 
 func main() {
-
-	client, err := mongo.Connect(options.Client().ApplyURI(mongoURI))
+	uri := mongoURI
+	if v := os.Getenv("MONGO_URL"); v != "" {
+		uri = v
+	}
+	client, err := mongo.Connect(options.Client().ApplyURI(uri))
 	if err != nil {
 		log.Fatalf("failed to connect to MongoDB: %v\n", err)
 	}
@@ -145,3 +148,4 @@ func main() {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
+

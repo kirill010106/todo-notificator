@@ -38,6 +38,8 @@ type mockPomodoroProvider struct {
 
 	applyStatsDeltaCalled bool
 	statsDelta            domain.StatsDelta
+	deleteCalled bool
+	deletedID int64
 	applyStatsDeltaErr    error
 
 	getTaskCalled bool
@@ -233,3 +235,11 @@ func TestStop_StopSessionNotFound(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+
+func (m *mockPomodoroProvider) DeletePomodoroSession(ctx context.Context, userID int64, sessionID int64) error {
+	m.deleteCalled = true
+	m.deletedID = sessionID
+	return nil
+}
+
