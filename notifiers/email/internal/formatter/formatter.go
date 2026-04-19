@@ -51,7 +51,6 @@ func New(appURL string) (*Formatter, error) {
 func (f *Formatter) Format(task domain.Task, interval time.Duration) (string, error) {
 	data := deadlineTemplateData{
 		Task:              task,
-		UrgencyText:       formatUrgencyText(interval),
 		BadgeClass:        formatBadgeClass(interval),
 		DeadlineFormatted: formatDeadline(task.Deadline),
 	}
@@ -81,22 +80,23 @@ func (f *Formatter) Verification(token string) (string, error) {
 }
 
 func (f *Formatter) Subject(task domain.Task, interval time.Duration) string {
-	return fmt.Sprintf("⏰ %s — %s", formatUrgencyText(interval), task.Title)
+	return fmt.Sprintf("⏰ Напоминание о задаче — %s", task.Title)
 }
 
-func formatUrgencyText(interval time.Duration) string {
-	switch {
-	case interval >= 24*time.Hour:
-		days := int(interval.Hours() / 24)
-		return fmt.Sprintf("Deadline in %d %s", days, pluralDay(days))
-	case interval >= time.Hour:
-		hours := int(interval.Hours())
-		return fmt.Sprintf("Deadline in %d %s", hours, pluralHour(hours))
-	default:
-		minutes := int(interval.Minutes())
-		return fmt.Sprintf("Deadline in %d %s!", minutes, pluralMinute(minutes))
-	}
-}
+// func formatSubjectText() string {
+// 	return fmt.Sprintf("Напоминание о задаче!")
+// 	switch {
+// 	case interval >= 24*time.Hour:
+// 		days := int(interval.Hours() / 24)
+// 		return fmt.Sprintf("Deadline in %d %s", days, pluralDay(days))
+// 	case interval >= time.Hour:
+// 		hours := int(interval.Hours())
+// 		return fmt.Sprintf("Deadline in %d %s", hours, pluralHour(hours))
+// 	default:
+// 		minutes := int(interval.Minutes())
+// 		return fmt.Sprintf("Deadline in %d %s!", minutes, pluralMinute(minutes))
+// 	}
+// }
 
 func formatBadgeClass(interval time.Duration) string {
 	switch {
@@ -111,7 +111,7 @@ func formatBadgeClass(interval time.Duration) string {
 
 func formatDeadline(deadline *time.Time) string {
 	if deadline == nil {
-		return "not specified"
+		return "не задан"
 	}
 	return deadline.Format("02.01.2006 at 15:04")
 }
