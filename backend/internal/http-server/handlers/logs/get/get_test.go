@@ -69,7 +69,7 @@ func TestGetLogsHandler(t *testing.T) {
 				m.On("GetLogs", mock.Anything, int64(1), int32(50), int32(0)).Return(
 					nil, errors.New("db string error"))
 			},
-			expectedStatus: http.StatusOK,
+			expectedStatus: http.StatusInternalServerError,
 		},
 	}
 

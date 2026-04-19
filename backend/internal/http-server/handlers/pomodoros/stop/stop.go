@@ -41,6 +41,8 @@ type EventLogger interface {
 
 var validate = validator.New()
 
+// TODO: проверить начисление очков за задачи по таймеру
+
 func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.stop.New"
@@ -126,9 +128,9 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 				render.JSON(w, r, resp.Error("failed to delete free session"))
 				return
 			}
-			
+
 			log.Info("free pomodoro session abandoned without penalty")
-			
+
 			if eventLogger != nil {
 				eventLogger.LogEvent(userID, "POMODORO_ABANDONED_FREE", sessionID, map[string]any{})
 			}

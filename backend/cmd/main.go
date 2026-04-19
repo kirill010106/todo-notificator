@@ -34,6 +34,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/get"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/save"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
@@ -43,6 +44,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/go-chi/httprate"
+	"github.com/go-chi/render"
 	"github.com/joho/godotenv"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	slogpretty "github.com/kirill010106/todo-notificator/internal/lib/handlers"
@@ -114,7 +116,32 @@ func main() {
 	router.Use(middleware.URLFormat)
 	router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
+	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
+		helpers.SendError(w, http.StatusNotFound, "endpoint is not exist", "NOT_FOUND")
+	})
+
+	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
+		helpers.SendError(w, http.StatusMethodNotAllowed, "method is not allowed", "METHOD_NOT_ALLOWED")
+	})
+
+	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		render.Status(r, http.StatusOK)
+		render.JSON(w, r, map[string]string{
+			"status":  "active",
+			"project": "todo-notificator",
+			"info":    "Use /api/v1 for requests",
+		})
+	})
+
 	router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+			render.Status(r, http.StatusOK)
+			render.JSON(w, r, map[string]string{
+				"status":  "active",
+				"project": "todo-notificator",
+				"info":    "Use /api/v1/health for checking availibility of the service",
+			})
+		})
 
 		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
 		r.Post("/login", login.New(log, storage, cfg, loggerClient))
