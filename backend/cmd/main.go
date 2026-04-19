@@ -24,6 +24,7 @@ import (
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
+	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
 	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
 	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
@@ -135,6 +136,7 @@ func main() {
 			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage, loggerClient))
 			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage, loggerClient))
 
+			r.Get("/me/logs", logsget.New(log, loggerClient))
 			r.Get("/me/stats", statsget.New(log, storage))
 			r.Patch("/me/stats", statsupdate.New(log, storage))
 

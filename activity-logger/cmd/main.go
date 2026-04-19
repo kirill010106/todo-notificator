@@ -24,6 +24,15 @@ type server struct {
 	collection *mongo.Collection
 }
 
+type activityDoc struct {
+	ID          bson.ObjectID `bson:"_id,omitempty"`
+	UserID      int64         `bson:"user_id"`
+	Action      string        `bson:"action"`
+	EntityID    int64         `bson:"entity_id"`
+	DetailsJSON string        `bson:"details_json"`
+	CreatedAt   time.Time     `bson:"created_at"`
+}
+
 func (s *server) LogEvent(ctx context.Context, req *pb.LogRequest) (*pb.LogResponse, error) {
 	log.Printf("Received event: UserID=%d Action=%s EntityID=%d JSON=%s\n",
 		req.GetUserId(), req.GetAction(), req.GetEntityId(), req.GetDetailsJson())
@@ -54,6 +63,56 @@ func (s *server) LogEvent(ctx context.Context, req *pb.LogRequest) (*pb.LogRespo
 	}, nil
 }
 
+func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLogsResponse, error) {
+	log.Printf("Received GetLogs request: UserID=%d Limit=%d Offset=%d\n", req.GetUserId(), req.GetLimit(), req.GetOffset())
+
+	filter := bson.M{"user_id": req.GetUserId()}
+
+	findOptions := options.Find().SetSort(bson.D{{"created_at", -1}})
+
+	if req.GetLimit() > 0 {
+		findOptions.SetLimit(int64(req.GetLimit()))
+	} else {
+		findOptions.SetLimit(50)
+	}
+
+	if req.GetOffset() > 0 {
+		findOptions.SetSkip(int64(req.GetOffset()))
+	}
+
+	ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	cursor, err := s.collection.Find(ctxTimeout, filter, findOptions)
+	if err != nil {
+		log.Printf("failed to find logs in MongoDB: %v\n", err)
+		return nil, err
+	}
+	defer cursor.Close(ctxTimeout)
+
+	var results []*pb.ActivityLog
+	for cursor.Next(ctxTimeout) {
+		var doc activityDoc
+		if err := cursor.Decode(&doc); err != nil {
+			log.Printf("failed to decode mongodb doc: %v\n", err)
+			continue
+		}
+
+		results = append(results, &pb.ActivityLog{
+			Id:          doc.ID.Hex(),
+			UserId:      doc.UserID,
+			Action:      doc.Action,
+			EntityId:    doc.EntityID,
+			DetailsJson: doc.DetailsJSON,
+			Timestamp:   doc.CreatedAt.UnixMilli(),
+		})
+	}
+
+	return &pb.GetLogsResponse{
+		Logs: results,
+	}, nil
+}
+
 func main() {
 
 	client, err := mongo.Connect(options.Client().ApplyURI(mongoURI))
@@ -61,8 +120,8 @@ func main() {
 		log.Fatalf("failed to connect to MongoDB: %v\n", err)
 	}
 	if err := client.Ping(context.Background(), nil); err != nil {
-        log.Fatalf("failed to ping MongoDB: %v\n", err)
-    }
+		log.Fatalf("failed to ping MongoDB: %v\n", err)
+	}
 	defer func() {
 		if err := client.Disconnect(context.Background()); err != nil {
 			log.Printf("failed to disconnect from MongoDB: %v", err)

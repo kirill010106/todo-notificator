@@ -153,7 +153,7 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		if session.TaskID != nil && *session.TaskID > 0 {
 			updatePayload := domain.TaskUpdate{}
 			shouldUpdate := false
-			
+
 			task, err := provider.GetTask(r.Context(), userID, *session.TaskID)
 			if err == nil {
 				if req.Action == domain.PomodoroStatusCompleted && task.RewardClaimed {

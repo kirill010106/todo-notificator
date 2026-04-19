@@ -20,6 +20,7 @@ const _ = grpc.SupportPackageIsVersion9
 
 const (
 	ActivityLogger_LogEvent_FullMethodName = "/activity_logger.v1.ActivityLogger/LogEvent"
+	ActivityLogger_GetLogs_FullMethodName  = "/activity_logger.v1.ActivityLogger/GetLogs"
 )
 
 // ActivityLoggerClient is the client API for ActivityLogger service.
@@ -27,6 +28,7 @@ const (
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type ActivityLoggerClient interface {
 	LogEvent(ctx context.Context, in *LogRequest, opts ...grpc.CallOption) (*LogResponse, error)
+	GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*GetLogsResponse, error)
 }
 
 type activityLoggerClient struct {
@@ -47,11 +49,22 @@ func (c *activityLoggerClient) LogEvent(ctx context.Context, in *LogRequest, opt
 	return out, nil
 }
 
+func (c *activityLoggerClient) GetLogs(ctx context.Context, in *GetLogsRequest, opts ...grpc.CallOption) (*GetLogsResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(GetLogsResponse)
+	err := c.cc.Invoke(ctx, ActivityLogger_GetLogs_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // ActivityLoggerServer is the server API for ActivityLogger service.
 // All implementations must embed UnimplementedActivityLoggerServer
 // for forward compatibility.
 type ActivityLoggerServer interface {
 	LogEvent(context.Context, *LogRequest) (*LogResponse, error)
+	GetLogs(context.Context, *GetLogsRequest) (*GetLogsResponse, error)
 	mustEmbedUnimplementedActivityLoggerServer()
 }
 
@@ -64,6 +77,9 @@ type UnimplementedActivityLoggerServer struct{}
 
 func (UnimplementedActivityLoggerServer) LogEvent(context.Context, *LogRequest) (*LogResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method LogEvent not implemented")
+}
+func (UnimplementedActivityLoggerServer) GetLogs(context.Context, *GetLogsRequest) (*GetLogsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetLogs not implemented")
 }
 func (UnimplementedActivityLoggerServer) mustEmbedUnimplementedActivityLoggerServer() {}
 func (UnimplementedActivityLoggerServer) testEmbeddedByValue()                        {}
@@ -104,6 +120,24 @@ func _ActivityLogger_LogEvent_Handler(srv interface{}, ctx context.Context, dec 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ActivityLogger_GetLogs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetLogsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ActivityLoggerServer).GetLogs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ActivityLogger_GetLogs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ActivityLoggerServer).GetLogs(ctx, req.(*GetLogsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // ActivityLogger_ServiceDesc is the grpc.ServiceDesc for ActivityLogger service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -114,6 +148,10 @@ var ActivityLogger_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "LogEvent",
 			Handler:    _ActivityLogger_LogEvent_Handler,
+		},
+		{
+			MethodName: "GetLogs",
+			Handler:    _ActivityLogger_GetLogs_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},
