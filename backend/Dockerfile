@@ -17,7 +17,7 @@ RUN cd backend && go mod download
 COPY . .
 
 WORKDIR /app/backend
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/backend ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/backend ./cmd
 
 FROM alpine:3.19
 

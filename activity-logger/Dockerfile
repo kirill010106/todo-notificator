@@ -17,7 +17,7 @@ RUN cd activity-logger && go mod download
 COPY . .
 
 WORKDIR /app/activity-logger
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/activity-logger ./cmd/main.go
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/activity-logger ./cmd
 
 FROM alpine:3.19
 
