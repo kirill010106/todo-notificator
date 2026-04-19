@@ -50,6 +50,7 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 		logs, err := logsGetter.GetLogs(r.Context(), userID, limit, offset)
 		if err != nil {
 			log.Error("failed to get logs", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to get logs"))
 			return
 		}

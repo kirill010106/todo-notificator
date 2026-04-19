@@ -9,7 +9,7 @@ http_server:
   idle_timeout: 60s
 clients:
   activity_logger:
-    address: "localhost:50051"
+    address: "activity-logger:50051"
     timeout: "2s"
     retries_count: 3
 access_token_ttl: 15m

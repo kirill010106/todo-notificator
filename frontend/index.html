@@ -39,159 +39,281 @@
       </template>
     </div>
 
-    <!-- AUTH страница (Login / Register) -->
+    <!-- AUTH страница и Лендинг -->
     <div
       x-show="!isAuthenticated"
       x-cloak
-      class="min-h-screen flex items-center justify-center p-4"
+      class="min-h-screen bg-gray-50 flex flex-col"
     >
-      <div class="bg-white rounded-2xl shadow-xl w-full max-w-md p-8">
-        <!-- Логотип -->
-        <div class="text-center mb-8">
-          <div class="text-4xl mb-2">✅</div>
-          <h1 class="text-2xl font-bold text-gray-800">ToDo Notificator</h1>
-          <p class="text-gray-500 text-sm mt-1">Управляй задачами эффективно</p>
-        </div>
-
-        <!-- Табы -->
-        <div class="flex bg-gray-100 rounded-lg p-1 mb-6">
-          <button
-            @click="authTab = 'login'"
-            :class="authTab === 'login' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
-            class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
-          >
-            Войти
-          </button>
-          <button
-            @click="authTab = 'register'"
-            :class="authTab === 'register' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
-            class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
-          >
-            Регистрация
-          </button>
-        </div>
-
-        <!-- Форма Login -->
-        <form
-          x-show="authTab === 'login'"
-          @submit.prevent="login()"
-          class="space-y-4"
-        >
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Email</label
-            >
-            <input
-              type="email"
-              x-model="loginForm.email"
-              placeholder="you@example.com"
-              required
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
+      <!-- Навигация Лендинга -->
+      <nav class="bg-white shadow border-b border-gray-200">
+        <div class="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+          <div class="flex items-center gap-2">
+            <span class="text-xl">✅</span>
+            <span class="font-bold text-gray-800">ToDo Notificator</span>
           </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Пароль</label
-            >
-            <div class="relative">
-              <input
-                :type="showLoginPassword ? 'text' : 'password'"
-                x-model="loginForm.password"
-                placeholder="••••••••"
-                required
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
-              />
+          <div class="space-x-4 flex items-center">
+            <a href="#features" class="text-gray-600 hover:text-gray-900 text-sm font-medium hidden md:inline-block">Возможности</a>
+            <a href="#pricing" class="text-gray-600 hover:text-gray-900 text-sm font-medium hidden md:inline-block">Тарифы</a>
+            <button @click="document.getElementById('auth-form').scrollIntoView({behavior: 'smooth'})" class="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors">
+              Войти
+            </button>
+          </div>
+        </div>
+      </nav>
+
+      <!-- Главный экран (Hero) -->
+      <section class="max-w-6xl mx-auto px-4 py-16 flex flex-col md:flex-row items-center gap-8 text-center md:text-left">
+        <div class="flex-1">
+          <h1 class="text-4xl md:text-5xl font-extrabold text-gray-900 mb-4">Делая больше. Уставая меньше.</h1>
+          <p class="text-lg text-gray-600 mb-8 max-w-2xl mx-auto md:mx-0">Мощный таск-менеджер со встроенным таймером Pomodoro, геймификацией и статистикой. Наведите порядок в своих делах и сфокусируйтесь на главном.</p>
+          <button @click="document.getElementById('auth-form').scrollIntoView({behavior: 'smooth'})" class="bg-green-500 hover:bg-green-600 text-white px-8 py-3 rounded-lg text-lg font-bold transition-colors shadow-lg shadow-green-200 inline-block">
+            Начать бесплатно
+          </button>
+        </div>
+      </section>
+
+      <!-- Возможности -->
+      <section id="features" class="bg-white py-16 border-y border-gray-200">
+        <div class="max-w-6xl mx-auto px-4">
+          <h2 class="text-3xl font-bold text-center text-gray-900 mb-12">Всё для вашей продуктивности</h2>
+          <div class="grid md:grid-cols-3 gap-8">
+            <div class="text-center p-6 bg-gray-50 rounded-2xl">
+              <div class="text-4xl mb-4">📋</div>
+              <h3 class="text-xl font-bold text-gray-800 mb-2">Умные списки задач</h3>
+              <p class="text-gray-600">Разбивайте задачи по статусам, выставляйте напоминания и категоризируйте всё, что нужно сделать.</p>
+            </div>
+            <div class="text-center p-6 bg-gray-50 rounded-2xl">
+              <div class="text-4xl mb-4">⏱️</div>
+              <h3 class="text-xl font-bold text-gray-800 mb-2">Pomodoro-таймер</h3>
+              <p class="text-gray-600">Встроенный таймер для работы интервалами по проверенной методике. Глубокий фокус без отвлечений.</p>
+            </div>
+            <div class="text-center p-6 bg-gray-50 rounded-2xl">
+              <div class="text-4xl mb-4">📈</div>
+              <h3 class="text-xl font-bold text-gray-800 mb-2">Статистика и Активность</h3>
+              <p class="text-gray-600">Анализируйте свою продуктивность, зарабатывайте очки за выполненные задачи и следите за прогрессом.</p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Тарифы -->
+      <section id="pricing" class="max-w-6xl mx-auto px-4 py-16">
+        <div class="text-center mb-12">
+          <h2 class="text-3xl font-bold text-gray-900 mb-4">Прозрачные тарифы</h2>
+          <p class="text-gray-600">Выберите план, который подходит именно вам.</p>
+        </div>
+        
+        <div class="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
+          <!-- Тариф Бесплатный -->
+          <div class="bg-white border border-gray-200 rounded-3xl p-8 shadow-sm flex flex-col">
+            <h3 class="text-2xl font-bold text-gray-800 mb-2">Стартовый</h3>
+            <div class="text-4xl font-extrabold text-gray-900 mb-6">0 ₽ <span class="text-lg font-medium text-gray-500">/ навсегда</span></div>
+            <ul class="space-y-4 mb-8 flex-1">
+              <li class="flex items-center text-gray-600"><span class="text-green-500 mr-2">✓</span> Управление задачами</li>
+              <li class="flex items-center text-gray-600"><span class="text-green-500 mr-2">✓</span> Базовый таймер Pomodoro</li>
+              <li class="flex items-center text-gray-600"><span class="text-green-500 mr-2">✓</span> Локальная статистика на 7 дней</li>
+            </ul>
+            <button @click="document.getElementById('auth-form').scrollIntoView({behavior: 'smooth'})" class="w-full py-3 px-4 border-2 border-gray-300 rounded-xl font-bold text-gray-700 hover:bg-gray-50 transition-colors">
+              Вход и Регистрация
+            </button>
+          </div>
+          
+          <!-- Тариф Премиум -->
+          <div class="bg-blue-600 rounded-3xl p-8 shadow-xl shadow-blue-200 text-white flex flex-col relative transform md:-translate-y-4">
+            <div class="absolute top-0 right-8 transform -translate-y-1/2 bg-gradient-to-r from-orange-400 to-red-500 text-white text-xs font-bold px-3 py-1 rounded-full uppercase tracking-wide">
+              Хит продаж
+            </div>
+            <h3 class="text-2xl font-bold mb-2">Премиум</h3>
+            <div class="text-4xl font-extrabold mb-6">199 ₽ <span class="text-blue-200 text-lg font-medium">/ 1 месяц</span></div>
+            <ul class="space-y-4 mb-8 flex-1 text-blue-50">
+              <li class="flex items-center"><span class="text-white mr-2">✓</span> Всё из Стартового тарифа</li>
+              <li class="flex items-center"><span class="text-white mr-2">✓</span> Полная история активности и детали</li>
+              <li class="flex items-center"><span class="text-white mr-2">✓</span> Безлимитные категории и трекинг</li>
+              <li class="flex items-center"><span class="text-white mr-2">✓</span> Уведомления (скоро)</li>
+              <li class="flex items-center"><span class="text-white mr-2">✓</span> Приоритетная поддержка</li>
+            </ul>
+            <div class="text-sm text-blue-200 mb-4 text-center">
+              Доступ предоставляется автоматически сразу после оплаты.
+            </div>
+            <button @click="document.getElementById('auth-form').scrollIntoView({behavior: 'smooth'})" class="w-full py-3 px-4 bg-white text-blue-600 rounded-xl font-bold hover:bg-blue-50 transition-colors shadow-lg">
+              Купить Премиум
+            </button>
+          </div>
+        </div>
+      </section>
+
+      <!-- Блок авторизации (бывшая страница входа) -->
+      <section id="auth-form" class="py-16 bg-white border-y border-gray-200 flex-1 flex flex-col justify-center">
+        <div class="flex items-center justify-center px-4">
+          <div class="border border-gray-200 rounded-2xl shadow-lg w-full max-w-md p-8 bg-white">
+            <div class="text-center mb-8">
+              <div class="text-4xl mb-2">✅</div>
+              <h2 class="text-2xl font-bold text-gray-800">Вход в систему</h2>
+            </div>
+            
+            <div class="flex bg-gray-100 rounded-lg p-1 mb-6">
               <button
-                type="button"
-                @click="showLoginPassword = !showLoginPassword"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                @click="authTab = 'login'"
+                :class="authTab === 'login' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+                class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
               >
-                <span x-text="showLoginPassword ? '🙈' : '👁'"></span>
+                Войти
+              </button>
+              <button
+                @click="authTab = 'register'"
+                :class="authTab === 'register' ? 'bg-white shadow text-gray-800' : 'text-gray-500'"
+                class="flex-1 py-2 rounded-md text-sm font-medium transition-all"
+              >
+                Регистрация
               </button>
             </div>
-          </div>
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-2.5 rounded-lg transition-colors"
-          >
-            <span x-show="!loading">Войти</span>
-            <span x-show="loading">Загрузка...</span>
-          </button>
-        </form>
 
-        <!-- Форма Register -->
-        <form
-          x-show="authTab === 'register'"
-          @submit.prevent="register()"
-          class="space-y-4"
-        >
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Email</label
+            <!-- Форма Login -->
+            <form
+              x-show="authTab === 'login'"
+              @submit.prevent="login()"
+              class="space-y-4"
             >
-            <input
-              type="email"
-              x-model="registerForm.email"
-              placeholder="you@example.com"
-              required
-              class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-            />
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-1"
-              >Пароль</label
-            >
-            <div class="relative">
-              <input
-                :type="showRegisterPassword ? 'text' : 'password'"
-                x-model="registerForm.password"
-                placeholder="Минимум 8 символов"
-                required
-                minlength="8"
-                class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
-              />
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  x-model="loginForm.email"
+                  placeholder="you@example.com"
+                  required
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
+                <div class="relative">
+                  <input
+                    :type="showLoginPassword ? 'text' : 'password'"
+                    x-model="loginForm.password"
+                    placeholder="••••••••"
+                    required
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    @click="showLoginPassword = !showLoginPassword"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <span x-text="showLoginPassword ? '🙈' : '👁️'"></span>
+                  </button>
+                </div>
+              </div>
               <button
-                type="button"
-                @click="showRegisterPassword = !showRegisterPassword"
-                class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                type="submit"
+                :disabled="loading"
+                class="w-full bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium py-2.5 rounded-lg transition-colors"
               >
-                <span x-text="showRegisterPassword ? '🙈' : '👁'"></span>
+                <span x-show="!loading">Войти</span>
+                <span x-show="loading">Загрузка...</span>
               </button>
-            </div>
-            <!-- Индикатор силы пароля -->
-            <div
-              class="mt-2 flex gap-1"
-              x-show="registerForm.password.length > 0"
+            </form>
+
+            <!-- Форма Register -->
+            <form
+              x-show="authTab === 'register'"
+              @submit.prevent="register()"
+              class="space-y-4"
             >
-              <div
-                :class="passwordStrength >= 1 ? 'bg-red-400' : 'bg-gray-200'"
-                class="h-1 flex-1 rounded"
-              ></div>
-              <div
-                :class="passwordStrength >= 2 ? 'bg-yellow-400' : 'bg-gray-200'"
-                class="h-1 flex-1 rounded"
-              ></div>
-              <div
-                :class="passwordStrength >= 3 ? 'bg-green-400' : 'bg-gray-200'"
-                class="h-1 flex-1 rounded"
-              ></div>
-              <div
-                :class="passwordStrength >= 4 ? 'bg-green-600' : 'bg-gray-200'"
-                class="h-1 flex-1 rounded"
-              ></div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
+                <input
+                  type="email"
+                  x-model="registerForm.email"
+                  placeholder="you@example.com"
+                  required
+                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
+                <div class="relative">
+                  <input
+                    :type="showRegisterPassword ? 'text' : 'password'"
+                    x-model="registerForm.password"
+                    placeholder="Минимум 8 символов"
+                    required
+                    minlength="8"
+                    class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
+                  />
+                  <button
+                    type="button"
+                    @click="showRegisterPassword = !showRegisterPassword"
+                    class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                  >
+                    <span x-text="showRegisterPassword ? '🙈' : '👁️'"></span>
+                  </button>
+                </div>
+                <!-- Индикатор силы пароля -->
+                <div
+                  class="mt-2 flex gap-1"
+                  x-show="registerForm.password.length > 0"
+                >
+                  <div
+                    :class="passwordStrength >= 1 ? 'bg-red-400' : 'bg-gray-200'"
+                    class="h-1 flex-1 rounded"
+                  ></div>
+                  <div
+                    :class="passwordStrength >= 2 ? 'bg-yellow-400' : 'bg-gray-200'"
+                    class="h-1 flex-1 rounded"
+                  ></div>
+                  <div
+                    :class="passwordStrength >= 3 ? 'bg-green-400' : 'bg-gray-200'"
+                    class="h-1 flex-1 rounded"
+                  ></div>
+                  <div
+                    :class="passwordStrength >= 4 ? 'bg-green-600' : 'bg-gray-200'"
+                    class="h-1 flex-1 rounded"
+                  ></div>
+                </div>
+              </div>
+              <button
+                type="submit"
+                :disabled="loading"
+                class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2.5 rounded-lg transition-colors"
+              >
+                <span x-show="!loading">Зарегистрироваться</span>
+                <span x-show="loading">Загрузка...</span>
+              </button>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- Подвал (Футер) -->
+      <footer class="bg-gray-900 text-gray-400 py-10 text-sm">
+        <div class="max-w-6xl mx-auto px-4 grid md:grid-cols-2 gap-8">
+          <div>
+            <div class="text-white text-lg font-bold mb-4 flex items-center gap-2">
+              <span>✅</span> ToDo Notificator
+            </div>
+            <p class="mb-4 max-w-sm">Инструмент для эффективного управления задачами и повышения личной продуктивности.</p>
+            <div class="flex items-center gap-4 text-gray-500">
+              <a href="/offer.html" target="_blank" class="hover:text-white transition-colors">Публичная оферта</a>
+              <span>•</span>
+              <a href="/policy.html" target="_blank" class="hover:text-white transition-colors">Политика конфиденциальности</a>
             </div>
           </div>
-          <button
-            type="submit"
-            :disabled="loading"
-            class="w-full bg-green-600 hover:bg-green-700 disabled:bg-green-300 text-white font-medium py-2.5 rounded-lg transition-colors"
-          >
-            <span x-show="!loading">Зарегистрироваться</span>
-            <span x-show="loading">Загрузка...</span>
-          </button>
-        </form>
-      </div>
+          <div class="md:text-right">
+            <h4 class="text-white font-bold mb-4 uppercase tracking-wider text-xs">Реквизиты и Контакты</h4>
+            <ul class="space-y-2">
+              <li><strong>Самозанятый (НПД):</strong> ПЛАХОТНЫЙ КИРИЛЛ НИКОЛАЕВИЧ</li>
+              <li><strong>ИНДИВИДУАЛЬНЫЙ НОМЕР НАЛОГОПЛАТЕЛЬЩИКА (ИНН):</strong> 502756731220</li>
+              <li><strong>Email:</strong> <a href="mailto:konstruktor.png22@mail.ru" class="hover:text-white transition-colors">konstruktor.png22@mail.ru</a></li>
+              <li><strong>Телефон:</strong> +7 (996) 807-62-04</li>
+            </ul>
+          </div>
+        </div>
+        <div class="max-w-6xl mx-auto px-4 mt-8 pt-8 border-t border-gray-800 text-center md:text-left flex flex-col md:flex-row justify-between items-center text-gray-500">
+          <p>© 2026 ToDo Notificator. Все права защищены.</p>
+          <p class="mt-2 md:mt-0">Сервис работает в бета-тесте</p>
+        </div>
+      </footer>
     </div>
 
     <!-- DASHBOARD (после авторизации) -->

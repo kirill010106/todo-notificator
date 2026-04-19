@@ -135,7 +135,7 @@ func (s *Storage) StopPomodoroSession(ctx context.Context, userID int64, session
 func (s *Storage) DeletePomodoroSession(ctx context.Context, userID int64, sessionID int64) error {
 	const op = "storage.postgres.DeletePomodoroSession"
 
-	query := "DELETE FROM pomodoros WHERE id = $1 AND user_id = $2 AND status = $3"
+	query := "DELETE FROM pomodoro_sessions WHERE id = $1 AND user_id = $2 AND status = $3"
 	res, err := s.DB.ExecContext(ctx, query, sessionID, userID, domain.PomodoroStatusActive)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
