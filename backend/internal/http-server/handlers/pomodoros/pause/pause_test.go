@@ -53,7 +53,7 @@ func TestPause_Success(t *testing.T) {
 	tok := getTestToken(5, "u@test.com", secret)
 
 	provider := &mockPomodoroProvider{}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -76,7 +76,7 @@ func TestPause_Exhausted(t *testing.T) {
 	provider := &mockPomodoroProvider{
 		addBreakErr: storage.ErrBreakExhausted,
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -96,7 +96,7 @@ func TestPause_NotFound(t *testing.T) {
 	provider := &mockPomodoroProvider{
 		addBreakErr: storage.ErrSessionNotFound,
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -116,7 +116,7 @@ func TestPause_InternalError(t *testing.T) {
 	provider := &mockPomodoroProvider{
 		addBreakErr: errors.New("db error"),
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 

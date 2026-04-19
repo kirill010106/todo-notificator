@@ -36,6 +36,10 @@ type TaskSaver interface {
 	SaveTask(ctx context.Context, t domain.Task) (int64, error)
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 func (r Request) ToDomain(userID int64) domain.Task {
 	task := domain.Task{
 		UserID:      userID,
@@ -55,7 +59,7 @@ type schedulerWebhookPayload struct {
 	Type string `json:"type"`
 }
 
-func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string) http.HandlerFunc {
+func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string, eventLogger EventLogger) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
@@ -140,6 +144,13 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			Response: resp.OK(),
 			ID:       id,
 		})
+
+		 if eventLogger != nil {
+            eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
+                "title":       req.Title,
+                "category_id": req.CategoryID,
+            })
+        }
 
 		if webhookURL != "" {
 			go notifyScheduler(l, webhookURL, webhookSecret, "task_created")

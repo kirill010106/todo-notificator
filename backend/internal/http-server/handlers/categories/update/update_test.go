@@ -38,7 +38,7 @@ func (m *mockCategoryUpdater) UpdateCategory(ctx context.Context, userID int64, 
 }
 
 func TestUpdate_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockCategoryUpdater{})
+	h := New(slog.New(slog.DiscardHandler), &mockCategoryUpdater{}, nil)
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/1", strings.NewReader(`{"name":"Urgent"}`))
 	w := httptest.NewRecorder()
@@ -55,7 +55,7 @@ func TestUpdate_InvalidCategoryID(t *testing.T) {
 	updater := &mockCategoryUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/abc", strings.NewReader(`{"name":"Urgent"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -74,7 +74,7 @@ func TestUpdate_EmptyBody(t *testing.T) {
 	updater := &mockCategoryUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/1", strings.NewReader(``))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -93,7 +93,7 @@ func TestUpdate_NoFields(t *testing.T) {
 	updater := &mockCategoryUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/1", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -112,7 +112,7 @@ func TestUpdate_Success(t *testing.T) {
 	updater := &mockCategoryUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/10", strings.NewReader(`{"name":"Urgent"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -134,7 +134,7 @@ func TestUpdate_NotFound(t *testing.T) {
 	updater := &mockCategoryUpdater{err: storage.ErrCategoryNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/1", strings.NewReader(`{"name":"Urgent"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -152,7 +152,7 @@ func TestUpdate_InternalError(t *testing.T) {
 	updater := &mockCategoryUpdater{err: errors.New("boom")}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater))
+	r.Patch("/categories/{category_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/categories/1", strings.NewReader(`{"name":"Urgent"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)

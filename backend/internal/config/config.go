@@ -16,6 +16,17 @@ type Config struct {
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-default:"168h"`
 	AppSecret       string        `yaml:"app_secret" env-required:"true" env:"APP_SECRET"`
 	Webhook         Webhook       `yaml:"webhook"`
+	Clients         Clients       `yaml:"clients"`
+}
+
+type Clients struct {
+	ActivityLogger ActivityLoggerClientConf `yaml:"activity_logger"`
+}
+
+type ActivityLoggerClientConf struct {
+	Address      string        `yaml:"address" env:"ACTIVITY_LOGGER_ADDR" env-default:"localhost:50051"`
+    Timeout      time.Duration `yaml:"timeout" env-default:"2s"`
+    RetriesCount int           `yaml:"retries_count" env-default:"3"`
 }
 
 type Webhook struct {

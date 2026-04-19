@@ -12,6 +12,7 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	todonotificator "github.com/kirill010106/todo-notificator"
+	"github.com/kirill010106/todo-notificator/clients/activitylogger"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/login"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
@@ -23,6 +24,7 @@ import (
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
+	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
 	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
 	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
@@ -76,6 +78,11 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
+	loggerClient, err := activitylogger.New(ctx, log, cfg.Clients.ActivityLogger.Address, cfg.Clients.ActivityLogger.Timeout)
+	if err != nil {
+		log.Error("failed to init activity logger client", sl.Err(err))
+	}
+
 	cleanup.StartTokenCleanup(ctx, log, storage, 24*time.Hour)
 
 	goose.SetBaseFS(todonotificator.MigrationsFS)
@@ -109,8 +116,8 @@ func main() {
 
 	router.Route("/api/v1", func(r chi.Router) {
 
-		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
-		r.Post("/login", login.New(log, storage, cfg))
+		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
+		r.Post("/login", login.New(log, storage, cfg, loggerClient))
 		r.Get("/health", health.New(log, storage.DB))
 		r.Post("/refresh", refresh.New(log, storage, cfg))
 		r.Get("/verify", verify.New(log, storage))
@@ -120,21 +127,22 @@ func main() {
 
 			r.Post("/logout", logout.New(log, storage))
 			r.Get("/tasks", get.New(log, storage))
-			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
-			r.Delete("/tasks/{task_id}", delete.New(log, storage))
-			r.Patch("/tasks/{task_id}", update.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
+			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
+			r.Delete("/tasks/{task_id}", delete.New(log, storage, loggerClient))
+			r.Patch("/tasks/{task_id}", update.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
 
-			r.Post("/categories", create.New(log, storage))
+			r.Post("/categories", create.New(log, storage, loggerClient))
 			r.Get("/categories", categoriesget.New(log, storage))
-			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage))
-			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage))
+			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage, loggerClient))
+			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage, loggerClient))
 
+			r.Get("/me/logs", logsget.New(log, loggerClient))
 			r.Get("/me/stats", statsget.New(log, storage))
 			r.Patch("/me/stats", statsupdate.New(log, storage))
 
-			r.Post("/pomodoros/start", pomodorostart.New(log, storage))
-			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage))
-			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage))
+			r.Post("/pomodoros/start", pomodorostart.New(log, storage, loggerClient))
+			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage, loggerClient))
+			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
 
 			r.Post("/verify/resend", resend.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
 

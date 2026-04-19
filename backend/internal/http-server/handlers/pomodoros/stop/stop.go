@@ -27,6 +27,7 @@ type Request struct {
 type PomodoroProvider interface {
 	storage.Provider
 	StopPomodoroSession(ctx context.Context, userID int64, sessionID int64, finalStatus string) error
+	DeletePomodoroSession(ctx context.Context, userID int64, sessionID int64) error
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, update domain.TaskUpdate) error
@@ -34,9 +35,13 @@ type PomodoroProvider interface {
 	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 var validate = validator.New()
 
-func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
+func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.stop.New"
 
@@ -113,6 +118,26 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 			return
 		}
 
+		if req.Action == domain.PomodoroStatusAbandoned && (session.TaskID == nil || *session.TaskID <= 0) {
+			err = provider.DeletePomodoroSession(r.Context(), userID, sessionID)
+			if err != nil {
+				log.Error("failed to delete abandoned free session", sl.Err(err))
+				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, resp.Error("failed to delete free session"))
+				return
+			}
+			
+			log.Info("free pomodoro session abandoned without penalty")
+			
+			if eventLogger != nil {
+				eventLogger.LogEvent(userID, "POMODORO_ABANDONED_FREE", sessionID, map[string]any{})
+			}
+
+			render.Status(r, http.StatusOK)
+			render.JSON(w, r, resp.OK())
+			return
+		}
+
 		err = provider.StopPomodoroSession(r.Context(), userID, sessionID, req.Action)
 		if err != nil {
 			if errors.Is(err, storage.ErrSessionNotFound) {
@@ -149,7 +174,7 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		if session.TaskID != nil && *session.TaskID > 0 {
 			updatePayload := domain.TaskUpdate{}
 			shouldUpdate := false
-			
+
 			task, err := provider.GetTask(r.Context(), userID, *session.TaskID)
 			if err == nil {
 				if req.Action == domain.PomodoroStatusCompleted && task.RewardClaimed {
@@ -188,6 +213,12 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		}
 
 		log.Info("pomodoro session stopped successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "POMODORO_STOPPED", sessionID, map[string]any{
+				"action": req.Action,
+			})
+		}
 
 		if statsDelta.PointsDelta == 0 && statsDelta.PomodorosDelta == 0 && statsDelta.BurntTasksDelta == 0 && !statsDelta.ResetStreak {
 			log.Info("no stats delta to apply")

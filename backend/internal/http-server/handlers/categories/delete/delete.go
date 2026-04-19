@@ -19,7 +19,11 @@ type CategoryDeleter interface {
 	DeleteCategory(ctx context.Context, userID int64, categoryID int64) error
 }
 
-func New(log *slog.Logger, categoryDeleter CategoryDeleter) http.HandlerFunc {
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
+func New(log *slog.Logger, categoryDeleter CategoryDeleter, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.categories.delete.New"
 
@@ -61,6 +65,10 @@ func New(log *slog.Logger, categoryDeleter CategoryDeleter) http.HandlerFunc {
 		}
 
 		log.Info("category deleted successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "CATEGORY_DELETED", categoryID, nil)
+		}
 
 		w.WriteHeader(http.StatusNoContent)
 	}

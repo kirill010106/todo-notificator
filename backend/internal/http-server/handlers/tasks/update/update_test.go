@@ -48,7 +48,7 @@ func (m *mockUpdater) ApplyStatsDelta(ctx context.Context, userID int64, delta d
 }
 
 func TestUpdate_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockUpdater{}, "", "")
+	h := New(slog.New(slog.DiscardHandler), &mockUpdater{}, "", "", nil)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"a"}`))
 	w := httptest.NewRecorder()
@@ -65,7 +65,7 @@ func TestUpdate_EmptyBodyFields(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -84,7 +84,7 @@ func TestUpdate_Success(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -121,7 +121,7 @@ func TestUpdate_Success_NotifiesScheduler(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, webhookSrv.URL, webhookSecret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, webhookSrv.URL, webhookSecret, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -146,7 +146,7 @@ func TestUpdate_NotFound(t *testing.T) {
 	updater := &mockUpdater{err: storage.ErrTaskNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -164,7 +164,7 @@ func TestUpdate_InternalError(t *testing.T) {
 	updater := &mockUpdater{err: errors.New("boom")}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -182,7 +182,7 @@ func TestUpdate_CategoryNotFound(t *testing.T) {
 	updater := &mockUpdater{err: storage.ErrCategoryNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":999}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -201,7 +201,7 @@ func TestUpdate_WithCategory(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", ""))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":5}`))
 	req.Header.Set("Authorization", "Bearer "+tok)

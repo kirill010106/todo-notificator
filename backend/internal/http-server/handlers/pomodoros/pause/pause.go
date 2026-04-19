@@ -21,7 +21,11 @@ type PomodoroProvider interface {
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 }
 
-func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
+func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.pause.New"
 
@@ -64,6 +68,10 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		}
 
 		log.Info("pomodoro break added successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "POMODORO_PAUSED", sessionID, nil)
+		}
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, resp.OK())

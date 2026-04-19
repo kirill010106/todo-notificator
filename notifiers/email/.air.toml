@@ -2,7 +2,7 @@ root = "."
 tmp_dir = "../../tmp/email"
 
 [build]
-  cmd        = "go build -o ../../tmp/email/app.exe ./cmd/main.go"
+  cmd        = "go build -o ../../tmp/email/app.exe ./cmd"
   bin        = "../../tmp/email/app.exe"
   include_ext = ["go", "yaml"]
   exclude_dir = ["tmp", "vendor"]

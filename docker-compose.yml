@@ -1,9 +1,33 @@
 version: '3.8'
 
 services:
+  # MONGO FOR PRODUCTION (or use external)
+  mongo:
+    image: mongo:7
+    restart: always
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - default
+    # ports:
+    #  - "27017:27017" # disable external access to prod mongo for safety
+
+  activity-logger:
+    image: ${IMAGE_BASE}-activity-logger:latest
+    restart: always
+    depends_on:
+      mongo:
+        condition: service_started
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+    networks:
+      - default
+
   backend:
     image: ${IMAGE_BASE}-backend:latest
     restart: always
+    depends_on:
+      - activity-logger
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CONFIG_PATH=/app/config/prod.yaml
@@ -70,3 +94,5 @@ networks:
   matrix-traefik-net:
     external: true
     name: traefik
+volumes:
+  mongo_data:

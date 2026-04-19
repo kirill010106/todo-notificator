@@ -37,9 +37,13 @@ type UserProvider interface {
 	SaveRefreshToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 var validate = validator.New()
 
-func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.HandlerFunc {
+func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.login.New"
 
@@ -127,6 +131,12 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config) http.H
 			slog.Int64("id", user.ID),
 			slog.String("email", user.Email),
 		)
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(user.ID, "USER_LOGGED_IN", user.ID, map[string]any{
+				"email": user.Email,
+			})
+		}
 
 		render.JSON(w, r, Response{
 			Response:     resp.OK(),
