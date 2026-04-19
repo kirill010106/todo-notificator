@@ -1,7 +1,11 @@
 go 1.25.0
 
 use (
+	.
+	./activity-logger
 	./backend
 	./notifiers
 	./notifiers/email
 )
+
+replace google.golang.org/genproto => google.golang.org/genproto v0.0.0-20260414002931-afd174a4e478

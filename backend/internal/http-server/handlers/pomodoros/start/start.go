@@ -34,7 +34,11 @@ type PomodoroProvider interface {
 	GetActivePomodoroSession(ctx context.Context, userID int64) (*domain.PomodoroSession, error)
 }
 
-func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
+func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.start.New"
 
@@ -80,6 +84,14 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		}
 
 		log.Info("pomodoro session started successfully", slog.Int64("session_id", session.ID))
+
+		if eventLogger != nil {
+			details := map[string]any{}
+			if req.TaskID != nil {
+				details["task_id"] = *req.TaskID
+			}
+			eventLogger.LogEvent(userID, "POMODORO_STARTED", session.ID, details)
+		}
 
 		render.Status(r, http.StatusCreated)
 		render.JSON(w, r, Response{

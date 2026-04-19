@@ -34,9 +34,13 @@ type PomodoroProvider interface {
 	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 var validate = validator.New()
 
-func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
+func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.pomodoros.stop.New"
 
@@ -188,6 +192,12 @@ func New(log *slog.Logger, provider PomodoroProvider) http.HandlerFunc {
 		}
 
 		log.Info("pomodoro session stopped successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "POMODORO_STOPPED", sessionID, map[string]any{
+				"action": req.Action,
+			})
+		}
 
 		if statsDelta.PointsDelta == 0 && statsDelta.PomodorosDelta == 0 && statsDelta.BurntTasksDelta == 0 && !statsDelta.ResetStreak {
 			log.Info("no stats delta to apply")

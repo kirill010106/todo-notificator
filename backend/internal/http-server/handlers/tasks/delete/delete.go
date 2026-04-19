@@ -19,7 +19,11 @@ type TaskDeleter interface {
 	DeleteTask(ctx context.Context, userID int64, taskID int64) error
 }
 
-func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
+func New(log *slog.Logger, taskDeleter TaskDeleter, eventLogger EventLogger) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.delete.New"
@@ -61,6 +65,10 @@ func New(log *slog.Logger, taskDeleter TaskDeleter) http.HandlerFunc {
 		}
 
 		l.Info("task deleted successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "TASK_DELETED", taskID, nil)
+		}
 
 		w.WriteHeader(http.StatusNoContent)
 	}

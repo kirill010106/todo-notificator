@@ -26,7 +26,7 @@ func (m mockDeleter) DeleteTask(ctx context.Context, userID int64, taskID int64)
 }
 
 func TestDelete_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), mockDeleter{})
+	h := New(slog.New(slog.DiscardHandler), mockDeleter{}, nil)
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/1", nil)
 	w := httptest.NewRecorder()
@@ -42,7 +42,7 @@ func TestDelete_Success(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{}))
+	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{}, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -59,7 +59,7 @@ func TestDelete_NotFound(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{err: storage.ErrTaskNotFound}))
+	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{err: storage.ErrTaskNotFound}, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -76,7 +76,7 @@ func TestDelete_InternalError(t *testing.T) {
 
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{err: errors.New("boom")}))
+	r.Delete("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), mockDeleter{err: errors.New("boom")}, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/tasks/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)

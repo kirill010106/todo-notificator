@@ -38,7 +38,7 @@ func (m *mockTaskSaver) SaveTask(ctx context.Context, t domain.Task) (int64, err
 }
 
 func TestSave_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockTaskSaver{}, "", "")
+	h := New(slog.New(slog.DiscardHandler), &mockTaskSaver{}, "", "", nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/tasks", strings.NewReader(`{"title":"task"}`))
 	w := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestSave_Created(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockTaskSaver{id: 99}
-	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -96,7 +96,7 @@ func TestSave_Created_NotifiesScheduler(t *testing.T) {
 	defer webhookSrv.Close()
 
 	saver := &mockTaskSaver{id: 99}
-	h := New(slog.New(slog.DiscardHandler), saver, webhookSrv.URL, webhookSecret)
+	h := New(slog.New(slog.DiscardHandler), saver, webhookSrv.URL, webhookSecret, nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -124,7 +124,7 @@ func TestSave_Conflict(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockTaskSaver{err: storage.ErrTaskExists}
-	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -145,7 +145,7 @@ func TestSave_InternalError(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockTaskSaver{err: errors.New("db down")}
-	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -166,7 +166,7 @@ func TestSave_CategoryNotFound(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockTaskSaver{err: storage.ErrCategoryNotFound}
-	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -192,7 +192,7 @@ func TestSave_WithCategory(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockTaskSaver{id: 42}
-	h := New(slog.New(slog.DiscardHandler), saver, "", "")
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))

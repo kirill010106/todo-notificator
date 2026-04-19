@@ -1,0 +1,22 @@
+syntax = "proto3";
+
+package activity_logger.v1;
+
+option go_package = "github.com/kirill010106/todo-notificator/root/pkg/activity_logger/v1;activity_logger";
+
+service ActivityLogger {
+    rpc LogEvent (LogRequest) returns (LogResponse);
+}
+
+message LogRequest {
+    int64 user_id = 1;
+    string action = 2;
+    int64 entity_id = 3;
+
+    string details_json = 4;
+}
+
+message LogResponse {
+    bool success = 1;
+    string error_message = 2;
+}

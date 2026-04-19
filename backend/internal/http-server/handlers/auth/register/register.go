@@ -79,9 +79,13 @@ func sendVerificationWebhook(ctx context.Context, webhookURL, webhookSecret, ema
 	return nil
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 var validate = validator.New()
 
-func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string) http.HandlerFunc {
+func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.register.New"
 
@@ -146,7 +150,19 @@ func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string
 			log.Error("failed to send verification webhook", sl.Err(err))
 			render.Status(r, http.StatusBadGateway)
 			render.JSON(w, r, resp.Error("user created, but failed to send verification email"))
+
+			if eventLogger != nil {
+				eventLogger.LogEvent(id, "USER_REGISTERED", id, map[string]any{
+					"email": req.Email,
+				})
+			}
 			return
+		}
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(id, "USER_REGISTERED", id, map[string]any{
+				"email": req.Email,
+			})
 		}
 
 		render.JSON(w, r, Response{

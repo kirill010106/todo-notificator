@@ -36,9 +36,13 @@ func (r Request) ToDomain(userID int64) domain.Category {
 	}
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 var validate = validator.New()
 
-func New(log *slog.Logger, categoryCreator CategoryCreator) http.HandlerFunc {
+func New(log *slog.Logger, categoryCreator CategoryCreator, eventLogger EventLogger) http.HandlerFunc {
 	const op = "handlers.categories.create.New"
 	return func(w http.ResponseWriter, r *http.Request) {
 		l, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
@@ -99,6 +103,12 @@ func New(log *slog.Logger, categoryCreator CategoryCreator) http.HandlerFunc {
 		}
 
 		l.Info("category created", slog.Int64("id", id))
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "CATEGORY_CREATED", id, map[string]any{
+				"name": req.Name,
+			})
+		}
 
 		render.Status(r, http.StatusCreated)
 		render.JSON(w, r, Response{

@@ -33,7 +33,7 @@ func (m *mockCategoryCreator) CreateCategory(ctx context.Context, c domain.Categ
 }
 
 func TestSave_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockCategoryCreator{})
+	h := New(slog.New(slog.DiscardHandler), &mockCategoryCreator{}, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/categories", strings.NewReader(`{"name":"Category"}`))
 	w := httptest.NewRecorder()
@@ -49,7 +49,7 @@ func TestSave_Created(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockCategoryCreator{id: 99}
-	h := New(slog.New(slog.DiscardHandler), saver)
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -72,7 +72,7 @@ func TestSave_Conflict(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockCategoryCreator{err: storage.ErrCategoryExists}
-	h := New(slog.New(slog.DiscardHandler), saver)
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -93,7 +93,7 @@ func TestSave_InternalError(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockCategoryCreator{err: errors.New("db down")}
-	h := New(slog.New(slog.DiscardHandler), saver)
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))
@@ -114,7 +114,7 @@ func TestSave_Empty(t *testing.T) {
 	require.NoError(t, err)
 
 	saver := &mockCategoryCreator{}
-	h := New(slog.New(slog.DiscardHandler), saver)
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
 
 	router := chi.NewRouter()
 	router.Use(authmw.New(secret))

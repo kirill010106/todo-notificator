@@ -41,7 +41,7 @@ func TestLogin_Success(t *testing.T) {
 
 	provider := mockUserProvider{user: domain.User{ID: 1, Email: "user@test.com", PassHash: hash}}
 	cfg := &config.Config{AppSecret: "app-secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour}
-	h := New(slog.New(slog.DiscardHandler), provider, cfg)
+	h := New(slog.New(slog.DiscardHandler), provider, cfg, nil)
 
 	body := `{"email":"user@test.com","password":"secret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(body))
@@ -58,7 +58,7 @@ func TestLogin_Success(t *testing.T) {
 func TestLogin_InvalidCredentials(t *testing.T) {
 	provider := mockUserProvider{err: storage.ErrUserNotFound}
 	cfg := &config.Config{AppSecret: "app-secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour}
-	h := New(slog.New(slog.DiscardHandler), provider, cfg)
+	h := New(slog.New(slog.DiscardHandler), provider, cfg, nil)
 
 	body := `{"email":"user@test.com","password":"secret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(body))
@@ -73,7 +73,7 @@ func TestLogin_InvalidCredentials(t *testing.T) {
 func TestLogin_InternalProviderError(t *testing.T) {
 	provider := mockUserProvider{err: errors.New("db down")}
 	cfg := &config.Config{AppSecret: "app-secret", AccessTokenTTL: 15 * time.Minute, RefreshTokenTTL: 24 * time.Hour}
-	h := New(slog.New(slog.DiscardHandler), provider, cfg)
+	h := New(slog.New(slog.DiscardHandler), provider, cfg, nil)
 
 	body := `{"email":"user@test.com","password":"secret123"}`
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(body))

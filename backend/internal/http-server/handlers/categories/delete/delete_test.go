@@ -33,7 +33,7 @@ func (m *mockCategoryDeleter) DeleteCategory(ctx context.Context, userID int64, 
 }
 
 func TestDelete_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockCategoryDeleter{})
+	h := New(slog.New(slog.DiscardHandler), &mockCategoryDeleter{}, nil)
 
 	req := httptest.NewRequest(http.MethodDelete, "/categories/1", nil)
 	w := httptest.NewRecorder()
@@ -50,7 +50,7 @@ func TestDelete_InvalidCategoryID(t *testing.T) {
 	deleter := &mockCategoryDeleter{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter))
+	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/categories/abc", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -69,7 +69,7 @@ func TestDelete_Success(t *testing.T) {
 	deleter := &mockCategoryDeleter{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter))
+	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/categories/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -90,7 +90,7 @@ func TestDelete_NotFound(t *testing.T) {
 	deleter := &mockCategoryDeleter{err: storage.ErrCategoryNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter))
+	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/categories/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -108,7 +108,7 @@ func TestDelete_InternalError(t *testing.T) {
 	deleter := &mockCategoryDeleter{err: errors.New("boom")}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter))
+	r.Delete("/categories/{category_id}", New(slog.New(slog.DiscardHandler), deleter, nil))
 
 	req := httptest.NewRequest(http.MethodDelete, "/categories/10", nil)
 	req.Header.Set("Authorization", "Bearer "+tok)

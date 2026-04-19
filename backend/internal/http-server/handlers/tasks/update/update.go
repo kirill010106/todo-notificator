@@ -68,7 +68,11 @@ func (r Request) IsEmpty() bool {
 		r.CategoryID == nil
 }
 
-func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret string) http.HandlerFunc {
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
+func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret string, eventLogger EventLogger) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.update.New"
@@ -195,6 +199,17 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 		}
 
 		log.Info("task updated successfully")
+
+		if eventLogger != nil {
+			details := map[string]any{}
+			if req.Title != nil {
+				details["title"] = *req.Title
+			}
+			if req.Status != nil {
+				details["status"] = *req.Status
+			}
+			eventLogger.LogEvent(userID, "TASK_UPDATED", taskID, details)
+		}
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{

@@ -102,7 +102,7 @@ func TestStop_SuccessWithoutTaskFinish(t *testing.T) {
 	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
 	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -132,7 +132,7 @@ func TestStop_SuccessWithTaskFinishCompleted(t *testing.T) {
 	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
 	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -160,7 +160,7 @@ func TestStop_SuccessWithTaskFinishAbandoned_SetsBurnt(t *testing.T) {
 	active := &domain.PomodoroSession{ID: 10, UserID: 5, TaskID: &taskID, StartedAt: &startedAt}
 
 	provider := &mockPomodoroProvider{activeSession: active, task: domain.Task{ID: 42}}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -186,7 +186,7 @@ func TestStop_NotFoundSession(t *testing.T) {
 	provider := &mockPomodoroProvider{
 		getActiveErr: storage.ErrSessionNotFound,
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -212,7 +212,7 @@ func TestStop_StopSessionNotFound(t *testing.T) {
 		task:          domain.Task{ID: 42},
 		stopErr:       storage.ErrSessionNotFound,
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 

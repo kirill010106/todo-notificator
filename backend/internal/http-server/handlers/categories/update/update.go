@@ -30,13 +30,17 @@ type CategoryUpdater interface {
 	UpdateCategory(ctx context.Context, userID int64, categoryID int64, c domain.CategoryUpdate) error
 }
 
+type EventLogger interface {
+	LogEvent(userID int64, action string, entityID int64, details map[string]any)
+}
+
 func (r Request) ToDomain() domain.CategoryUpdate {
 	return domain.CategoryUpdate{
 		Name: &r.Name,
 	}
 }
 
-func New(log *slog.Logger, categoryUpdater CategoryUpdater) http.HandlerFunc {
+func New(log *slog.Logger, categoryUpdater CategoryUpdater, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.categories.update.New"
 
@@ -107,6 +111,12 @@ func New(log *slog.Logger, categoryUpdater CategoryUpdater) http.HandlerFunc {
 		}
 
 		log.Info("category updated successfully")
+
+		if eventLogger != nil {
+			eventLogger.LogEvent(userID, "CATEGORY_UPDATED", categoryID, map[string]any{
+				"name": req.Name,
+			})
+		}
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{

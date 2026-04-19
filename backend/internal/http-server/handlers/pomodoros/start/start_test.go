@@ -71,7 +71,7 @@ func TestStart_Created(t *testing.T) {
 	}
 
 	provider := &mockPomodoroProvider{session: session}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -97,7 +97,7 @@ func TestStart_ConflictActiveSession(t *testing.T) {
 		startErr:      storage.ErrSessionActive,
 		activeSession: active,
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 
@@ -120,7 +120,7 @@ func TestStart_InternalError(t *testing.T) {
 	provider := &mockPomodoroProvider{
 		startErr: errors.New("db error"),
 	}
-	h := New(slog.New(slog.DiscardHandler), provider)
+	h := New(slog.New(slog.DiscardHandler), provider, nil)
 
 	router := setupTestRouter(h, secret)
 

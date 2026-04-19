@@ -72,6 +72,7 @@ Write-Host "DATABASE_URL=$localDbURL" -ForegroundColor DarkGray
 
 $backendDir = Join-Path $PSScriptRoot "backend"
 $emailDir = Join-Path $PSScriptRoot "notifiers\email"
+$activityLoggerDir = Join-Path $PSScriptRoot "activity-logger"
 
 $backendCommand = @"
 `$env:DATABASE_URL = '$localDbURL'
@@ -87,6 +88,11 @@ Set-Location '$emailDir'
 air -c .air.toml
 "@
 
+$activityLoggerCommand = @"
+Set-Location '$activityLoggerDir'
+go run cmd/main.go
+"@
+
 $backend = Start-Process powershell `
     -ArgumentList "-NoExit", "-Command", $backendCommand `
     -PassThru
@@ -95,8 +101,13 @@ $email = Start-Process powershell `
     -ArgumentList "-NoExit", "-Command", $emailCommand `
     -PassThru
 
-Write-Host "Backend PID:        $($backend.Id)" -ForegroundColor Cyan
-Write-Host "Email notifier PID: $($email.Id)" -ForegroundColor Cyan
+$activityLogger = Start-Process powershell `
+    -ArgumentList "-NoExit", "-Command", $activityLoggerCommand `
+    -PassThru
+
+Write-Host "Backend PID:         $($backend.Id)" -ForegroundColor Cyan
+Write-Host "Email notifier PID:  $($email.Id)" -ForegroundColor Cyan
+Write-Host "Activity Logger PID: $($activityLogger.Id)" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
 
 try {
@@ -104,5 +115,6 @@ try {
 } finally {
     Stop-Process -Id $backend.Id -ErrorAction SilentlyContinue
     Stop-Process -Id $email.Id   -ErrorAction SilentlyContinue
+    Stop-Process -Id $activityLogger.Id   -ErrorAction SilentlyContinue
     Write-Host "All services stopped" -ForegroundColor Red
 }

@@ -87,7 +87,7 @@ func TestRegister(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			// Arrange
 			mock := &mockUserSaver{ID: tt.mockID, Error: tt.mockErr}
-			handler := New(slog.New(slog.DiscardHandler), mock, webhookSrv.URL, "secret")
+			handler := New(slog.New(slog.DiscardHandler), mock, webhookSrv.URL, "secret", nil)
 			req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(tt.body))
 			req.Header.Set("Content-Type", "application/json")
 			w := httptest.NewRecorder()
@@ -112,7 +112,7 @@ func TestRegister_WebhookFailure(t *testing.T) {
 	defer webhookSrv.Close()
 
 	mock := &mockUserSaver{ID: 1, Error: nil}
-	handler := New(slog.New(slog.DiscardHandler), mock, webhookSrv.URL, "secret")
+	handler := New(slog.New(slog.DiscardHandler), mock, webhookSrv.URL, "secret", nil)
 	req := httptest.NewRequest("POST", "/register", bytes.NewBufferString(`{"email":"test@test.com", "password": "password123"}`))
 	req.Header.Set("Content-Type", "application/json")
 	w := httptest.NewRecorder()
