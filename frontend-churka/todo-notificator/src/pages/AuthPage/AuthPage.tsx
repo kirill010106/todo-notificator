@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import "./AuthPage.css";
+import "./AuthPage.scss";
 
 const API_BASE = "http://localhost:8082/api/v1";
 

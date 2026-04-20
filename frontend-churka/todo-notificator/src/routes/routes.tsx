@@ -1,6 +1,7 @@
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import AuthPage from "../pages/AuthPage/AuthPage";
 import App from "../App";
+import MainPage from "../pages/MainPage/MainPage";
 
 const router = createBrowserRouter([
   {
@@ -17,7 +18,7 @@ const router = createBrowserRouter([
       },
       {
         path: "main",
-        element: <div>Главная (залогинен)</div>,
+        element: <MainPage />,
       },
       {
         path: "*",
