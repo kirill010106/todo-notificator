@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect, useCallback, useMemo } from "react";
 import TaskHeader from "../../components/TaskHeader/TaskHeader";
 import TaskForm from "../../components/TaskForm/TaskForm";
