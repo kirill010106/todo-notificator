@@ -25,6 +25,8 @@ import (
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
 	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
+	createpayment "github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/create"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/webhook"
 	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
 	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
@@ -39,6 +41,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
 	"github.com/pressly/goose/v3"
+	"github.com/rvinnie/yookassa-sdk-go/yookassa"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
@@ -101,6 +104,8 @@ func main() {
 	}
 	log.Info("Migrations applied successfully!")
 
+	yooClient := yookassa.NewClient(cfg.YooKassa.ShopID, cfg.YooKassa.SecretKey)
+
 	router := chi.NewRouter()
 
 	router.Use(cors.Handler(cors.Options{
@@ -148,6 +153,7 @@ func main() {
 		r.Get("/health", health.New(log, storage.DB))
 		r.Post("/refresh", refresh.New(log, storage, cfg))
 		r.Get("/verify", verify.New(log, storage))
+		r.Post("/webhooks/yookassa", webhook.New(log, storage))
 
 		r.Group(func(r chi.Router) {
 			r.Use(auth.New(cfg.AppSecret))
@@ -172,6 +178,8 @@ func main() {
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
 
 			r.Post("/verify/resend", resend.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
+
+			r.Post("/payments/create", createpayment.New(ctx, log, storage, yooClient, cfg.ClientURL))
 
 		})
 

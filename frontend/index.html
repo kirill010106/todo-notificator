@@ -785,8 +785,12 @@
               </div>
               <div class="flex flex-col items-center md:items-end w-full md:w-auto">
                 <div class="text-2xl font-extrabold mb-3">49 ₽ <span class="text-blue-200 text-sm font-normal">/ навсегда</span></div>
-                <button @click="alert('Переход к оплате...')" class="w-full md:w-auto px-6 py-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition shadow-md">
-                  Оплатить Премиум
+                <button 
+                  @click="buyPremium()" 
+                  :disabled="loadingPayment"
+                  class="w-full md:w-auto px-6 py-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition shadow-md disabled:opacity-70 disabled:cursor-not-allowed">
+                  <span x-show="!loadingPayment">Оплатить Премиум</span>
+                  <span x-show="loadingPayment">Загрузка...</span>
                 </button>
               </div>
             </div>
@@ -1255,6 +1259,8 @@
 
       function app() {
         return {
+          loadingPayment: false,
+          
           // Состояние активности (логов)
           logs: [],
           loadingLogs: false,
@@ -2193,6 +2199,38 @@
               this.showToast("Ошибка подключения к серверу", "error");
             } finally {
               this.loadingCreate = false;
+            }
+          },
+
+          async buyPremium() {
+            this.loadingPayment = true;
+            try {
+              const response = await this.apiRequest("/payments/create", {
+                method: "POST",
+              });
+              
+              if (!response) {
+                this.loadingPayment = false;
+                return;
+              }
+
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка инициализации платежа", "error");
+                this.loadingPayment = false;
+                return;
+              }
+
+              if (data.confirmation_url) {
+                window.location.href = data.confirmation_url;
+              } else {
+                this.showToast("Не получен URL для оплаты", "error");
+                this.loadingPayment = false;
+              }
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+              this.loadingPayment = false;
             }
           },
 

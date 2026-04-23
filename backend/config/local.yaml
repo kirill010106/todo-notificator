@@ -1,5 +1,5 @@
 env: "local"
-
+client_url: "http://localhost:3000/frontend"
 webhook:
   url: "http://localhost:8084"
   secret: ""
@@ -12,5 +12,8 @@ clients:
     address: "localhost:50051"
     timeout: "2s"
     retries_count: 3
+yookassa:
+  shop_id: ""
+  secret_key: ""
 access_token_ttl: 15m
 refresh_token_ttl: 168h
