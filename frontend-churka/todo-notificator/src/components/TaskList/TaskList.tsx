@@ -1,8 +1,9 @@
 import TaskItem from "../TaskItem/TaskItem";
 import "./TaskList.scss";
+import { type Task } from "../../types/task";
 
 interface TaskListProps {
-  tasks: any[];
+  tasks: Task[];
   loading: boolean;
   onToggle: (id: number, currentStatus: string) => void;
   onDelete: (id: number) => void;
