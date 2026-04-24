@@ -1,10 +1,24 @@
 import "./TaskItem.scss";
+import { type Task } from "../../types/task"; // Убедись, что путь к файлу верный
 
-const TaskItem = ({ task, onToggle, onDelete }: any) => {
-  // Функция для красивого формата даты (как в твоем старом проекте)
-  const formatDate = (dateStr: string) => {
+// 1. Описываем интерфейс пропсов
+interface TaskItemProps {
+  task: Task;
+  onToggle: (id: number, currentStatus: string) => void;
+  onDelete: (id: number) => void;
+}
+
+// 2. Используем интерфейс в компоненте
+const TaskItem = ({ task, onToggle, onDelete }: TaskItemProps) => {
+  // Типизируем аргумент функции форматирования
+  const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return "";
-    return new Date(dateStr).toLocaleString("ru-RU", {
+    const d = new Date(dateStr);
+
+    // Проверка на валидность даты, чтобы не выводить "Invalid Date"
+    if (isNaN(d.getTime())) return "";
+
+    return d.toLocaleString("ru-RU", {
       day: "2-digit",
       month: "2-digit",
       hour: "2-digit",
@@ -17,7 +31,8 @@ const TaskItem = ({ task, onToggle, onDelete }: any) => {
       <div className="task-content">
         <div className="task-main-info">
           <h4>{task.title}</h4>
-          <span className="status-badge">
+          {/* Добавил динамический класс для статуса, чтобы в CSS красить badge */}
+          <span className={`status-badge ${task.status}`}>
             {task.status === "done" ? "Выполнено" : "В процессе"}
           </span>
         </div>
@@ -25,10 +40,12 @@ const TaskItem = ({ task, onToggle, onDelete }: any) => {
         <p>{task.description}</p>
 
         <div className="task-date-info">
-          <span className="task-date">📅 {formatDate(task.created_at)}</span>
-          {task.notification_time && (
+          {/* Используем поля из твоего OpenAPI: deadline и reminder_at */}
+          <span className="task-date">📅 {formatDate(task.deadline)}</span>
+
+          {task.reminder_at && (
             <span className="task-time-badge">
-              ⏰ {formatDate(task.notification_time)}
+              ⏰ {formatDate(task.reminder_at)}
             </span>
           )}
         </div>

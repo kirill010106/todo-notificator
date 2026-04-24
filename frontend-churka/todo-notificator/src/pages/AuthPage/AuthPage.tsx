@@ -1,13 +1,36 @@
-import React, { useState } from "react";
+<<<<<<< Updated upstream
+import React from "react";
 import { useNavigate } from "react-router-dom";
+import { observer } from "mobx-react-lite";
+import { authStore } from "../../stores/AuthStore";
+import { useAuthMutation } from "../../hooks/useAuthMutation";
 import "./AuthPage.scss";
+
+const AuthPage: React.FC = observer(() => {
+  const navigate = useNavigate();
+  const { mutate, isPending } = useAuthMutation();
+
+  const handleFormSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+
+    mutate(undefined, {
+      onSuccess: () => {
+        if (authStore.authTab === "login") {
+          navigate("/main");
+        } else {
+          authStore.setAuthTab("login");
+        }
+      },
+    });
+=======
+import React, { useState } from "react";
+import "./AuthPage.css";
 
 const API_BASE = "http://localhost:8082/api/v1";
 
 type AuthTab = "login" | "register";
 
 const AuthPage: React.FC = () => {
-  const navigate = useNavigate();
   const [authTab, setAuthTab] = useState<AuthTab>("login");
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({ email: "", password: "" });
@@ -32,6 +55,7 @@ const AuthPage: React.FC = () => {
     e.preventDefault();
     setLoading(true);
 
+    // В Swagger у тебя /login и /register без префикса /auth
     const path = authTab === "login" ? "/login" : "/register";
 
     try {
@@ -44,26 +68,26 @@ const AuthPage: React.FC = () => {
       const data = await response.json();
 
       if (!response.ok) {
-        // Обработка ошибок по твоему Swagger
+        // Обработка специфичных ошибок из твоего Swagger
         if (response.status === 401)
           throw new Error("Неверный логин или пароль");
         if (response.status === 409)
-          throw new Error("Этот email уже зарегистрирован");
+          throw new Error("Пользователь уже существует");
         throw new Error(data.error || "Ошибка сервера");
       }
 
       if (authTab === "login") {
-        // Сохраняем токены (snake_case из Swagger)
+        // Согласно Swagger: access_token, refresh_token (snake_case)
         if (data.access_token) {
           localStorage.setItem("token", data.access_token);
           localStorage.setItem("refresh", data.refresh_token);
 
-          // Используем navigate вместо window.location для SPA-перехода
-          navigate("/main");
+          alert("Вход выполнен!");
+          window.location.href = "/dashboard";
         }
       } else {
-        // Успешная регистрация
-        alert(`Регистрация успешна! (ID: ${data.user_id})`);
+        // Для register возвращается user_id
+        alert(`Регистрация успешна! ID пользователя: ${data.user_id}`);
         setAuthTab("login");
         setFormData((prev) => ({ ...prev, password: "" }));
       }
@@ -72,6 +96,7 @@ const AuthPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
+>>>>>>> Stashed changes
   };
 
   return (
@@ -80,6 +105,16 @@ const AuthPage: React.FC = () => {
         <header className="auth-header">
           <div className="auth-logo">✅</div>
           <h1>ToDo Notificator</h1>
+<<<<<<< Updated upstream
+        </header>
+
+        <nav className="auth-tabs">
+          {(["login", "register"] as const).map((tab) => (
+            <button
+              key={tab}
+              className={`tab-btn ${authStore.authTab === tab ? "active" : ""}`}
+              onClick={() => authStore.setAuthTab(tab)}
+=======
           <p>Управляй задачами эффективно</p>
         </header>
 
@@ -93,12 +128,30 @@ const AuthPage: React.FC = () => {
                 setFormData({ email: "", password: "" });
               }}
               className={`tab-btn ${authTab === tab ? "active" : ""}`}
+>>>>>>> Stashed changes
             >
               {tab === "login" ? "Войти" : "Регистрация"}
             </button>
           ))}
         </nav>
 
+<<<<<<< Updated upstream
+        <form onSubmit={handleFormSubmit} className="auth-form">
+          {authStore.message && (
+            <div className={`auth-notification ${authStore.message.type}`}>
+              {authStore.message.text}
+            </div>
+          )}
+
+          <div className="input-group">
+            <label>Email</label>
+            <input
+              name="email"
+              type="email"
+              required
+              value={authStore.formData.email}
+              onChange={(e) => authStore.setFormField("email", e.target.value)}
+=======
         <form onSubmit={handleSubmit} className="auth-form">
           <div className="input-group">
             <label htmlFor="email">Email</label>
@@ -107,23 +160,52 @@ const AuthPage: React.FC = () => {
               name="email"
               type="email"
               placeholder="you@example.com"
-              autoComplete="email"
               required
               value={formData.email}
               onChange={handleChange}
+>>>>>>> Stashed changes
             />
           </div>
 
           <div className="input-group">
+<<<<<<< Updated upstream
+            <label>Пароль</label>
+            <div className="password-wrapper">
+              <input
+                name="password"
+                type={authStore.showPassword ? "text" : "password"}
+                required
+                value={authStore.formData.password}
+                onChange={(e) =>
+                  authStore.setFormField("password", e.target.value)
+                }
+              />
+              <button
+                type="button"
+                onClick={() => authStore.togglePasswordVisibility()}
+              >
+                {authStore.showPassword ? "🙈" : "👁"}
+              </button>
+            </div>
+
+            {authStore.authTab === "register" &&
+              authStore.formData.password.length > 0 && (
+                <div className="strength-meter">
+                  {[1, 2, 3, 4].map((step) => (
+                    <div
+                      key={step}
+                      className={`strength-step ${authStore.passwordStrength >= step ? "filled" : ""}`}
+                    />
+                  ))}
+                </div>
+              )}
+=======
             <label htmlFor="password">Пароль</label>
             <div className="password-wrapper">
               <input
                 id="password"
                 name="password"
                 type={showPassword ? "text" : "password"}
-                autoComplete={
-                  authTab === "login" ? "current-password" : "new-password"
-                }
                 placeholder={
                   authTab === "login" ? "••••••••" : "Минимум 8 символов"
                 }
@@ -136,7 +218,6 @@ const AuthPage: React.FC = () => {
                 type="button"
                 className="toggle-pass"
                 onClick={() => setShowPassword(!showPassword)}
-                tabIndex={-1}
               >
                 {showPassword ? "🙈" : "👁"}
               </button>
@@ -156,16 +237,26 @@ const AuthPage: React.FC = () => {
                 ))}
               </div>
             )}
+>>>>>>> Stashed changes
           </div>
 
           <button
             type="submit"
+<<<<<<< Updated upstream
+            disabled={isPending} // Используем флаг из TanStack Query
+            className="submit-btn"
+          >
+            {isPending
+              ? "Загрузка..."
+              : authStore.authTab === "login"
+=======
             disabled={loading}
             className={`submit-btn ${authTab}-btn`}
           >
             {loading
               ? "Загрузка..."
               : authTab === "login"
+>>>>>>> Stashed changes
                 ? "Войти"
                 : "Создать аккаунт"}
           </button>
@@ -173,6 +264,10 @@ const AuthPage: React.FC = () => {
       </div>
     </div>
   );
+<<<<<<< Updated upstream
+});
+=======
 };
+>>>>>>> Stashed changes
 
 export default AuthPage;

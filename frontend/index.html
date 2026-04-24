@@ -785,12 +785,8 @@
               </div>
               <div class="flex flex-col items-center md:items-end w-full md:w-auto">
                 <div class="text-2xl font-extrabold mb-3">49 ₽ <span class="text-blue-200 text-sm font-normal">/ навсегда</span></div>
-                <button 
-                  @click="buyPremium()" 
-                  :disabled="loadingPayment"
-                  class="w-full md:w-auto px-6 py-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition shadow-md disabled:opacity-70 disabled:cursor-not-allowed">
-                  <span x-show="!loadingPayment">Оплатить Премиум</span>
-                  <span x-show="loadingPayment">Загрузка...</span>
+                <button @click="alert('Переход к оплате...')" class="w-full md:w-auto px-6 py-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition shadow-md">
+                  Оплатить Премиум
                 </button>
               </div>
             </div>
