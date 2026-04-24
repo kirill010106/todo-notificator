@@ -18,6 +18,7 @@ func NewAccessToken(user domain.User, secret string, duration time.Duration) (st
 		"exp":         time.Now().Add(duration).Unix(),
 		"iat":         time.Now().Unix(),
 		"is_verified": user.IsVerified,
+		"is_premium":  user.IsPremium,
 	})
 
 	return token.SignedString([]byte(secret))

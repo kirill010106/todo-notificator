@@ -25,7 +25,13 @@ func LoggerWithAuth(w http.ResponseWriter, r *http.Request, log *slog.Logger, op
 		render.JSON(w, r, resp.Error("unauthorized"))
 		return nil, 0, false
 	}
-
-	l = l.With(slog.Int64("user_id", userID))
+	isPremium, ok := auth.GetPremiumStatus(r.Context())
+	if !ok {
+		l.Warn("premium status not found in context")
+		render.Status(r, http.StatusInternalServerError)
+		render.JSON(w, r, resp.Error("internal error"))
+		return nil, 0, false
+	}
+	l = l.With(slog.Int64("user_id", userID), slog.Bool("is_premium", isPremium))
 	return l, userID, true
 }

@@ -13,6 +13,7 @@ import (
 type contextKey string
 
 const userIDKey contextKey = "user_id"
+const isPremiumKey contextKey = "is_premium"
 
 func New(secret string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -42,6 +43,7 @@ func New(secret string) func(next http.Handler) http.Handler {
 			}
 
 			ctx := context.WithValue(r.Context(), userIDKey, uid)
+			ctx = context.WithValue(ctx, isPremiumKey, true)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -51,4 +53,9 @@ func New(secret string) func(next http.Handler) http.Handler {
 func GetUserID(ctx context.Context) (int64, bool) {
 	userID, zbs := ctx.Value(userIDKey).(int64)
 	return userID, zbs
+}
+
+func GetPremiumStatus(ctx context.Context) (bool, bool) {
+	isPremium, zbs := ctx.Value(isPremiumKey).(bool)
+	return isPremium, zbs
 }
