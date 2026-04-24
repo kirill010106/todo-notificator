@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+<<<<<<< Updated upstream
     "@tanstack/react-query": "^5.99.2",
     "axios": "^1.15.2",
     "mobx": "^6.15.0",
@@ -18,6 +19,11 @@
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.14.1",
     "sass": "^1.99.0"
+=======
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-router-dom": "^7.14.1"
+>>>>>>> Stashed changes
   },
   "devDependencies": {
     "@eslint/js": "^9.39.4",
