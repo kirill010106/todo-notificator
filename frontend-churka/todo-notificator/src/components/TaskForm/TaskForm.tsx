@@ -1,46 +1,17 @@
-import React, { useState } from "react";
+import React from "react";
+import { observer } from "mobx-react-lite";
+import { todoStore } from "../../stores/TodoStore";
+import { useCreateTaskMutation } from "../../hooks/useTodos";
 import "./TaskForm.scss";
 
-interface TaskFormProps {
-  onTaskCreated: () => void;
-}
+const TaskForm: React.FC = observer(() => {
+  // Подключаем наш хук мутации
+  const { mutate, isPending } = useCreateTaskMutation();
 
-const TaskForm: React.FC<TaskFormProps> = ({ onTaskCreated }) => {
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (isSubmitting) return;
-
-    setIsSubmitting(true);
-    const token = localStorage.getItem("token");
-
-    try {
-      const res = await fetch("http://localhost:8082/api/v1/tasks", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify({
-          title,
-          description,
-          status: "pending",
-        }),
-      });
-
-      if (res.ok) {
-        setTitle("");
-        setDescription("");
-        onTaskCreated();
-      }
-    } catch (err) {
-      console.error("Failed to create task:", err);
-    } finally {
-      setIsSubmitting(false);
-    }
+    // Вызываем мутацию (аргумент undefined, т.к. данные берутся из стора)
+    mutate(undefined);
   };
 
   return (
@@ -55,8 +26,10 @@ const TaskForm: React.FC<TaskFormProps> = ({ onTaskCreated }) => {
           id="task-title"
           type="text"
           placeholder="Что нужно сделать?"
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
+          // Данные из MobX
+          value={todoStore.newTask.title}
+          // Тот самый типизированный метод
+          onChange={(e) => todoStore.setNewTaskField("title", e.target.value)}
           required
         />
       </div>
@@ -66,16 +39,18 @@ const TaskForm: React.FC<TaskFormProps> = ({ onTaskCreated }) => {
         <textarea
           id="task-desc"
           placeholder="Детали задачи..."
-          value={description}
-          onChange={(e) => setDescription(e.target.value)}
+          value={todoStore.newTask.description}
+          onChange={(e) =>
+            todoStore.setNewTaskField("description", e.target.value)
+          }
         />
       </div>
 
-      <button type="submit" className="submit-btn" disabled={isSubmitting}>
-        {isSubmitting ? "Добавление..." : "Добавить задачу"}
+      <button type="submit" className="submit-btn" disabled={isPending}>
+        {isPending ? "Добавление..." : "Добавить задачу"}
       </button>
     </form>
   );
-};
+});
 
 export default TaskForm;
