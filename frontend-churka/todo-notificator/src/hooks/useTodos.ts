@@ -113,3 +113,28 @@ export const useStatsQuery = () => {
     staleTime: 1000 * 60,
   });
 };
+
+export const useStartPomodoroMutation = () => {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (taskId?: number) => {
+      const { data } = await api.post("/pomodoros/start", { task_id: taskId });
+      return data.session;
+    },
+    onSuccess: (newSession) => {
+      queryClient.setQueryData(["activePomodoro"], newSession);
+    },
+    onError: (error: any) => {
+      const status = error.response?.status;
+
+      if (status === 409) {
+        todoStore.showToast("У вас уже есть активный таймер!", "error");
+      } else if (status === 404) {
+        todoStore.showToast("Задача не найдена", "error");
+      } else {
+        todoStore.showToast("Не удалось запустить таймер", "error");
+      }
+    },
+  });
+};
