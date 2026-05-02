@@ -3,6 +3,7 @@ import TaskHeader from "../../components/TaskHeader/TaskHeader";
 import TaskForm from "../../components/TaskForm/TaskForm";
 import TaskList from "../../components/TaskList/TaskList";
 import Toast from "../../components/Toast/Toast";
+import PomodoroTimer from "../../components/PomodoroTimer/PomodoroTimer";
 import { todoStore } from "../../stores/TodoStore";
 import {
   useTasksQuery,
@@ -13,17 +14,14 @@ import {
 import "./MainPage.scss";
 
 const MainPage = observer(() => {
-  // 1. Получаем данные (список задач и статистика)
   const { data: tasks = [], isLoading: tasksLoading } = useTasksQuery();
   const { data: stats } = useStatsQuery();
 
   console.log(stats);
 
-  // 2. Подключаем мутации
   const updateMutation = useUpdateTaskMutation();
   const deleteMutation = useDeleteTaskMutation();
 
-  // 3. Обработчики действий
   const handleToggleStatus = (id: number, currentStatus: string) => {
     const newStatus = currentStatus === "done" ? "pending" : "done";
     updateMutation.mutate({ taskId: id, fields: { status: newStatus } });
@@ -66,7 +64,7 @@ const MainPage = observer(() => {
 
         <div className="content-grid">
           <aside className="side-panel">
-            {/* TaskForm внутри сама знает, как создавать задачи через MobX */}
+            <PomodoroTimer />
             <TaskForm />
 
             {/* Сюда можно добавить блок фильтров, который будет менять todoStore.setFilter */}
