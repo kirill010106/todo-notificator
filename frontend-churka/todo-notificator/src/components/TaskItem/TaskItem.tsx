@@ -1,15 +1,15 @@
 import "./TaskItem.scss";
 import { type Task } from "../../types/task"; // Убедись, что путь к файлу верный
 
-// 1. Описываем интерфейс пропсов
 interface TaskItemProps {
   task: Task;
   onToggle: (id: number, currentStatus: string) => void;
   onDelete: (id: number) => void;
+  onPomodoro: (id: number) => void;
 }
 
 // 2. Используем интерфейс в компоненте
-const TaskItem = ({ task, onToggle, onDelete }: TaskItemProps) => {
+const TaskItem = ({ task, onToggle, onDelete, onPomodoro }: TaskItemProps) => {
   // Типизируем аргумент функции форматирования
   const formatDate = (dateStr: string | null | undefined) => {
     if (!dateStr) return "";
@@ -52,6 +52,14 @@ const TaskItem = ({ task, onToggle, onDelete }: TaskItemProps) => {
       </div>
 
       <div className="task-actions">
+        <button
+          className="action-btn btn-pomodoro"
+          onClick={() => onPomodoro(task.id)}
+          title="Запустить фокус для этой задачи"
+        >
+          🍅
+        </button>
+
         <button
           className="action-btn btn-complete"
           onClick={() => onToggle(task.id, task.status)}

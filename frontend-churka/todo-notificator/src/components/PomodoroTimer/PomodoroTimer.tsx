@@ -1,11 +1,17 @@
 import React from "react";
-import "./PomodoroTimer.scss";
+import { observer } from "mobx-react-lite";
+import { pomodoroStore } from "../../stores/PomodoroStore";
 import { usePomodoro } from "../../hooks/usePomodoro";
+import "./PomodoroTimer.scss";
 
-const PomodoroTimer: React.FC = () => {
-  // Добавляем isLoading и stopSession из хука
-  const { startSession, stopSession, isActive, formatTime, mode, isLoading } =
-    usePomodoro();
+const PomodoroTimer: React.FC = observer(() => {
+  // Достаем только методы управления и состояние загрузки мутаций
+  const { startSession, stopSession, isLoading } = usePomodoro();
+
+  // Основной источник правды — наш MobX стор
+  const { isActive, formatTime, mode } = pomodoroStore;
+
+  console.log(isActive);
 
   return (
     <section className="pomodoro">
@@ -29,25 +35,25 @@ const PomodoroTimer: React.FC = () => {
               </button>
               <p className="pomodoro__hint">
                 Или нажмите <span>🍅</span> на конкретной задаче ниже, чтобы
-                запустить жесткий режим.
+                запустить режим фокуса.
               </p>
             </div>
           ) : (
             <div className="pomodoro__active">
+              {/* Таймер меняет цвет в зависимости от режима: focus или break */}
               <div className={`pomodoro__timer pomodoro__timer--${mode}`}>
-                {formatTime()}
+                {formatTime}
               </div>
               <p className="pomodoro__status">
                 {mode === "focus" ? "Время концентрироваться" : "Перерыв"}
               </p>
 
-              {/* Кнопка остановки из макета */}
               <button
                 onClick={() => stopSession()}
                 disabled={isLoading}
                 className="pomodoro__btn-stop"
               >
-                Остановить
+                {isLoading ? "..." : "Остановить"}
               </button>
             </div>
           )}
@@ -55,6 +61,6 @@ const PomodoroTimer: React.FC = () => {
       </div>
     </section>
   );
-};
+});
 
 export default PomodoroTimer;

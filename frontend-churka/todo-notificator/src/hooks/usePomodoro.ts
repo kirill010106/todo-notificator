@@ -1,80 +1,90 @@
-import { useState, useCallback } from "react";
-import { useTimer } from "./useTimer";
+import { useCallback } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Modal } from "antd"; // Импортируем модалку из Antd
 import { api } from "../api/api";
 import { todoStore } from "../stores/TodoStore";
-import { useMutation } from "@tanstack/react-query";
-
-interface PomodoroSession {
-  id: number;
-  task_id?: number;
-  duration_minutes: number;
-}
+import { pomodoroStore } from "../stores/PomodoroStore";
 
 export const usePomodoro = () => {
-  const [session, setSession] = useState<PomodoroSession | null>(null);
-  const [mode, setMode] = useState<"focus" | "break">("focus");
+  const queryClient = useQueryClient();
 
-  // 1. Мутация для старта
   const startMutation = useMutation({
     mutationFn: async (taskId?: number) => {
       const { data } = await api.post("/pomodoros/start", { task_id: taskId });
-      return data.session;
+      return data.session || data.active_session;
     },
-    onSuccess: (data: PomodoroSession) => {
-      setSession(data);
-      setMode("focus");
-      start(data.duration_minutes * 60);
+    onSuccess: (data) => {
+      pomodoroStore.setSession(data);
+      pomodoroStore.start(data.duration_minutes * 60);
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
     },
     onError: (error: any) => {
       const status = error.response?.status;
-      if (status === 409) {
-        todoStore.showToast("Сессия уже запущена на сервере", "error");
+      const data = error.response?.data;
+      const activeSession = data?.active_session;
+
+      if (status === 409 && activeSession) {
+        pomodoroStore.setSession(activeSession);
+        pomodoroStore.start(activeSession.duration_minutes * 60);
+        todoStore.showToast("Сессия уже запущена", "error");
       } else {
-        todoStore.showToast("Ошибка при запуске таймера", "error");
+        todoStore.showToast(data?.error || "Ошибка старта", "error");
       }
     },
   });
 
-  // 2. Мутация для стопа
   const stopMutation = useMutation({
     mutationFn: async (action: "abandoned" | "completed") => {
+      const session = pomodoroStore.session;
       if (!session) return;
       await api.post(`/pomodoros/${session.id}/stop`, { action });
     },
     onSuccess: () => {
-      stop();
-      setSession(null);
-      setMode("focus");
+      pomodoroStore.stop();
+      queryClient.invalidateQueries({ queryKey: ["stats"] });
+      queryClient.invalidateQueries({ queryKey: ["tasks"] });
     },
     onError: () => {
-      todoStore.showToast("Не удалось остановить сессию", "error");
+      todoStore.showToast("Не удалось остановить таймер", "error");
     },
   });
 
-  // Колбэк по окончанию таймера
-  const handleExpire = useCallback(() => {
-    if (mode === "focus") {
-      // Когда время вышло, завершаем сессию как выполненную
-      stopMutation.mutate("completed");
-      // И переключаем на отдых (локально)
-      setMode("break");
-      start(5 * 60);
-    } else {
-      setSession(null);
-      setMode("focus");
-    }
-  }, [mode, session, stopMutation]);
+  const startSession = useCallback(
+    (taskId?: number) => {
+      if (pomodoroStore.isActive) {
+        todoStore.showToast("Сначала завершите текущую сессию", "error");
+        return;
+      }
+      startMutation.mutate(taskId);
+    },
+    [startMutation],
+  );
 
-  const { timeLeft, start, stop, formatTime } = useTimer(0, handleExpire);
+  const stopSession = useCallback(() => {
+    const isHardMode = !!pomodoroStore.session?.task_id;
+
+    if (isHardMode) {
+      // Используем Ant Design Modal вместо window.confirm
+      Modal.confirm({
+        title: "Вы уверены, что хотите прервать фокус?",
+        content: "Прогресс по текущей задаче не будет сохранен.",
+        okText: "Да, прервать",
+        okType: "danger",
+        cancelText: "Отмена",
+        onOk() {
+          stopMutation.mutate("abandoned");
+        },
+        // onCancel ничего не делает, просто закрывает окно
+      });
+    } else {
+      // Если свободный режим — стопаем сразу
+      stopMutation.mutate("abandoned");
+    }
+  }, [stopMutation]);
 
   return {
-    session,
-    mode,
-    timeLeft,
-    formatTime,
-    isActive: !!session,
     isLoading: startMutation.isPending || stopMutation.isPending,
-    startSession: (taskId?: number) => startMutation.mutate(taskId),
-    stopSession: () => stopMutation.mutate("abandoned"),
+    startSession,
+    stopSession,
   };
 };
