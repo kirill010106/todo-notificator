@@ -1,6 +1,7 @@
 import TaskItem from "../TaskItem/TaskItem";
 import "./TaskList.scss";
 import { type Task } from "../../types/task";
+import { usePomodoro } from "../../hooks/usePomodoro";
 
 interface TaskListProps {
   tasks: Task[];
@@ -15,6 +16,8 @@ const TaskList: React.FC<TaskListProps> = ({
   onToggle,
   onDelete,
 }) => {
+  const { startSession } = usePomodoro();
+
   if (loading) return <div className="loading-state">Загрузка задач...</div>;
 
   return (
@@ -28,6 +31,7 @@ const TaskList: React.FC<TaskListProps> = ({
             task={task}
             onToggle={onToggle}
             onDelete={onDelete}
+            onPomodoro={(id) => startSession(id)}
           />
         ))
       )}

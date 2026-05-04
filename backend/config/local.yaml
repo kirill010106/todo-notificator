@@ -2,15 +2,29 @@ env: "local"
 
 webhook:
   url: "http://localhost:8084"
-  secret: ""
+  secret: "test-webhook-secret-123"
+
 http_server:
   address: "0.0.0.0:8082"
   timeout: 4s
   idle_timeout: 60s
-clients:
-  activity_logger:
-    address: "localhost:50051"
-    timeout: "2s"
-    retries_count: 3
+
+cors:
+  allowed_origins:
+    - "http://localhost:3030"
+    - "http://127.0.0.1:3030"
+    - "http://localhost:5173"
+    - "http://127.0.0.1:5173"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Content-Type"
+    - "Authorization"
+  allow_credentials: true
+
 access_token_ttl: 15m
 refresh_token_ttl: 168h

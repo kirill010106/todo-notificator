@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { api } from "../api/api";
 import { todoStore } from "../stores/TodoStore";
-import { type Task, type Pagination; } 
+import { type Task, type Pagination } from "../types/task";
 import { type AxiosError } from "axios";
 
 // 1. Получение списка задач
