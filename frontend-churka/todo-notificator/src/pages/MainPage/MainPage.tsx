@@ -65,7 +65,6 @@ const MainPage = observer(() => {
         <div className="content-grid">
           <aside className="side-panel">
             <PomodoroTimer />
-            <TaskForm />
 
             {/* Сюда можно добавить блок фильтров, который будет менять todoStore.setFilter */}
             <div className="filter-panel">
@@ -80,6 +79,7 @@ const MainPage = observer(() => {
           </aside>
 
           <main className="main-panel">
+            <TaskForm />
             <TaskList
               tasks={displayTasks}
               loading={tasksLoading}
