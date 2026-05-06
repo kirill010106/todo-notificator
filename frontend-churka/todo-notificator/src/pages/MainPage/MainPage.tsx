@@ -12,6 +12,7 @@ import {
   useDeleteTaskMutation,
 } from "../../hooks/useTodos";
 import "./MainPage.scss";
+import CategoryForm from "../../components/CategoryForm/CategoryForm";
 
 const MainPage = observer(() => {
   const { data: tasks = [], isLoading: tasksLoading } = useTasksQuery();
@@ -80,6 +81,7 @@ const MainPage = observer(() => {
 
           <main className="main-panel">
             <TaskForm />
+            <CategoryForm />
             <TaskList
               tasks={displayTasks}
               loading={tasksLoading}
