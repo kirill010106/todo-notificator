@@ -1,0 +1,134 @@
+@use "sass:math";
+@import "../../helpers/helpers";
+
+.pomodoro {
+  margin-bottom: rem(30);
+
+  &__title {
+    font-size: rem(20);
+    font-weight: 800;
+    color: var(--text-main);
+    margin-bottom: rem(20);
+  }
+
+  &__card {
+    @include card-base;
+    padding: rem(16);
+    border-radius: rem(40);
+  }
+
+  &__inner {
+    background-color: #f8faff;
+    border: 1px solid #edf2ff;
+    border-radius: rem(32);
+    padding: rem(64) rem(32);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+
+    @include mobile {
+      padding: rem(40) rem(20);
+    }
+  }
+
+  &__icon-wrapper {
+    width: rem(64);
+    height: rem(64);
+    background-color: #eef2ff;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-bottom: rem(32);
+    font-size: rem(24);
+  }
+
+  &__heading {
+    font-size: rem(24);
+    font-weight: 700;
+    color: #2d366d;
+    margin-bottom: rem(32);
+    text-align: center;
+  }
+
+  &__btn-start {
+    @include btn-primary;
+    padding: rem(16) rem(40);
+    border-radius: rem(16);
+    font-size: rem(18);
+  }
+
+  &__hint {
+    margin-top: rem(40);
+    font-size: rem(14);
+    color: var(--text-secondary);
+    text-align: center;
+    line-height: 1.6;
+
+    span {
+      display: inline-block;
+      transform: scale(1.1);
+    }
+  }
+
+  &__timer {
+    font-size: rem(80);
+    font-family: "Inter", sans-serif;
+    font-weight: 800;
+    margin-bottom: rem(16);
+    letter-spacing: rem(-2);
+
+    &--focus {
+      color: var(--error-red);
+    }
+
+    &--break {
+      color: var(--primary-indigo);
+    }
+  }
+
+  &__status {
+    color: var(--text-secondary);
+    font-weight: 600;
+    font-size: rem(16);
+    text-align: center;
+  }
+
+  &__btn-stop {
+    margin-top: rem(24);
+    background-color: var(--error-red);
+    color: white;
+    padding: rem(12) rem(32);
+    border-radius: rem(12);
+    border: none;
+    font-weight: 700;
+    font-size: rem(16);
+    cursor: pointer;
+    transition: all 0.3s ease;
+    box-shadow: 0 4px 12px rgba(239, 68, 68, 0.3);
+
+    &:hover:not(:disabled) {
+      filter: brightness(1.1);
+      transform: translateY(-2px);
+      box-shadow: 0 6px 15px rgba(239, 68, 68, 0.4);
+    }
+
+    &:active:not(:disabled) {
+      transform: translateY(0);
+    }
+
+    &:disabled {
+      background-color: var(--text-muted);
+      cursor: not-allowed;
+      box-shadow: none;
+    }
+  }
+
+  // Обновим контейнер активного режима для центрирования
+  &__active {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+}
