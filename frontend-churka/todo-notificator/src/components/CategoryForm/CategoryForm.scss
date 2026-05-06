@@ -1,0 +1,58 @@
+@import "../../helpers/helpers";
+
+.category-form-container {
+  @include card-base; // Тот же фон и тени
+  border: 1px solid var(--border-color);
+  padding: rem(20);
+  background: #fff;
+  margin-bottom: rem(20);
+
+  .form-title {
+    margin: 0 0 rem(20) 0;
+    font-size: rem(18); // Чуть меньше, чем у основной формы
+    font-weight: 800;
+    color: var(--text-main);
+    display: flex;
+    align-items: center;
+    gap: rem(8);
+
+    &::before {
+      content: "🏷️"; // Иконка тега для категорий
+    }
+  }
+
+  .form-row {
+    display: flex;
+    gap: rem(15);
+    align-items: center; // Центрируем по вертикали для выравнивания инпута и пикера
+  }
+
+  .custom-input {
+    @include input-base;
+    flex: 1; // Занимает всё свободное место
+  }
+
+  // Стили для Ant Design ColorPicker, чтобы он вписался
+  .ant-color-picker-trigger {
+    height: rem(40);
+    width: rem(40);
+    border-radius: rem(8);
+    border-color: var(--border-color);
+
+    &:hover {
+      border-color: var(--accent-color);
+    }
+  }
+
+  .add-category-btn {
+    @include btn-primary;
+    height: rem(40);
+    border-radius: rem(8);
+    font-weight: 600;
+    padding: 0 rem(20);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+  }
+}
