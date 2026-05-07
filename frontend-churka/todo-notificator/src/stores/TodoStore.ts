@@ -6,7 +6,7 @@ class TodoStore {
   filter: "all" | TaskStatus | "logs" = "all";
 
   // Пагинация (как в OpenAPI: limit = 20, offset = 0)
-  pagination = { limit: 20, offset: 0, total: 0 };
+  pagination = { limit: 5, offset: 0, total: 0 };
 
   toasts: ToastMessage[] = [];
 
