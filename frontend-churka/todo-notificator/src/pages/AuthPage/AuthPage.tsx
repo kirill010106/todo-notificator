@@ -76,6 +76,7 @@ const AuthPage: React.FC = observer(() => {
               <button
                 type="button"
                 onClick={() => authStore.togglePasswordVisibility()}
+                className="toggle-pass"
               >
                 {authStore.showPassword ? "🙈" : "👁"}
               </button>

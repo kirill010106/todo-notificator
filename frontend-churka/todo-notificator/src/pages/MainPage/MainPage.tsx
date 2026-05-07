@@ -39,7 +39,6 @@ const MainPage = observer(() => {
     window.location.href = "/auth";
   };
 
-  // 4. Фильтрация на клиенте (как в твоем index.html)
   const displayTasks = todoStore.getFilteredTasks(tasks);
 
   return (
@@ -69,11 +68,22 @@ const MainPage = observer(() => {
 
             {/* Сюда можно добавить блок фильтров, который будет менять todoStore.setFilter */}
             <div className="filter-panel">
-              <button onClick={() => todoStore.setFilter("all")}>Все</button>
-              <button onClick={() => todoStore.setFilter("pending")}>
+              <button
+                onClick={() => todoStore.setFilter("all")}
+                className="filter-btn"
+              >
+                Все
+              </button>
+              <button
+                onClick={() => todoStore.setFilter("pending")}
+                className="filter-btn"
+              >
                 В работе
               </button>
-              <button onClick={() => todoStore.setFilter("done")}>
+              <button
+                onClick={() => todoStore.setFilter("done")}
+                className="filter-btn"
+              >
                 Готово
               </button>
             </div>
@@ -94,12 +104,14 @@ const MainPage = observer(() => {
               <button
                 disabled={todoStore.pagination.offset === 0}
                 onClick={() => todoStore.changePage(-1)}
+                className="pagination-btn"
               >
                 Назад
               </button>
               <button
                 disabled={tasks.length < todoStore.pagination.limit}
                 onClick={() => todoStore.changePage(1)}
+                className="pagination-btn"
               >
                 Вперед
               </button>
