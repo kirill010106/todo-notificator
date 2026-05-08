@@ -1078,6 +1078,30 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  /pomodoros/active:
+    get:
+      tags: [Pomodoros]
+      summary: Получить активную pomodoro-сессию
+      responses:
+        "200":
+          description: Активная сессия (если есть)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  active_session:
+                    $ref: '#/components/schemas/PomodoroSession'
+        "404":
+          description: Активная сессия не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
   /pomodoros/start:
     post:
       tags: [Pomodoros]

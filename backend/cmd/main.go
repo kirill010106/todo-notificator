@@ -28,6 +28,7 @@ import (
 	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
 	createpayment "github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/create"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/webhook"
+	pomodoroactive "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/active"
 	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
 	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
@@ -176,6 +177,7 @@ func main() {
 			r.Patch("/me/stats", statsupdate.New(log, storage))
 
 			r.Post("/pomodoros/start", pomodorostart.New(log, storage, loggerClient))
+			r.Get("/pomodoros/active", pomodoroactive.New(log, storage))
 			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage, loggerClient))
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
 

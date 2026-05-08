@@ -50,6 +50,7 @@ docs/              Swagger UI + openapi.yaml
 - GET /me/stats
 - PATCH /me/stats
 - GET /me/logs
+- GET /pomodoros/active
 - POST /pomodoros/start
 - POST /pomodoros/{id}/pause
 - POST /pomodoros/{id}/stop
