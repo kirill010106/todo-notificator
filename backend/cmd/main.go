@@ -22,6 +22,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
 	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
+	categoriesgetone "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/getone"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
 	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
@@ -166,6 +167,7 @@ func main() {
 
 			r.Post("/categories", create.New(log, storage, loggerClient))
 			r.Get("/categories", categoriesget.New(log, storage))
+			r.Get("/categories/{category_id}", categoriesgetone.New(log, storage))
 			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage, loggerClient))
 			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage, loggerClient))
 

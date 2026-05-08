@@ -49,7 +49,7 @@ LIMIT $2 OFFSET $3`)
 				AddRow(int64(9), userID, "T2", "D2", nil, nil, "done", true, int64(3), int64(2), true),
 		)
 
-	tasks, total, err := s.GetTasks(context.Background(), userID, limit, offset)
+	tasks, total, err := s.GetTasks(context.Background(), userID, limit, offset, domain.TaskFilter{})
 	require.NoError(t, err)
 	require.Equal(t, 5, total)
 	require.Len(t, tasks, 2)
@@ -76,7 +76,7 @@ func TestGetTasks_CountQueryError(t *testing.T) {
 		WithArgs(int64(1)).
 		WillReturnError(errors.New("count failed"))
 
-	tasks, total, err := s.GetTasks(context.Background(), 1, 10, 0)
+	tasks, total, err := s.GetTasks(context.Background(), 1, 10, 0, domain.TaskFilter{})
 	require.Error(t, err)
 	require.Nil(t, tasks)
 	require.Zero(t, total)
@@ -109,7 +109,7 @@ LIMIT $2 OFFSET $3`)
 		WithArgs(userID, 10, 0).
 		WillReturnError(errors.New("data failed"))
 
-	tasks, total, err := s.GetTasks(context.Background(), userID, 10, 0)
+	tasks, total, err := s.GetTasks(context.Background(), userID, 10, 0, domain.TaskFilter{})
 	require.Error(t, err)
 	require.Nil(t, tasks)
 	require.Zero(t, total)

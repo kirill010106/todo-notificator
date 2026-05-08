@@ -2,8 +2,10 @@ openapi: 3.0.3
 info:
   title: ToDo Notificator API
   description: API для управления задачами, категориями, статистикой и помодоро-сессиями
-  version: 1.1.0
+  version: 1.2.0
 servers:
+  - url: https://todoapi.chkpnk.ru/api/v1
+    description: Production
   - url: http://localhost:8082/api/v1
     description: Local backend
 
@@ -18,6 +20,8 @@ tags:
     description: Статистика пользователя
   - name: Pomodoros
     description: Управление pomodoro-сессиями
+  - name: ActivityLogs
+    description: Лог активности пользователя
   - name: System
     description: Системные ручки
 
@@ -337,6 +341,38 @@ components:
         active_session:
           $ref: '#/components/schemas/PomodoroSession'
 
+    ActivityLog:
+      type: object
+      properties:
+        id:
+          type: string
+        user_id:
+          type: integer
+          format: int64
+        action:
+          type: string
+          description: "Тип действия: TASK_CREATED, TASK_UPDATED, TASK_DELETED, CATEGORY_CREATED, CATEGORY_UPDATED, CATEGORY_DELETED, POMODORO_STARTED, POMODORO_STOPPED, POMODORO_PAUSED, POMODORO_ABANDONED_FREE, USER_REGISTERED, USER_LOGGED_IN"
+        entity_id:
+          type: integer
+          format: int64
+        details:
+          type: object
+          additionalProperties: true
+        timestamp:
+          type: string
+          format: date-time
+
+    ActivityLogsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        logs:
+          type: array
+          items:
+            $ref: '#/components/schemas/ActivityLog'
+
 security:
   - bearerAuth: []
 
@@ -550,6 +586,18 @@ paths:
           schema:
             type: integer
             default: 0
+        - in: query
+          name: status
+          description: Фильтр по статусу задачи
+          schema:
+            type: string
+            enum: [all, pending, done, burnt]
+            default: all
+        - in: query
+          name: search
+          description: Поиск по title и description (case-insensitive)
+          schema:
+            type: string
       responses:
         "200":
           description: Список задач
@@ -836,6 +884,54 @@ paths:
                 $ref: '#/components/schemas/ErrorResponse'
 
   /categories/{category_id}:
+    get:
+      tags: [Categories]
+      summary: Получить категорию по ID
+      parameters:
+        - in: path
+          name: category_id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: Категория получена
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  category:
+                    $ref: '#/components/schemas/Category'
+        "400":
+          description: Невалидный ID
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "404":
+          description: Категория не найдена
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
     patch:
       tags: [Categories]
       summary: Обновить категорию
@@ -1153,6 +1249,41 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        "500":
+          description: Внутренняя ошибка сервера
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /me/logs:
+    get:
+      tags: [ActivityLogs]
+      summary: Лог активности пользователя
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: Логи получены
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ActivityLogsResponse'
         "401":
           description: Неавторизован
           content:
