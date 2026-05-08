@@ -21,7 +21,7 @@ export interface Pagination {
 }
 
 export interface ToastMessage {
-  id: number; // Обычно используем Date.now()
-  text: string; // Само сообщение
-  type: "success" | "error"; // Статус для стилизации (зеленый/красный)
+  id: number;
+  text: string; 
+  type: "success" | "error";
 }
