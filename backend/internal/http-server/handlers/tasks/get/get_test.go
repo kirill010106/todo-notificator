@@ -26,13 +26,15 @@ type mockTaskGetter struct {
 	gotUserID int64
 	gotLimit  int
 	gotOffset int
+	gotFilter domain.TaskFilter
 }
 
-func (m *mockTaskGetter) GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error) {
+func (m *mockTaskGetter) GetTasks(ctx context.Context, userID int64, limit, offset int, filter domain.TaskFilter) ([]domain.Task, int, error) {
 	m.called = true
 	m.gotUserID = userID
 	m.gotLimit = limit
 	m.gotOffset = offset
+	m.gotFilter = filter
 	return m.tasks, m.total, m.err
 }
 

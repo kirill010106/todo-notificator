@@ -1,5 +1,5 @@
 env: "local"
-
+client_url: "http://localhost:3000/frontend"
 webhook:
   url: "http://localhost:8084"
   secret: "test-webhook-secret-123"

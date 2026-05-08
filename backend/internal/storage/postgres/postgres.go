@@ -114,25 +114,51 @@ func (s *Storage) GetTask(ctx context.Context, userID int64, taskID int64) (doma
 	return t, nil
 }
 
-func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error) {
+func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int, filter domain.TaskFilter) ([]domain.Task, int, error) {
 	const op = "storage.postgres.GetTasks"
 
-	countQuery := `
-		SELECT COUNT(*) FROM tasks WHERE user_id = $1
-	`
+	// Build dynamic WHERE conditions
+	conditions := []string{"user_id = $1"}
+	args := []any{userID}
+	argID := 2
+
+	if filter.Status != nil && *filter.Status != "all" && *filter.Status != "" {
+		if domain.ValidTaskStatuses[*filter.Status] {
+			conditions = append(conditions, fmt.Sprintf("status = $%d", argID))
+			args = append(args, *filter.Status)
+			argID++
+		}
+	}
+
+	if filter.Search != nil && *filter.Search != "" {
+		searchPattern := "%" + *filter.Search + "%"
+		conditions = append(conditions, fmt.Sprintf("(title ILIKE $%d OR description ILIKE $%d)", argID, argID))
+		args = append(args, searchPattern)
+		argID++
+	}
+
+	whereClause := strings.Join(conditions, " AND ")
+
+	// Count query
+	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM tasks WHERE %s`, whereClause) //nolint:gosec
 
 	var total int
-	if err := s.DB.QueryRowContext(ctx, countQuery, userID).Scan(&total); err != nil {
+	if err := s.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
 
-	dataQuery := `
+	// Data query
+	dataArgs := make([]any, len(args))
+	copy(dataArgs, args)
+	dataArgs = append(dataArgs, limit, offset)
+
+	dataQuery := fmt.Sprintf(`
 SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
 FROM tasks
-	WHERE user_id = $1 ORDER BY created_at DESC, id DESC
-LIMIT $2 OFFSET $3`
+	WHERE %s ORDER BY created_at DESC, id DESC
+LIMIT $%d OFFSET $%d`, whereClause, argID, argID+1) //nolint:gosec
 
-	rows, err := s.DB.QueryContext(ctx, dataQuery, userID, limit, offset)
+	rows, err := s.DB.QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -154,6 +180,7 @@ LIMIT $2 OFFSET $3`
 
 	return tasks, total, nil
 }
+
 
 func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) error {
 	const op = "storage.postgres.DeleteTask"
@@ -514,6 +541,24 @@ func (s *Storage) GetCategories(ctx context.Context, userID int64) ([]domain.Cat
 	}
 
 	return categories, nil
+}
+
+func (s *Storage) GetCategory(ctx context.Context, userID int64, categoryID int64) (domain.Category, error) {
+	const op = "storage.postgres.GetCategory"
+
+	query := `
+		SELECT id, user_id, name FROM categories
+		WHERE user_id = $1 AND id = $2
+	`
+	var c domain.Category
+	err := s.DB.QueryRowContext(ctx, query, userID, categoryID).Scan(&c.ID, &c.UserID, &c.Name)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return domain.Category{}, fmt.Errorf("%s: %w", op, storage.ErrCategoryNotFound)
+		}
+		return domain.Category{}, fmt.Errorf("%s: %w", op, err)
+	}
+	return c, nil
 }
 
 func (s *Storage) DeleteCategory(ctx context.Context, userID int64, categoryID int64) error {

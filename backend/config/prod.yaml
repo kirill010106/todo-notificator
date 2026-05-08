@@ -1,5 +1,5 @@
 env: "prod"
-
+client_url: "https://todo.chkpnk.ru"
 webhook:
   url: "http://email-notifier:8084"
   secret: ""

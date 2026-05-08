@@ -1255,6 +1255,8 @@
 
       function app() {
         return {
+          loadingPayment: false,
+          
           // Состояние активности (логов)
           logs: [],
           loadingLogs: false,
@@ -2193,6 +2195,38 @@
               this.showToast("Ошибка подключения к серверу", "error");
             } finally {
               this.loadingCreate = false;
+            }
+          },
+
+          async buyPremium() {
+            this.loadingPayment = true;
+            try {
+              const response = await this.apiRequest("/payments/create", {
+                method: "POST",
+              });
+              
+              if (!response) {
+                this.loadingPayment = false;
+                return;
+              }
+
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка инициализации платежа", "error");
+                this.loadingPayment = false;
+                return;
+              }
+
+              if (data.confirmation_url) {
+                window.location.href = data.confirmation_url;
+              } else {
+                this.showToast("Не получен URL для оплаты", "error");
+                this.loadingPayment = false;
+              }
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+              this.loadingPayment = false;
             }
           },
 

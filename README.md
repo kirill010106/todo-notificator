@@ -43,17 +43,18 @@ docs/              Swagger UI + openapi.yaml
 - PATCH /tasks/{task_id}
 - DELETE /tasks/{task_id}
 - GET /categories
+- GET /categories/{category_id}
 - POST /categories
 - PATCH /categories/{category_id}
 - DELETE /categories/{category_id}
 - GET /me/stats
 - PATCH /me/stats
+- GET /me/logs
 - POST /pomodoros/start
 - POST /pomodoros/{id}/pause
 - POST /pomodoros/{id}/stop
 
 Полная спецификация: docs/openapi.yaml
-Синхронная копия для backend-модуля: backend/docs/openapi.yaml
 
 ## Требования
 

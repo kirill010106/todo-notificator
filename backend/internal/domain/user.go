@@ -7,6 +7,7 @@ type User struct {
 	Email      string `json:"email"`
 	PassHash   []byte `json:"-"`
 	IsVerified bool   `json:"is_verified"`
+	IsPremium bool `json:"is_premium"`
 }
 
 type EmailVerificationToken struct {

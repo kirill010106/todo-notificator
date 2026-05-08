@@ -21,7 +21,7 @@ const (
 )
 
 type TaskGetter interface {
-	GetTasks(ctx context.Context, userID int64, limit, offset int) ([]domain.Task, int, error)
+	GetTasks(ctx context.Context, userID int64, limit, offset int, filter domain.TaskFilter) ([]domain.Task, int, error)
 }
 
 type Pagination struct {
@@ -52,7 +52,15 @@ func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 			return
 		}
 
-		tasks, total, err := taskGetter.GetTasks(r.Context(), userID, limit, offset)
+		filter, err := parseFilter(r)
+		if err != nil {
+			l.Info("invalid filter params", sl.Err(err))
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error(err.Error()))
+			return
+		}
+
+		tasks, total, err := taskGetter.GetTasks(r.Context(), userID, limit, offset, filter)
 
 		if err != nil {
 
@@ -107,4 +115,21 @@ func parsePagination(r *http.Request) (limit, offset int, err error) {
 	}
 
 	return limit, offset, nil
+}
+
+func parseFilter(r *http.Request) (domain.TaskFilter, error) {
+	var filter domain.TaskFilter
+
+	if raw := r.URL.Query().Get("status"); raw != "" {
+		if raw != "all" && !domain.ValidTaskStatuses[raw] {
+			return filter, errors.New("invalid status filter, must be one of: all, pending, done, burnt")
+		}
+		filter.Status = &raw
+	}
+
+	if raw := r.URL.Query().Get("search"); raw != "" {
+		filter.Search = &raw
+	}
+
+	return filter, nil
 }
