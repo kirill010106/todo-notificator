@@ -8,6 +8,11 @@ http_server:
   address: "0.0.0.0:8082"
   timeout: 4s
   idle_timeout: 60s
+clients:
+  activity_logger:
+    address: "localhost:50051"
+    timeout: "2s"
+    retries_count: 3
 
 cors:
   allowed_origins:
@@ -25,5 +30,6 @@ cors:
     - "Content-Type"
     - "Authorization"
   allow_credentials: true
+
 access_token_ttl: 15m
 refresh_token_ttl: 168h

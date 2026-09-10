@@ -6,7 +6,7 @@ class TodoStore {
   filter: "all" | TaskStatus | "logs" = "all";
 
   // Пагинация (как в OpenAPI: limit = 20, offset = 0)
-  pagination = { limit: 20, offset: 0, total: 0 };
+  pagination = { limit: 5, offset: 0, total: 0 };
 
   toasts: ToastMessage[] = [];
 
@@ -85,8 +85,8 @@ class TodoStore {
     this.editForm = {
       title: task.title,
       description: task.description || "",
-      deadline: this.toDateTimeLocal(task.deadline),
-      reminder_at: this.toDateTimeLocal(task.reminder_at),
+      deadline: task.deadline || "", // AntDesign DatePicker сам поймет ISO
+      reminder_at: task.reminder_at || "",
       status: task.status,
       category_id: task.category_id,
     };

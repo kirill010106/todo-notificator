@@ -1,14 +1,14 @@
 @import "../../helpers/helpers";
 
-.task-form-card {
-  @include card-base; // Используем миксин для фона, теней и скруглений
-  position: sticky;
+.task-form-container {
+  @include card-base; // Фон, тени и скругления
   top: rem(24);
   border: 1px solid var(--border-color);
-}
+  padding: rem(20);
+  background: #fff;
+  margin-bottom: rem(20);
 
-.form-header {
-  h3 {
+  .form-title {
     margin: 0 0 rem(20) 0;
     font-size: rem(20);
     font-weight: 800;
@@ -21,33 +21,63 @@
       content: "📝";
     }
   }
-}
 
-.form-group {
-  margin-bottom: rem(20);
+  .form-row {
+    display: flex;
+    gap: rem(15);
+    margin-bottom: rem(15);
+    align-items: flex-start;
 
-  label {
-    display: block;
-    font-size: rem(13);
-    font-weight: 700;
-    color: var(--text-secondary);
-    text-transform: uppercase;
-    margin-bottom: rem(8);
-    margin-left: rem(4);
+    &.items-end {
+      align-items: flex-end;
+    }
   }
 
-  input,
-  textarea {
-    @include input-base; // Миксин для инпутов (рамки, фокус, фоны)
+  .form-group {
+    display: flex;
+    flex-direction: column;
+    gap: rem(6);
+    margin-bottom: 0;
+
+    label {
+      display: block;
+      font-size: rem(12);
+      font-weight: 700;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      margin-left: rem(4);
+    }
+
+    &.flex-grow {
+      flex: 1;
+    }
   }
 
-  textarea {
-    min-height: rem(120);
+  .custom-input,
+  .custom-textarea {
+    @include input-base;
+    width: 100%;
+  }
+
+  .custom-textarea {
+    min-height: rem(40);
+    height: 100%;
     resize: none;
   }
-}
 
-.submit-btn {
-  @include btn-primary; // Миксин для градиентной кнопки с анимацией
-  width: 100%;
+  .custom-picker,
+  .custom-select {
+    width: 200px !important;
+  }
+
+  .add-task-btn {
+    @include btn-primary;
+    height: rem(40);
+    border-radius: rem(8);
+    font-weight: 600;
+    padding: 0 rem(25);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
 }

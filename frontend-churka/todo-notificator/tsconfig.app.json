@@ -21,9 +21,5 @@
     "erasableSyntaxOnly": true,
     "noFallthroughCasesInSwitch": true
   },
-<<<<<<< Updated upstream
   "include": ["src"]
-=======
-  "include": ["src", "pages/AuthPage"]
->>>>>>> Stashed changes
 }

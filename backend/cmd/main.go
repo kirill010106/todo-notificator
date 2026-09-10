@@ -121,6 +121,7 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
+	router.Use(middleware.RedirectSlashes)
 	router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -138,6 +139,10 @@ func main() {
 			"project": "todo-notificator",
 			"info":    "Use /api/v1 for requests",
 		})
+	})
+
+	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("pong"))
 	})
 
 	router.Route("/api/v1", func(r chi.Router) {

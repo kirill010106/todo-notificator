@@ -3,6 +3,7 @@ import TaskHeader from "../../components/TaskHeader/TaskHeader";
 import TaskForm from "../../components/TaskForm/TaskForm";
 import TaskList from "../../components/TaskList/TaskList";
 import Toast from "../../components/Toast/Toast";
+import PomodoroTimer from "../../components/PomodoroTimer/PomodoroTimer";
 import { todoStore } from "../../stores/TodoStore";
 import {
   useTasksQuery,
@@ -11,19 +12,17 @@ import {
   useDeleteTaskMutation,
 } from "../../hooks/useTodos";
 import "./MainPage.scss";
+import CategoryForm from "../../components/CategoryForm/CategoryForm";
 
 const MainPage = observer(() => {
-  // 1. Получаем данные (список задач и статистика)
   const { data: tasks = [], isLoading: tasksLoading } = useTasksQuery();
   const { data: stats } = useStatsQuery();
 
   console.log(stats);
 
-  // 2. Подключаем мутации
   const updateMutation = useUpdateTaskMutation();
   const deleteMutation = useDeleteTaskMutation();
 
-  // 3. Обработчики действий
   const handleToggleStatus = (id: number, currentStatus: string) => {
     const newStatus = currentStatus === "done" ? "pending" : "done";
     updateMutation.mutate({ taskId: id, fields: { status: newStatus } });
@@ -40,7 +39,6 @@ const MainPage = observer(() => {
     window.location.href = "/auth";
   };
 
-  // 4. Фильтрация на клиенте (как в твоем index.html)
   const displayTasks = todoStore.getFilteredTasks(tasks);
 
   return (
@@ -66,22 +64,34 @@ const MainPage = observer(() => {
 
         <div className="content-grid">
           <aside className="side-panel">
-            {/* TaskForm внутри сама знает, как создавать задачи через MobX */}
-            <TaskForm />
+            <PomodoroTimer />
 
             {/* Сюда можно добавить блок фильтров, который будет менять todoStore.setFilter */}
             <div className="filter-panel">
-              <button onClick={() => todoStore.setFilter("all")}>Все</button>
-              <button onClick={() => todoStore.setFilter("pending")}>
+              <button
+                onClick={() => todoStore.setFilter("all")}
+                className="filter-btn"
+              >
+                Все
+              </button>
+              <button
+                onClick={() => todoStore.setFilter("pending")}
+                className="filter-btn"
+              >
                 В работе
               </button>
-              <button onClick={() => todoStore.setFilter("done")}>
+              <button
+                onClick={() => todoStore.setFilter("done")}
+                className="filter-btn"
+              >
                 Готово
               </button>
             </div>
           </aside>
 
           <main className="main-panel">
+            <TaskForm />
+            <CategoryForm />
             <TaskList
               tasks={displayTasks}
               loading={tasksLoading}
@@ -94,12 +104,14 @@ const MainPage = observer(() => {
               <button
                 disabled={todoStore.pagination.offset === 0}
                 onClick={() => todoStore.changePage(-1)}
+                className="pagination-btn"
               >
                 Назад
               </button>
               <button
                 disabled={tasks.length < todoStore.pagination.limit}
                 onClick={() => todoStore.changePage(1)}
+                className="pagination-btn"
               >
                 Вперед
               </button>
