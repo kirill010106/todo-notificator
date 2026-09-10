@@ -28,6 +28,7 @@ import (
 	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
 	createpayment "github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/create"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/webhook"
+	pomodoroactive "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/active"
 	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
 	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
 	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
@@ -120,6 +121,7 @@ func main() {
 	router.Use(middleware.Logger)
 	router.Use(middleware.Recoverer)
 	router.Use(middleware.URLFormat)
+	router.Use(middleware.RedirectSlashes)
 	router.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
@@ -137,6 +139,10 @@ func main() {
 			"project": "todo-notificator",
 			"info":    "Use /api/v1 for requests",
 		})
+	})
+
+	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte("pong"))
 	})
 
 	router.Route("/api/v1", func(r chi.Router) {
@@ -176,6 +182,7 @@ func main() {
 			r.Patch("/me/stats", statsupdate.New(log, storage))
 
 			r.Post("/pomodoros/start", pomodorostart.New(log, storage, loggerClient))
+			r.Get("/pomodoros/active", pomodoroactive.New(log, storage))
 			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage, loggerClient))
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
 
