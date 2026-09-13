@@ -2,7 +2,6 @@ package update
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -48,7 +47,7 @@ func (m *mockUpdater) ApplyStatsDelta(ctx context.Context, userID int64, delta d
 }
 
 func TestUpdate_Unauthorized(t *testing.T) {
-	h := New(slog.New(slog.DiscardHandler), &mockUpdater{}, "", "", nil)
+	h := New(slog.New(slog.DiscardHandler), &mockUpdater{}, nil)
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"a"}`))
 	w := httptest.NewRecorder()
@@ -65,7 +64,7 @@ func TestUpdate_EmptyBodyFields(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -84,7 +83,7 @@ func TestUpdate_Success(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -93,49 +92,6 @@ func TestUpdate_Success(t *testing.T) {
 	r.ServeHTTP(w, req)
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, updater.called)
-}
-
-func TestUpdate_Success_NotifiesScheduler(t *testing.T) {
-	secret := "secret"
-	webhookSecret := "webhook-secret"
-	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com"}, secret, time.Hour)
-	require.NoError(t, err)
-
-	triggered := make(chan struct{}, 1)
-	webhookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		var payload struct {
-			Type string `json:"type"`
-		}
-		_ = json.NewDecoder(r.Body).Decode(&payload)
-
-		if r.Method == http.MethodPost &&
-			r.URL.Path == "/webhook/task-created" &&
-			r.Header.Get("X-Webhook-Secret") == webhookSecret &&
-			payload.Type == "task_updated" {
-			triggered <- struct{}{}
-		}
-		w.WriteHeader(http.StatusOK)
-	}))
-	defer webhookSrv.Close()
-
-	updater := &mockUpdater{}
-	r := chi.NewRouter()
-	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, webhookSrv.URL, webhookSecret, nil))
-
-	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
-	req.Header.Set("Authorization", "Bearer "+tok)
-	w := httptest.NewRecorder()
-
-	r.ServeHTTP(w, req)
-	require.Equal(t, http.StatusOK, w.Code)
-	require.True(t, updater.called)
-
-	select {
-	case <-triggered:
-	case <-time.After(1500 * time.Millisecond):
-		t.Fatal("expected scheduler webhook to be called after task update")
-	}
 }
 
 func TestUpdate_NotFound(t *testing.T) {
@@ -146,7 +102,7 @@ func TestUpdate_NotFound(t *testing.T) {
 	updater := &mockUpdater{err: storage.ErrTaskNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -164,7 +120,7 @@ func TestUpdate_InternalError(t *testing.T) {
 	updater := &mockUpdater{err: errors.New("boom")}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"title":"new"}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -182,7 +138,7 @@ func TestUpdate_CategoryNotFound(t *testing.T) {
 	updater := &mockUpdater{err: storage.ErrCategoryNotFound}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":999}`))
 	req.Header.Set("Authorization", "Bearer "+tok)
@@ -201,7 +157,7 @@ func TestUpdate_WithCategory(t *testing.T) {
 	updater := &mockUpdater{}
 	r := chi.NewRouter()
 	r.Use(authmw.New(secret))
-	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, nil))
 
 	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"category_id":5}`))
 	req.Header.Set("Authorization", "Bearer "+tok)

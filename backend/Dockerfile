@@ -9,8 +9,6 @@ COPY go.work go.work.sum* ./
 COPY go.mod go.sum* ./
 COPY activity-logger/go.mod activity-logger/go.sum* ./activity-logger/
 COPY backend/go.mod backend/go.sum* ./backend/
-COPY notifiers/go.mod notifiers/go.sum* ./notifiers/
-COPY notifiers/email/go.mod notifiers/email/go.sum* ./notifiers/email/
 
 RUN --mount=type=cache,target=/go/pkg/mod \
     cd backend && go mod download

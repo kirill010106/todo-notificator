@@ -155,7 +155,7 @@ func main() {
 			})
 		})
 
-		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
+		r.Post("/register", register.New(log, storage, loggerClient))
 		r.Post("/login", login.New(log, storage, cfg, loggerClient))
 		r.Get("/health", health.New(log, storage.DB))
 		r.Post("/refresh", refresh.New(log, storage, cfg))
@@ -167,9 +167,9 @@ func main() {
 
 			r.Post("/logout", logout.New(log, storage))
 			r.Get("/tasks", get.New(log, storage))
-			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
+			r.Post("/tasks", save.New(log, storage, loggerClient))
 			r.Delete("/tasks/{task_id}", delete.New(log, storage, loggerClient))
-			r.Patch("/tasks/{task_id}", update.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
+			r.Patch("/tasks/{task_id}", update.New(log, storage, loggerClient))
 
 			r.Post("/categories", create.New(log, storage, loggerClient))
 			r.Get("/categories", categoriesget.New(log, storage))
@@ -186,7 +186,7 @@ func main() {
 			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage, loggerClient))
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
 
-			r.Post("/verify/resend", resend.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
+			r.Post("/verify/resend", resend.New(log, storage))
 
 			r.Post("/payments/create", createpayment.New(ctx, log, storage, yooClient, cfg.ClientURL))
 

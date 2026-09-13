@@ -63,23 +63,11 @@ services:
       - ACTIVITY_LOGGER_ADDR=activity-logger:50051
       - SHOP_ID=test_shop_id
       - SECRET_KEY=test_secret_key
-      - CLIENT_URL=http://localhost:3000
+      - CLIENT_URL=http://localhost:3030
     volumes:
       - ./backend/config:/app/config:ro
     ports:
       - "8082:8082"
-
-  frontend-react:
-    build:
-      context: ./frontend-react/todo-notificator
-      dockerfile: Dockerfile
-    container_name: todo-frontend-react-local
-    restart: unless-stopped
-    depends_on:
-      backend:
-        condition: service_started
-    ports:
-      - "3000:80"
 
   frontend-alpine:
     build:

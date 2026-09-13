@@ -15,7 +15,6 @@ type Config struct {
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env-default:"15m"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-default:"168h"`
 	AppSecret       string        `yaml:"app_secret" env-required:"true" env:"APP_SECRET"`
-	Webhook         Webhook       `yaml:"webhook"`
 	Clients         Clients       `yaml:"clients"`
 	YooKassa        YooKassa      `yaml:"yookassa"`
 }
@@ -35,13 +34,8 @@ type ActivityLoggerClientConf struct {
 	RetriesCount int           `yaml:"retries_count" env-default:"3"`
 }
 
-type Webhook struct {
-	URL    string `yaml:"url" env:"WEBHOOK_URL" env-default:""`
-	Secret string `yaml:"secret" env:"WEBHOOK_SECRET" env-default:""`
-}
-
 type HTTPServer struct {
-	ClientURL   string        `yaml:"client_url" env:"CLIENT_URL" env-default:"http://localhost:3000"`
+	ClientURL   string        `yaml:"client_url" env:"CLIENT_URL" env-default:"http://localhost:3030"`
 	Address     string        `yaml:"address" env-default:"localhost:8080"`
 	Timeout     time.Duration `yaml:"timeout" env-default:"4s"`
 	IdleTimeout time.Duration `yaml:"idle_timeout" env-default:"60s"`
