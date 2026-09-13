@@ -1,0 +1,86 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: todo-postgres-local
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: todo
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_local_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d todo"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  mongo:
+    image: mongo:7
+    container_name: todo-mongo-local
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongo_local_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 3s
+      timeout: 5s
+      retries: 10
+
+  activity-logger:
+    build:
+      context: .
+      dockerfile: ./activity-logger/Dockerfile
+    container_name: todo-activity-logger-local
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      - MONGO_URL=mongodb://mongo:27017
+    ports:
+      - "50051:50051"
+
+  backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+    container_name: todo-backend-local
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+      activity-logger:
+        condition: service_started
+    environment:
+      - DATABASE_URL=postgres://postgres:postgres@postgres:5432/todo?sslmode=disable
+      - CONFIG_PATH=/app/config/local.yaml
+      - APP_SECRET=test-secret-key-for-jwt-tokens-minimum-32-chars
+      - ACTIVITY_LOGGER_ADDR=activity-logger:50051
+      - SHOP_ID=test_shop_id
+      - SECRET_KEY=test_secret_key
+      - CLIENT_URL=http://localhost:3030
+    volumes:
+      - ./backend/config:/app/config:ro
+    ports:
+      - "8082:8082"
+
+  frontend-alpine:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: todo-frontend-alpine-local
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_started
+    ports:
+      - "3030:80"
+
+volumes:
+  postgres_local_data:
+  mongo_local_data:

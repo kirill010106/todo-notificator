@@ -1,13 +1,10 @@
 package register
 
 import (
-	"bytes"
 	"context"
 	"crypto/rand"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"time"
@@ -43,49 +40,13 @@ func generateToken() (string, error) {
 	return hex.EncodeToString(b), nil
 }
 
-func sendVerificationWebhook(ctx context.Context, webhookURL, webhookSecret, email, token string) error {
-	const op = "handlers.auth.register.sendVerificationWebhook"
-
-	payload := map[string]string{
-		"type":  "verification",
-		"email": email,
-		"token": token,
-	}
-
-	body, err := json.Marshal(payload)
-	if err != nil {
-		return fmt.Errorf("%s: marshal payload: %w", op, err)
-	}
-
-	reqW, err := http.NewRequestWithContext(ctx, http.MethodPost, webhookURL, bytes.NewBuffer(body))
-	if err != nil {
-		return fmt.Errorf("%s: create request: %w", op, err)
-	}
-
-	reqW.Header.Set("Content-Type", "application/json")
-	reqW.Header.Set("X-Webhook-Secret", webhookSecret)
-
-	client := &http.Client{Timeout: 5 * time.Second}
-	respW, err := client.Do(reqW)
-	if err != nil {
-		return fmt.Errorf("%s: send request: %w", op, err)
-	}
-	defer respW.Body.Close()
-
-	if respW.StatusCode < http.StatusOK || respW.StatusCode >= http.StatusMultipleChoices {
-		return fmt.Errorf("%s: unexpected status code: %d", op, respW.StatusCode)
-	}
-
-	return nil
-}
-
 type EventLogger interface {
 	LogEvent(userID int64, action string, entityID int64, details map[string]any)
 }
 
 var validate = validator.New()
 
-func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string, eventLogger EventLogger) http.HandlerFunc {
+func New(log *slog.Logger, userSaver UserSaver, eventLogger EventLogger) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.auth.register.New"
 
@@ -140,22 +101,6 @@ func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string
 			log.Error("failed to save token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to save token"))
-			return
-		}
-
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		if err := sendVerificationWebhook(ctx, webhookURL, webhookSecret, req.Email, token); err != nil {
-			log.Error("failed to send verification webhook", sl.Err(err))
-			render.Status(r, http.StatusBadGateway)
-			render.JSON(w, r, resp.Error("user created, but failed to send verification email"))
-
-			if eventLogger != nil {
-				eventLogger.LogEvent(id, "USER_REGISTERED", id, map[string]any{
-					"email": req.Email,
-				})
-			}
 			return
 		}
 

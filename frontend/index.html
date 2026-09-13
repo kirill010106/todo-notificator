@@ -4,11 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ToDo Notificator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script
-      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-      defer
-    ></script>
+    <script src="./tailwind.js"></script>
+    <script src="./alpine.min.js" defer></script>
     <style>
       [x-cloak] {
         display: none !important;
@@ -356,14 +353,6 @@
     <span class="text-xl">⚠️</span>
     <span class="text-sm font-medium">Ваша почта не подтверждена! Напоминания отключены. Для получения писем пройдите по ссылке из нашего email.</span>
   </div>
-  <button 
-    @click="resendVerificationEmail()" 
-    :disabled="resendLoading || resendCooldown > 0"
-    class="w-full sm:w-auto bg-amber-100 hover:bg-amber-200 text-amber-800 disabled:opacity-50 px-4 py-2 rounded-lg text-sm font-bold transition-colors whitespace-nowrap">
-    <span x-show="!resendLoading && resendCooldown === 0">Отправить письмо еще раз</span>
-    <span x-show="resendLoading">Отправка...</span>
-    <span x-show="resendCooldown > 0" x-text="`Отправить через ${resendCooldown}с`"></span>
-  </button>
 </div>
 
                 <!-- POMODORO WIDGET -->
@@ -849,7 +838,6 @@
               </div>
               <button
                 type="submit"
-                :disabled="loadingCreate"
                 class="w-full sm:w-auto self-stretch sm:self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
               >
                 <span x-show="!loadingCreate">+ Добавить</span>
@@ -1249,7 +1237,7 @@
 
     <script>
       // Automatically target local server or production API based on hostname
-      const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
         ? "http://localhost:8082/api/v1"
         : "https://todoapi.chkpnk.ru/api/v1";
 
@@ -1441,7 +1429,6 @@
           },
 
           startPomodoroTimer(seconds) {
-            this.clearPomodoroTimer();
             if (seconds === undefined) return;
             this.pomodoro.timeLeft = seconds;
             this.pomodoro.timerInterval = setInterval(() => {
@@ -1593,8 +1580,7 @@
 
           // Вычисляемые свойства
           get filteredTasks() {
-            if (this.filter === "all") return this.tasks;
-            return this.tasks.filter((t) => t.status === this.filter);
+            return this.tasks.filter((t) => t.status === "pending");
           },
 
           get passwordStrength() {
@@ -1845,15 +1831,9 @@
           },
 
           handleLogout() {
-            this.clearPomodoroTimer();
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
-            localStorage.removeItem("user_email");
             this.isAuthenticated = false;
-            this.tasks = [];
-            this.categories = [];
-            this.stats = null;
-            this.userEmail = "";
             this.showToast("Вы вышли из системы", "info");
           },
 
@@ -2122,9 +2102,8 @@
           },
 
           categoryNameById(categoryId) {
-            const id = Number(categoryId);
-            const category = this.categories.find((c) => Number(c.id) === id);
-            return category ? category.name : "Категория";
+            const category = this.categories.find((c) => c.id === String(categoryId));
+            return category ? category.name : "Без категории";
           },
 
           // Задачи
@@ -2240,7 +2219,6 @@
               if (!response) return;
 
               if (response.status === 204 || response.ok) {
-                this.tasks = this.tasks.filter((t) => t.id !== taskId);
                 this.showToast("Задача удалена", "success");
               } else {
                 const data = await response.json();

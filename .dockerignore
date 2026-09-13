@@ -1,0 +1,29 @@
+# Root .dockerignore
+.git
+.github
+.idea
+.vscode
+.postman
+postman
+
+# Node modules and build outputs
+node_modules
+**/node_modules
+dist
+**/dist
+tmp
+
+# Frontend dirs not needed in Go builds
+frontend
+frontend-react
+docs
+
+# Local binaries and archives
+*.exe
+*.dll
+*.so
+*.tar
+*.zip
+
+# Logs
+*.log
