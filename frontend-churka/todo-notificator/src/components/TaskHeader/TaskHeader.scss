@@ -1,0 +1,129 @@
+@import "../../helpers/helpers";
+
+.task-header {
+  background: var(--primary-gradient);
+  border-radius: rem(24);
+  padding: rem(32);
+  color: white;
+  box-shadow: 0 10px 25px -5px rgba(79, 70, 229, 0.4);
+}
+
+.header-main {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: rem(32);
+
+  @include mobile {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: rem(16);
+  }
+}
+
+.user-info {
+  display: flex;
+  align-items: center;
+  gap: rem(20);
+
+  .avatar {
+    background: rgba(255, 255, 255, 0.2);
+    width: rem(56);
+    height: rem(56);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: rem(16);
+    font-size: rem(24);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+  }
+
+  .user-text {
+    h1 {
+      font-size: rem(28);
+      font-weight: 800;
+      margin: 0;
+      letter-spacing: -0.025em;
+    }
+
+    p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: rem(15);
+    }
+  }
+}
+
+.logout-btn {
+  background: rgba(255, 255, 255, 0.15);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: white;
+  padding: rem(10) rem(20);
+  border-radius: rem(12);
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  backdrop-filter: blur(10px);
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.25);
+    transform: translateY(-1px);
+  }
+
+  @include mobile {
+    width: 100%;
+  }
+}
+
+/* Блок статистики */
+.stats-bar {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: rem(16);
+
+  @include mobile {
+    grid-template-columns: 1fr;
+  }
+}
+
+.stat-card {
+  background: rgba(255, 255, 255, 0.1);
+  padding: rem(16);
+  border-radius: rem(16);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.02);
+    background: rgba(255, 255, 255, 0.15);
+  }
+
+  .stat-value {
+    font-size: rem(24);
+    font-weight: 800;
+    line-height: 1;
+    margin-bottom: rem(4);
+  }
+
+  .stat-label {
+    font-size: rem(12);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    opacity: 0.8;
+    font-weight: 700;
+  }
+
+  /* Выделение выполненных задач */
+  &.success {
+    background: rgba(16, 185, 129, 0.2);
+    border-color: rgba(16, 185, 129, 0.3);
+
+    .stat-value {
+      color: #a7f3d0; // Светло-зеленый акцент
+    }
+  }
+}

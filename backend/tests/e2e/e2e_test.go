@@ -62,6 +62,7 @@ type e2eSuite struct {
 	pg      *tcpostgres.PostgresContainer
 	storage *postgres.Storage
 	api     *httptest.Server
+	webhook *httptest.Server
 	http    *http.Client
 }
 
@@ -141,10 +142,18 @@ func newE2ESuite(ctx context.Context) (*e2eSuite, error) {
 		return nil, fmt.Errorf("apply migrations: %w", err)
 	}
 
+	webhook := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+
 	cfg := &config.Config{
 		AppSecret:       "e2e-app-secret",
 		AccessTokenTTL:  15 * time.Minute,
 		RefreshTokenTTL: 24 * time.Hour,
+		Webhook: config.Webhook{
+			URL:    webhook.URL,
+			Secret: "e2e-webhook-secret",
+		},
 	}
 
 	log := slog.New(slog.DiscardHandler)
@@ -155,6 +164,7 @@ func newE2ESuite(ctx context.Context) (*e2eSuite, error) {
 		pg:      pg,
 		storage: storage,
 		api:     api,
+		webhook: webhook,
 		http:    api.Client(),
 	}, nil
 }
@@ -190,6 +200,9 @@ func (s *e2eSuite) close(ctx context.Context) error {
 	if s.api != nil {
 		s.api.Close()
 	}
+	if s.webhook != nil {
+		s.webhook.Close()
+	}
 	if s.storage != nil {
 		err := s.storage.Close()
 		if err != nil {
@@ -212,7 +225,7 @@ func buildRouter(log *slog.Logger, st *postgres.Storage, cfg *config.Config) htt
 	router.Use(middleware.Recoverer)
 
 	router.Route("/api/v1", func(r chi.Router) {
-		r.Post("/register", register.New(log, st, nil))
+		r.Post("/register", register.New(log, st, cfg.Webhook.URL, cfg.Webhook.Secret))
 		r.Post("/login", login.New(log, st, cfg))
 		r.Post("/refresh", refresh.New(log, st, cfg))
 		r.Get("/verify", verify.New(log, st))
@@ -222,8 +235,8 @@ func buildRouter(log *slog.Logger, st *postgres.Storage, cfg *config.Config) htt
 
 			r.Post("/logout", logout.New(log, st))
 			r.Get("/tasks", get.New(log, st))
-			r.Post("/tasks", save.New(log, st, nil))
-			r.Patch("/tasks/{task_id}", update.New(log, st, nil))
+			r.Post("/tasks", save.New(log, st, cfg.Webhook.URL, cfg.Webhook.Secret))
+			r.Patch("/tasks/{task_id}", update.New(log, st, cfg.Webhook.URL, cfg.Webhook.Secret))
 			r.Delete("/tasks/{task_id}", tasksdelete.New(log, st))
 
 			r.Post("/categories", create.New(log, st))
@@ -235,7 +248,7 @@ func buildRouter(log *slog.Logger, st *postgres.Storage, cfg *config.Config) htt
 			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, st))
 			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, st))
 
-			r.Post("/verify/resend", resend.New(log, st))
+			r.Post("/verify/resend", resend.New(log, st, cfg.Webhook.URL, cfg.Webhook.Secret))
 		})
 	})
 

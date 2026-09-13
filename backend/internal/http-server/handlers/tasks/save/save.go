@@ -1,7 +1,9 @@
 package save
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"log/slog"
@@ -53,7 +55,11 @@ func (r Request) ToDomain(userID int64) domain.Task {
 
 var validate = validator.New()
 
-func New(log *slog.Logger, taskSaver TaskSaver, eventLogger EventLogger) http.HandlerFunc {
+type schedulerWebhookPayload struct {
+	Type string `json:"type"`
+}
+
+func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string, eventLogger EventLogger) http.HandlerFunc {
 
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.tasks.save.New"
@@ -139,12 +145,41 @@ func New(log *slog.Logger, taskSaver TaskSaver, eventLogger EventLogger) http.Ha
 			ID:       id,
 		})
 
-		if eventLogger != nil {
-			eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
-				"title":       req.Title,
-				"category_id": req.CategoryID,
-			})
-		}
+		 if eventLogger != nil {
+            eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
+                "title":       req.Title,
+                "category_id": req.CategoryID,
+            })
+        }
 
+		if webhookURL != "" {
+			go notifyScheduler(l, webhookURL, webhookSecret, "task_created")
+		}
 	}
+}
+
+func notifyScheduler(log *slog.Logger, url, secret, eventType string) {
+	body, err := json.Marshal(schedulerWebhookPayload{Type: eventType})
+	if err != nil {
+		log.Warn("webhook: failed to marshal payload", sl.Err(err))
+		return
+	}
+
+	req, err := http.NewRequest(http.MethodPost, url+"/webhook/task-created", bytes.NewReader(body))
+	if err != nil {
+		log.Warn("webhook: failed to build request", sl.Err(err))
+		return
+	}
+	req.Header.Set("X-Webhook-Secret", secret)
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: 2 * time.Second}
+	res, err := client.Do(req)
+	if err != nil {
+		log.Warn("webhook: notifier unavailable, scheduler will catch up via ticker", sl.Err(err))
+		return
+	}
+	defer res.Body.Close()
+
+	log.Debug("webhook: notifier signaled", slog.Int("status", res.StatusCode), slog.String("type", eventType))
 }

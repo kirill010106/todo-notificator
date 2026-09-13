@@ -1,0 +1,167 @@
+@use "sass:math";
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap");
+
+// --- 1. ТИПОГРАФИКА ---
+$base-font-size: 16px;
+
+@function rem($px) {
+  @if math.is-unitless($px) {
+    $px: $px * 1px;
+  }
+  @return math.div($px, $base-font-size) * 1rem;
+}
+
+// --- 2. ЦВЕТОВАЯ ПАЛИТРА (Из твоих React-компонентов) ---
+:root {
+  // Brand Colors
+  --primary-gradient: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  --primary-indigo: #4f46e5;
+  --primary-purple: #7c3aed;
+
+  // Status Colors
+  --status-pending: #6366f1;
+  --status-pending-bg: #f5f3ff;
+  --status-done: #10b981;
+  --status-done-bg: #ecfdf5;
+  --error-red: #ef4444;
+  --error-bg: #fef2f2;
+
+  // Interface Colors
+  --bg-main: #f3f4f6;
+  --card-bg: #ffffff;
+  --text-main: #111827;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --border-color: #e5e7eb;
+
+  // Interactive
+  --input-bg: #f9fafb;
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.1);
+  --shadow-md: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
+  --shadow-lg: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+// --- 3. АДАПТИВНАЯ ВЕРСТКА ---
+$breakpoint-tablet: 1024px;
+$breakpoint-mobile: 768px;
+$breakpoint-small: 480px;
+
+@mixin tablet {
+  @media (max-width: #{$breakpoint-tablet}) {
+    @content;
+  }
+}
+
+@mixin mobile {
+  @media (max-width: #{$breakpoint-mobile}) {
+    @content;
+  }
+}
+
+@mixin small-mobile {
+  @media (max-width: #{$breakpoint-small}) {
+    @content;
+  }
+}
+
+// --- 4. МИКСИНЫ ---
+
+// Базовая кнопка (градиентная как в TaskForm)
+@mixin btn-primary {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: rem(8);
+  padding: rem(12) rem(24);
+  background: var(--primary-gradient);
+  color: white;
+  border: none;
+  border-radius: rem(12);
+  font-size: rem(16);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+
+  &:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 15px rgba(79, 70, 229, 0.4);
+    filter: brightness(1.1);
+  }
+
+  &:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  &:disabled {
+    background: #d1d5db;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+}
+
+// Базовый инпут
+@mixin input-base {
+  width: 100%;
+  padding: rem(12) rem(16);
+  background-color: var(--input-bg);
+  color: var(--text-main);
+  border: 1.5px solid var(--border-color);
+  border-radius: rem(12);
+  font-size: rem(15);
+  font-family: inherit;
+  outline: none;
+  transition: all 0.2s ease;
+
+  &:focus {
+    border-color: var(--primary-indigo);
+    background-color: white;
+    box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.1);
+  }
+}
+
+// Карточка (для тасков и формы)
+@mixin card-base {
+  background: var(--card-bg);
+  border-radius: rem(20);
+  padding: rem(24);
+  box-shadow: var(--shadow-md);
+  border: 1px solid rgba(0, 0, 0, 0.03);
+}
+
+// Контейнер страницы
+@mixin page-container {
+  max-width: rem(1200);
+  margin: 0 auto;
+  padding: rem(40) rem(20);
+
+  @include mobile {
+    padding: rem(20) rem(15);
+  }
+}
+
+// --- 5. ГЛОБАЛЬНЫЕ СБРОСЫ ---
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 0;
+  min-height: 100vh;
+  background-color: var(--bg-main);
+  color: var(--text-main);
+  font-family: "Inter", sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+h4 {
+  margin: 0;
+}
+
+button {
+  font-family: inherit;
+}

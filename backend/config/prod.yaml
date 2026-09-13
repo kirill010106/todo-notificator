@@ -1,5 +1,8 @@
 env: "prod"
 client_url: "https://todo.chkpnk.ru"
+webhook:
+  url: "http://email-notifier:8084"
+  secret: ""
 http_server:
   address: "0.0.0.0:8082"
   timeout: 4s

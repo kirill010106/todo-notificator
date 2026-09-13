@@ -1,0 +1,13 @@
+env: "local"
+
+app_url: "http://localhost:3030/frontend"
+
+smtp:
+  host: "smtp.mail.ru"
+  port: 587
+  username: ""
+  password: ""
+
+webhook:
+  address: "localhost:8084"
+  secret: ""

@@ -1,0 +1,13 @@
+env: "prod"
+
+app_url: "https://todo.chkpnk.ru"
+
+smtp:
+  host: "smtp.mail.ru"
+  port: 587
+  username: ""
+  password: ""
+
+webhook:
+  address: "0.0.0.0:8084"
+  secret: ""

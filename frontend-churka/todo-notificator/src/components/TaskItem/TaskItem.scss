@@ -1,0 +1,54 @@
+@import "../../helpers/helpers";
+
+.task-date-info {
+  display: flex;
+  flex-wrap: wrap;
+  gap: rem(8);
+  margin-top: rem(12);
+}
+
+.task-time-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: rem(6);
+  padding: rem(4) rem(10);
+  background: #eff6ff; // Можно оставить hex или вынести в переменную $blue-light
+  color: #2563eb;
+  border-radius: rem(8);
+  font-size: rem(12);
+  font-weight: 600;
+  border: 1px solid #dbeafe;
+  white-space: nowrap;
+}
+
+/* Эффект пульсации для активного таймера */
+.timer-active {
+  position: relative;
+
+  &::after {
+    content: "";
+    position: absolute;
+    top: rem(-2);
+    right: rem(-2);
+    width: rem(6);
+    height: rem(6);
+    background: var(--error-red); // Используем переменную из helpers
+    border-radius: 50%;
+    animation: pulse-timer 2s infinite;
+  }
+}
+
+@keyframes pulse-timer {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+  }
+  70% {
+    transform: scale(1);
+    box-shadow: 0 0 0 rem(5) rgba(239, 68, 68, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+  }
+}
