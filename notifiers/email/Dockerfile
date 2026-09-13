@@ -12,12 +12,15 @@ COPY backend/go.mod backend/go.sum* ./backend/
 COPY notifiers/go.mod notifiers/go.sum* ./notifiers/
 COPY notifiers/email/go.mod notifiers/email/go.sum* ./notifiers/email/
 
-RUN cd notifiers/email && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd notifiers/email && go mod download
 
 COPY . .
 
 WORKDIR /app/notifiers/email
-RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/email-notifier ./cmd
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -ldflags="-w -s" -o /go/bin/email-notifier ./cmd
 
 FROM alpine:3.19
 

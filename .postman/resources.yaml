@@ -1,0 +1,8 @@
+# Use this workspace to collaborate
+workspace:
+  id: e0e286ac-e12f-43fe-892f-3160f945f014
+
+localResources:
+  specs:
+    - ../docs/openapi.yaml
+    - ../proto/activity_logger/v1/activity_logger.proto

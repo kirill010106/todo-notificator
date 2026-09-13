@@ -115,16 +115,19 @@ func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []
 	}
 	defer client.Close()
 
-	tlsConfig := &tls.Config{
-		ServerName: s.cfg.Host,
+	if ok, _ := client.Extension("STARTTLS"); ok {
+		tlsConfig := &tls.Config{
+			ServerName: s.cfg.Host,
+		}
+		if err := client.StartTLS(tlsConfig); err != nil {
+			return fmt.Errorf("%s starttls: %w", op, err)
+		}
 	}
 
-	if err := client.StartTLS(tlsConfig); err != nil {
-		return fmt.Errorf("%s starttls: %w", op, err)
-	}
-
-	if err := client.Auth(auth); err != nil {
-		return fmt.Errorf("%s auth: %w", op, err)
+	if ok, _ := client.Extension("AUTH"); ok && auth != nil {
+		if err := client.Auth(auth); err != nil {
+			return fmt.Errorf("%s auth: %w", op, err)
+		}
 	}
 
 	if err := client.Mail(s.cfg.Username); err != nil {

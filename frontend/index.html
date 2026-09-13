@@ -4,11 +4,8 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>ToDo Notificator</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <script
-      src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"
-      defer
-    ></script>
+    <script src="./tailwind.js"></script>
+    <script src="./alpine.min.js" defer></script>
     <style>
       [x-cloak] {
         display: none !important;
@@ -1249,7 +1246,7 @@
 
     <script>
       // Automatically target local server or production API based on hostname
-      const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1')
+      const API_BASE = (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1' || window.location.protocol === 'file:')
         ? "http://localhost:8082/api/v1"
         : "https://todoapi.chkpnk.ru/api/v1";
 

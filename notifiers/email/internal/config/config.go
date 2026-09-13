@@ -24,8 +24,8 @@ type Webhook struct {
 }
 
 type SMTP struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
+	Host     string `yaml:"host" env:"SMTP_HOST" env-default:"smtp.mail.ru"`
+	Port     int    `yaml:"port" env:"SMTP_PORT" env-default:"587"`
 	Username string `yaml:"username" env:"SMTP_USERNAME" env-required:"TRUE"`
 	Password string `yaml:"password" env:"SMTP_PASSWORD" env-required:"TRUE"`
 }

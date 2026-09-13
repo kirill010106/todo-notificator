@@ -143,20 +143,22 @@ func New(log *slog.Logger, userSaver UserSaver, webhookURL, webhookSecret string
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
+		if webhookURL != "" {
+			ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+			defer cancel()
 
-		if err := sendVerificationWebhook(ctx, webhookURL, webhookSecret, req.Email, token); err != nil {
-			log.Error("failed to send verification webhook", sl.Err(err))
-			render.Status(r, http.StatusBadGateway)
-			render.JSON(w, r, resp.Error("user created, but failed to send verification email"))
+			if err := sendVerificationWebhook(ctx, webhookURL, webhookSecret, req.Email, token); err != nil {
+				log.Error("failed to send verification webhook", sl.Err(err))
+				render.Status(r, http.StatusBadGateway)
+				render.JSON(w, r, resp.Error("user created, but failed to send verification email"))
 
-			if eventLogger != nil {
-				eventLogger.LogEvent(id, "USER_REGISTERED", id, map[string]any{
-					"email": req.Email,
-				})
+				if eventLogger != nil {
+					eventLogger.LogEvent(id, "USER_REGISTERED", id, map[string]any{
+						"email": req.Email,
+					})
+				}
+				return
 			}
-			return
 		}
 
 		if eventLogger != nil {
