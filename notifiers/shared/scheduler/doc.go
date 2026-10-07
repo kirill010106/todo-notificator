@@ -1,2 +1,2 @@
-﻿// Package scheduler provides scheduler functionality.
+// Package scheduler provides scheduler functionality.
 package scheduler

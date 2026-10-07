@@ -4,3 +4,7 @@ node_modules/
 tmp/
 CODE_REVIEW.md
 *.exe
+
+# Артефакты покрытия тестами
+coverage.out
+coverage.html
