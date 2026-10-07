@@ -1254,13 +1254,13 @@ func TestGetLatestPendingPayment(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 		SELECT yookassa_payment_id FROM payments
-		WHERE user_id = $1 AND status = 'pending'
+		WHERE user_id = $1 AND status = $2
 		ORDER BY created_at DESC
 		LIMIT 1
 	`)
 
 	mock.ExpectQuery(query).
-		WithArgs(userID).
+		WithArgs(userID, domain.PaymentStatusPending).
 		WillReturnRows(sqlmock.NewRows([]string{"yookassa_payment_id"}).AddRow("yoo-123"))
 
 	paymentID, err := s.GetLatestPendingPayment(context.Background(), userID)

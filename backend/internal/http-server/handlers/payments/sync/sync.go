@@ -73,7 +73,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			render.JSON(w, r, Response{
 				Response:      resp.OK(),
 				IsPremium:     false,
-				PaymentStatus: "pending",
+				PaymentStatus: domain.PaymentStatusPending,
 			})
 			return
 		}
@@ -97,7 +97,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 
 		switch payment.Status {
 		case yoopayment.Succeeded:
-			_, err = checker.UpdatePaymentStatus(r.Context(), paymentID, "succeeded")
+			_, err = checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusSucceeded)
 			if err != nil {
 				log.Error("failed to update payment status to succeeded", sl.Err(err))
 			}
@@ -113,15 +113,20 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			render.JSON(w, r, Response{
 				Response:      resp.OK(),
 				IsPremium:     true,
-				PaymentStatus: "succeeded",
+				PaymentStatus: domain.PaymentStatusSucceeded,
 			})
 
 		case yoopayment.Canceled:
-			_, _ = checker.UpdatePaymentStatus(r.Context(), paymentID, "canceled")
+			if _, err := checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusCanceled); err != nil {
+				log.Error("failed to update payment status to canceled", sl.Err(err), slog.String("payment_id", paymentID))
+				render.Status(r, http.StatusInternalServerError)
+				render.JSON(w, r, resp.Error("failed to update payment status"))
+				return
+			}
 			render.JSON(w, r, Response{
 				Response:      resp.OK(),
 				IsPremium:     false,
-				PaymentStatus: "canceled",
+				PaymentStatus: domain.PaymentStatusCanceled,
 			})
 
 		default:

@@ -42,6 +42,8 @@ func main() {
 	logger.Info("sender created",
 		slog.String("host", cfg.SMTP.Host),
 		slog.Int("port", cfg.SMTP.Port),
+		slog.String("username", cfg.SMTP.Username),
+		slog.String("from", cfg.SMTP.From),
 	)
 
 	sched := scheduler.New(

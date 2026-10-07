@@ -1,4 +1,4 @@
-﻿name: CD Pipeline (Build & Deploy)
+name: CD Pipeline (Build & Deploy)
 
 on:
   push:
@@ -67,6 +67,10 @@ jobs:
     name: Deploy to Production
     needs: build-and-push
     runs-on: ubuntu-latest
+    # Деплой только если в репозитории явно выставлена переменная DEPLOY_ENABLED=true.
+    # Пока переменной нет — джоб скипается и не красит коммиты красным.
+    # Вернуть деплой: Settings → Secrets and variables → Actions → Variables → DEPLOY_ENABLED=true
+    if: vars.DEPLOY_ENABLED == 'true'
     steps:
       - name: Checkout code
         uses: actions/checkout@v4

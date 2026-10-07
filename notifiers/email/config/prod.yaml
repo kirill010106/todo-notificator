@@ -3,10 +3,12 @@ env: "prod"
 app_url: "https://todo.chkpnk.ru"
 
 smtp:
-  host: "smtp.mail.ru"
+  host: "smtp-relay.brevo.com"
   port: 587
   username: ""
   password: ""
+  from: ""
+  sender_name: "ToDoNotificator"
 
 webhook:
   address: "0.0.0.0:8084"

@@ -11,6 +11,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"github.com/kirill010106/todo-notificator/internal/domain"
 	yoopayment "github.com/rvinnie/yookassa-sdk-go/yookassa/payment"
 	yoowebhook "github.com/rvinnie/yookassa-sdk-go/yookassa/webhook"
 	"github.com/stretchr/testify/mock"
@@ -162,4 +163,111 @@ func TestWebhook_HandlesAPIFailureGracefully(t *testing.T) {
 	require.Equal(t, http.StatusBadGateway, w.Code)
 	updater.AssertNotCalled(t, "UpdatePaymentStatus")
 	updater.AssertNotCalled(t, "GrantPremium")
+}
+
+func TestWebhook_CanceledUpdateFails_Returns500(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	updater := new(mockPaymentUpdater)
+	finder := new(mockPaymentFinder)
+
+	event := yoowebhook.WebhookEvent[yoopayment.Payment]{
+		Event: yoowebhook.EventPaymentCanceled,
+		Object: yoopayment.Payment{
+			ID:     "pay-cancel-fail",
+			Status: yoopayment.Canceled,
+		},
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	// Запись отмены падает: обработчик обязан вернуть 5xx, чтобы шлюз повторил доставку.
+	// ВАЖНО: именно int64(0) — мок делает args.Get(0).(int64), голый 0 паникует.
+	updater.On("UpdatePaymentStatus", mock.Anything, "pay-cancel-fail", "canceled").
+		Return(int64(0), errors.New("db is down"))
+
+	h := New(log, updater, finder)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/yookassa", bytes.NewBuffer(body))
+	req.RemoteAddr = "127.0.0.1:443" // loopback: IP-фильтр пропускает
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusInternalServerError, w.Code)
+	updater.AssertExpectations(t)
+	// Отмена не должна ничего начислять.
+	updater.AssertNotCalled(t, "GrantPremium")
+	// Для canceled мы не ходим в API YooKassa — платёж не мог быть успешным.
+	finder.AssertNotCalled(t, "FindPayment")
+}
+
+func TestWebhook_CanceledUpdateSucceeds_Returns200(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	updater := new(mockPaymentUpdater)
+	finder := new(mockPaymentFinder)
+
+	event := yoowebhook.WebhookEvent[yoopayment.Payment]{
+		Event: yoowebhook.EventPaymentCanceled,
+		Object: yoopayment.Payment{
+			ID:     "pay-cancel-ok",
+			Status: yoopayment.Canceled,
+		},
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	updater.On("UpdatePaymentStatus", mock.Anything, "pay-cancel-ok", "canceled").
+		Return(int64(7), nil)
+
+	h := New(log, updater, finder)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/yookassa", bytes.NewBuffer(body))
+	req.RemoteAddr = "127.0.0.1:443"
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	updater.AssertExpectations(t)
+	updater.AssertNotCalled(t, "GrantPremium")
+}
+
+// Строковые значения статусов платежа должны совпадать с константами YooKassa.
+// Регрессия: в webhook-хендлере стояло "cancelled" (две буквы l) вместо "canceled",
+// из-за чего отмены, пришедшие вебхуком и через sync, писались в БД по-разному.
+func TestPaymentStatusConstantsMatchYooKassaSDK(t *testing.T) {
+	require.Equal(t, string(yoopayment.Pending), domain.PaymentStatusPending)
+	require.Equal(t, string(yoopayment.Succeeded), domain.PaymentStatusSucceeded)
+	require.Equal(t, string(yoopayment.Canceled), domain.PaymentStatusCanceled)
+}
+
+// Неизвестное событие (например, refund.succeeded) не должно ломать обработку:
+// подтверждаем доставку 200 и ничего не меняем.
+func TestWebhook_UnknownEvent_Returns200WithoutChanges(t *testing.T) {
+	log := slog.New(slog.NewTextHandler(io.Discard, nil))
+	updater := new(mockPaymentUpdater)
+	finder := new(mockPaymentFinder)
+
+	event := yoowebhook.WebhookEvent[yoopayment.Payment]{
+		Event: yoowebhook.EventRefundSucceeded,
+		Object: yoopayment.Payment{
+			ID:     "pay-refund",
+			Status: yoopayment.Succeeded,
+		},
+	}
+	body, err := json.Marshal(event)
+	require.NoError(t, err)
+
+	h := New(log, updater, finder)
+
+	req := httptest.NewRequest(http.MethodPost, "/webhooks/yookassa", bytes.NewBuffer(body))
+	req.RemoteAddr = "127.0.0.1:443"
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+	updater.AssertNotCalled(t, "UpdatePaymentStatus")
+	updater.AssertNotCalled(t, "GrantPremium")
+	finder.AssertNotCalled(t, "FindPayment")
 }

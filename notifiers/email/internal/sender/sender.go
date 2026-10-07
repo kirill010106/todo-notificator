@@ -4,6 +4,7 @@ import (
 	"crypto/tls"
 	"fmt"
 	"log/slog"
+	"mime"
 	"net/smtp"
 	"strings"
 	"time"
@@ -27,6 +28,20 @@ func New(log *slog.Logger, cfg config.SMTP, formatter *formatter.Formatter) *Sen
 	}
 }
 
+func (s *Sender) fromEmail() string {
+	if s.cfg.From != "" {
+		return s.cfg.From
+	}
+	return s.cfg.Username
+}
+
+func (s *Sender) senderName() string {
+	if s.cfg.SenderName != "" {
+		return s.cfg.SenderName
+	}
+	return "ToDoNotificator"
+}
+
 func (s *Sender) Send(user domain.User, task domain.Task, interval time.Duration) error {
 	const op = "sender.Send"
 	body, err := s.formatter.Format(task, interval)
@@ -41,6 +56,7 @@ func (s *Sender) Send(user domain.User, task domain.Task, interval time.Duration
 	}
 
 	s.log.Info("email sent",
+		slog.String("from", s.fromEmail()),
 		slog.String("to", user.Email),
 		slog.Int64("task_id", task.ID),
 		slog.Duration("interval", interval),
@@ -85,7 +101,7 @@ func (s *Sender) sendWithTLS(addr string, auth smtp.Auth, to string, msg []byte)
 		return fmt.Errorf("%s auth: %w", op, err)
 	}
 
-	if err := client.Mail(s.cfg.Username); err != nil {
+	if err := client.Mail(s.fromEmail()); err != nil {
 		return fmt.Errorf("%s mail from: %w", op, err)
 	}
 
@@ -127,7 +143,7 @@ func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []
 		return fmt.Errorf("%s auth: %w", op, err)
 	}
 
-	if err := client.Mail(s.cfg.Username); err != nil {
+	if err := client.Mail(s.fromEmail()); err != nil {
 		return fmt.Errorf("%s mail from: %w", op, err)
 	}
 
@@ -152,9 +168,10 @@ func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []
 func (s *Sender) buildMessage(to, subject, body string) []byte {
 	var sb strings.Builder
 
-	sb.WriteString(fmt.Sprintf("From: ToDoNotificator <%s>\r\n", s.cfg.Username))
+	from := fmt.Sprintf("%s <%s>", mime.QEncoding.Encode("utf-8", s.senderName()), s.fromEmail())
+	sb.WriteString(fmt.Sprintf("From: %s\r\n", from))
 	sb.WriteString(fmt.Sprintf("To: %s\r\n", to))
-	sb.WriteString(fmt.Sprintf("Subject: %s\r\n", subject))
+	sb.WriteString(fmt.Sprintf("Subject: %s\r\n", mime.QEncoding.Encode("utf-8", subject)))
 	sb.WriteString("MIME-Version: 1.0\r\n")
 	sb.WriteString("Content-Type: text/html; charset=\"UTF-8\"\r\n")
 	sb.WriteString("\r\n")
@@ -177,6 +194,7 @@ func (s *Sender) SendVerificationEmail(email, token string) error {
 	}
 
 	s.log.Info("verification email sent",
+		slog.String("from", s.fromEmail()),
 		slog.String("to", email),
 	)
 	return nil

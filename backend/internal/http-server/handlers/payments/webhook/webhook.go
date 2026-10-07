@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	yoopayment "github.com/rvinnie/yookassa-sdk-go/yookassa/payment"
 	webhook "github.com/rvinnie/yookassa-sdk-go/yookassa/webhook"
@@ -103,7 +104,8 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 
 		log.Info("received webhook", slog.String("event", string(event.Event)), slog.String("payment_id", event.Object.ID))
 
-		if event.Event == webhook.EventPaymentSucceeded {
+		switch event.Event {
+		case webhook.EventPaymentSucceeded:
 			// Verify payment directly with YooKassa API if finder is configured
 			if finder != nil {
 				verifiedPayment, err := finder.FindPayment(r.Context(), event.Object.ID)
@@ -121,7 +123,7 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 				}
 			}
 
-			userID, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, "succeeded")
+			userID, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusSucceeded)
 			if err != nil {
 				log.Error("failed to update payment status", sl.Err(err))
 				w.WriteHeader(http.StatusInternalServerError)
@@ -137,10 +139,18 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 			}
 
 			log.Info("payment succeeded and premium granted", slog.Int64("user_id", userID))
-		} else if event.Event == webhook.EventPaymentCanceled {
-			_, _ = updater.UpdatePaymentStatus(r.Context(), event.Object.ID, "canceled")
+		case webhook.EventPaymentCanceled:
+			if _, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusCanceled); err != nil {
+				log.Error("failed to update payment status to canceled",
+					sl.Err(err),
+					slog.String("payment_id", event.Object.ID))
+				http.Error(w, "failed to update payment status", http.StatusInternalServerError)
+				return
+			}
 		}
 
+		// Успешная обработка (включая события, которые нас не касаются): подтверждаем доставку,
+		// чтобы YooKassa не повторяла запрос. До этой точки доходят только успешные пути.
 		w.WriteHeader(http.StatusOK)
 	}
 }

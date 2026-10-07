@@ -5,6 +5,8 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+
+	"github.com/kirill010106/todo-notificator/internal/domain"
 )
 
 func (s *Storage) CreatePayment(ctx context.Context, yookassaID string, userID int64, amount string, currency string, status string, description string) (int64, error) {
@@ -65,12 +67,12 @@ func (s *Storage) GetLatestPendingPayment(ctx context.Context, userID int64) (st
 
 	query := `
 		SELECT yookassa_payment_id FROM payments
-		WHERE user_id = $1 AND status = 'pending'
+		WHERE user_id = $1 AND status = $2
 		ORDER BY created_at DESC
 		LIMIT 1
 	`
 	var paymentID string
-	err := s.DB.QueryRowContext(ctx, query, userID).Scan(&paymentID)
+	err := s.DB.QueryRowContext(ctx, query, userID, domain.PaymentStatusPending).Scan(&paymentID)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return "", nil
