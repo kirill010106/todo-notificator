@@ -9,6 +9,7 @@ import (
 
 type Response struct {
 	Status           string            `json:"status"`
+	Code             string            `json:"code,omitempty"`
 	Error            string            `json:"error,omitempty"`
 	ValidationErrors map[string]string `json:"validation_errors,omitempty"`
 }
@@ -27,6 +28,14 @@ func OK() Response {
 func Error(msg string) Response {
 	return Response{
 		Status: StatusError,
+		Error:  msg,
+	}
+}
+
+func ErrorCode(msg string, code string) Response {
+	return Response{
+		Status: StatusError,
+		Code:   code,
 		Error:  msg,
 	}
 }

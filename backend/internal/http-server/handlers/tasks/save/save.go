@@ -14,6 +14,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -34,6 +35,7 @@ type Response struct {
 
 type TaskSaver interface {
 	SaveTask(ctx context.Context, t domain.Task) (int64, error)
+	CountActiveReminders(ctx context.Context, userID int64) (int, error)
 }
 
 type EventLogger interface {
@@ -104,10 +106,28 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			return
 		}
 
-		if req.ReminderAt != nil && req.ReminderAt.Before(time.Now()) {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("reminder_at must be in the future"))
-			return
+		if req.ReminderAt != nil {
+			if req.ReminderAt.Before(time.Now()) {
+				render.Status(r, http.StatusBadRequest)
+				render.JSON(w, r, resp.Error("reminder_at must be in the future"))
+				return
+			}
+			isPremium, _ := auth.GetPremiumStatus(r.Context())
+			if !isPremium {
+				remindersCount, err := taskSaver.CountActiveReminders(r.Context(), userID)
+				if err != nil {
+					l.Error("failed to count active reminders", sl.Err(err))
+					render.Status(r, http.StatusInternalServerError)
+					render.JSON(w, r, resp.Error("internal server error"))
+					return
+				}
+				if remindersCount >= 3 {
+					l.Warn("active reminders limit reached for free user", slog.Int("count", remindersCount))
+					render.Status(r, http.StatusForbidden)
+					render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 активных напоминаний. Перейдите на Премиум для снятия ограничений"))
+					return
+				}
+			}
 		}
 
 		l.Debug("request body decoded", slog.Any("request", req))

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"embed"
 	"fmt"
+	"strings"
 	"text/template"
 	"time"
 
@@ -65,7 +66,8 @@ func (f *Formatter) Format(task domain.Task, interval time.Duration) (string, er
 
 // Verification generates the HTML body for the verification email
 func (f *Formatter) Verification(token string) (string, error) {
-	link := fmt.Sprintf("%s/?token=%s", f.appURL, token)
+	baseURL := strings.TrimRight(f.appURL, "/")
+	link := fmt.Sprintf("%s/?token=%s", baseURL, token)
 
 	data := verificationTemplateData{
 		VerificationLink: link,

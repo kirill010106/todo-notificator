@@ -13,6 +13,116 @@
       [x-cloak] {
         display: none !important;
       }
+      @keyframes burnRumble {
+        0%, 100% { transform: translate(0, 0) rotate(0deg); }
+        20% { transform: translate(-3px, 2px) rotate(-1.5deg); }
+        40% { transform: translate(3px, -2px) rotate(1.5deg); }
+        60% { transform: translate(-2px, -3px) rotate(-1deg); }
+        80% { transform: translate(2px, 3px) rotate(1.2deg); }
+      }
+      .task-burning {
+        animation: burnRumble 0.35s ease-in-out infinite alternate !important;
+        box-shadow: 0 0 30px rgba(239, 68, 68, 0.9), inset 0 0 15px rgba(249, 115, 22, 0.7) !important;
+        border-color: #ef4444 !important;
+        filter: contrast(1.3) brightness(0.95);
+      }
+      @keyframes shimmerWave {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(250%); }
+      }
+      .shimmer-bar {
+        position: relative;
+        overflow: hidden;
+      }
+      .shimmer-bar::after {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+        animation: shimmerWave 2.4s infinite cubic-bezier(0.4, 0, 0.2, 1);
+      }
+      @keyframes breathingHaloFocus {
+        0%, 100% {
+          opacity: 0.65;
+          transform: scale(0.985);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.02);
+        }
+      }
+      .breathing-halo-focus {
+        filter: drop-shadow(0 0 14px rgba(239, 68, 68, 0.75));
+        animation: breathingHaloFocus 3.5s ease-in-out infinite;
+        will-change: transform, opacity;
+        transform-origin: center;
+      }
+      @keyframes breathingHaloBreak {
+        0%, 100% {
+          opacity: 0.65;
+          transform: scale(0.985);
+        }
+        50% {
+          opacity: 1;
+          transform: scale(1.02);
+        }
+      }
+      .breathing-halo-break {
+        filter: drop-shadow(0 0 14px rgba(59, 130, 246, 0.75));
+        animation: breathingHaloBreak 3.5s ease-in-out infinite;
+        will-change: transform, opacity;
+        transform-origin: center;
+      }
+      @keyframes floatUpFade {
+        0% {
+          opacity: 0;
+          transform: translateY(0) scale(0.7);
+        }
+        25% {
+          opacity: 1;
+          transform: translateY(-14px) scale(1.15);
+        }
+        70% {
+          opacity: 1;
+          transform: translateY(-30px) scale(1.0);
+        }
+        100% {
+          opacity: 0;
+          transform: translateY(-50px) scale(0.9);
+        }
+      }
+      .floating-xp {
+        position: fixed;
+        pointer-events: none;
+        z-index: 9999;
+        font-weight: 800;
+        text-shadow: 0 2px 10px rgba(0,0,0,0.3);
+        animation: floatUpFade 1.2s cubic-bezier(0.2, 0.8, 0.2, 1) forwards;
+      }
+      @keyframes bouncyCheckbox {
+        0% { transform: scale(1); }
+        35% { transform: scale(0.72); }
+        65% { transform: scale(1.28); }
+        100% { transform: scale(1); }
+      }
+      .bouncy-btn {
+        animation: bouncyCheckbox 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+      }
+      @keyframes strokeDraw {
+        0% { stroke-dashoffset: 24; }
+        100% { stroke-dashoffset: 0; }
+      }
+      .checkmark-svg path, .checkmark-svg polyline {
+        stroke-dasharray: 24;
+        animation: strokeDraw 0.28s cubic-bezier(0.4, 0, 0.2, 1) forwards;
+      }
+      @keyframes pulseGlow {
+        0%, 100% { opacity: 0.85; transform: scale(1); }
+        50% { opacity: 1; transform: scale(1.08); filter: drop-shadow(0 0 10px rgba(245, 158, 11, 0.75)); }
+      }
+      .flame-glow {
+        animation: pulseGlow 1.8s ease-in-out infinite;
+      }
     </style>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg">
   </head>
@@ -180,7 +290,7 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
                   type="email"
-                  x-model="loginForm.email"
+                  x-model="authForm.email"
                   placeholder="you@example.com"
                   required
                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -190,18 +300,18 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
                 <div class="relative">
                   <input
-                    :type="showLoginPassword ? 'text' : 'password'"
-                    x-model="loginForm.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    x-model="authForm.password"
                     placeholder="••••••••"
                     required
                     class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm pr-10"
                   />
                   <button
                     type="button"
-                    @click="showLoginPassword = !showLoginPassword"
+                    @click="showPassword = !showPassword"
                     class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <span x-text="showLoginPassword ? '🙈' : '👁️'"></span>
+                    <span x-text="showPassword ? '🙈' : '👁️'"></span>
                   </button>
                 </div>
               </div>
@@ -225,7 +335,7 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Email</label>
                 <input
                   type="email"
-                  x-model="registerForm.email"
+                  x-model="authForm.email"
                   placeholder="you@example.com"
                   required
                   class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
@@ -235,8 +345,8 @@
                 <label class="block text-sm font-medium text-gray-700 mb-1">Пароль</label>
                 <div class="relative">
                   <input
-                    :type="showRegisterPassword ? 'text' : 'password'"
-                    x-model="registerForm.password"
+                    :type="showPassword ? 'text' : 'password'"
+                    x-model="authForm.password"
                     placeholder="Минимум 8 символов"
                     required
                     minlength="8"
@@ -244,16 +354,16 @@
                   />
                   <button
                     type="button"
-                    @click="showRegisterPassword = !showRegisterPassword"
+                    @click="showPassword = !showPassword"
                     class="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                   >
-                    <span x-text="showRegisterPassword ? '🙈' : '👁️'"></span>
+                    <span x-text="showPassword ? '🙈' : '👁️'"></span>
                   </button>
                 </div>
                 <!-- Индикатор силы пароля -->
                 <div
                   class="mt-2 flex gap-1"
-                  x-show="registerForm.password.length > 0"
+                  x-show="authForm.password.length > 0"
                 >
                   <div
                     :class="passwordStrength >= 1 ? 'bg-red-400' : 'bg-gray-200'"
@@ -312,7 +422,7 @@
         </div>
         <div class="max-w-6xl mx-auto px-4 mt-8 pt-8 border-t border-gray-800 text-center md:text-left flex flex-col md:flex-row justify-between items-center text-gray-500">
           <p>© 2026 ToDo Notificator. Все права защищены.</p>
-          <p class="mt-2 md:mt-0">Сервис работает в бета-тесте</p>
+          <p @click="handleBetaClick()" class="mt-2 md:mt-0 cursor-pointer select-none hover:text-gray-400 transition-colors" title="ToDo Notificator Beta (5 кликов для Dev Mode)">Сервис работает в бета-тесте</p>
         </div>
       </footer>
     </div>
@@ -322,7 +432,7 @@
       <!-- Верхняя панель (Navbar) -->
       <nav class="bg-white shadow-sm border-b border-gray-200">
         <div
-          class="max-w-4xl mx-auto px-4 py-3 flex items-center justify-between"
+          class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-3 flex items-center justify-between"
         >
           <div class="flex items-center gap-2">
             <span class="text-xl">✅</span>
@@ -336,7 +446,45 @@
               ></span>
               <span x-show="isVerified" class="text-green-500 text-sm" title="Почта подтверждена">✓</span>
               <span x-show="!isVerified" class="text-amber-500 text-sm cursor-help" title="Почта не подтверждена. Проверьте ваш email!">⚠️</span>
+              <span x-show="isPremium" class="ml-1.5 inline-flex items-center px-2 py-0.5 rounded text-xs font-bold bg-gradient-to-r from-amber-400 to-yellow-500 text-white shadow-xs">👑 PRO</span>
             </div>
+            <button
+              x-show="!isPremium"
+              @click="scrollToSubscription()"
+              class="hidden sm:inline-flex items-center gap-1 text-xs bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white font-bold px-2.5 py-1.5 rounded-lg shadow-sm transition-all"
+            >
+              <span>⭐ Премиум 49 ₽</span>
+            </button>
+            <!-- Баланс монет & Кнопка Магазина -->
+            <button 
+              @click="openShopModal()"
+              class="inline-flex items-center gap-1.5 text-xs bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold px-2.5 py-1.5 rounded-lg border border-amber-200 transition-colors shadow-xs"
+              title="Магазин наград">
+              <span>🪙</span>
+              <span x-text="coins"></span>
+              <span class="hidden md:inline text-amber-700 font-medium">коинов</span>
+            </button>
+
+            <!-- Кнопка Достижений -->
+            <button
+              @click="openAchievementsModal()"
+              class="inline-flex items-center gap-1.5 text-xs bg-indigo-50 hover:bg-indigo-100 text-indigo-700 font-semibold px-2.5 py-1.5 rounded-lg border border-indigo-200 transition-colors shadow-xs"
+              title="Зал достижений"
+            >
+              <span>🏆</span>
+              <span class="hidden md:inline">Достижения</span>
+              <span class="bg-indigo-200 text-indigo-800 text-[10px] px-1.5 py-0.2 rounded-full font-bold" x-text="`${unlockedAchievementsCount}/${totalAchievementsCount}`"></span>
+            </button>
+
+            <!-- Тумблер звука -->
+            <button
+              @click="toggleSound()"
+              class="p-1.5 text-gray-500 hover:text-gray-800 hover:bg-gray-100 rounded-lg transition-colors text-base"
+              :title="soundEnabled ? 'Звуковые эффекты включены' : 'Звук выключен'"
+            >
+              <span x-text="soundEnabled ? '🔊' : '🔇'"></span>
+            </button>
+
             <button
               @click="logout()"
               class="text-sm text-red-500 hover:text-red-700 font-medium flex items-center gap-1"
@@ -349,7 +497,8 @@
       </nav>
 
       <!-- Основной контент -->
-      <main class="flex-1 max-w-4xl mx-auto w-full px-4 py-6">
+      <main class="flex-1 max-w-7xl mx-auto w-full px-4 sm:px-6 lg:px-8 py-6">
+        <!-- Уведомление о неподтвержденной почте -->
         <!-- Уведомление о неподтвержденной почте -->
         <div x-cloak x-show="!isVerified" class="bg-amber-50 border border-amber-200 text-amber-700 px-4 py-3 rounded-xl mb-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3">
   <div class="flex items-center gap-2">
@@ -366,317 +515,104 @@
   </button>
 </div>
 
-                <!-- POMODORO WIDGET -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+        <!-- 2-COLUMN DASHBOARD GRID -->
+        <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
+          <!-- LEFT COLUMN: Рабочая область (Задачи, Категории, Фильтры, Логи) -->
+          <div class="lg:col-span-7 xl:col-span-8 space-y-6">
+            <!-- Создание задачи -->
+            <!-- Создание задачи -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
+          <h2 class="text-lg font-semibold text-gray-800 mb-4">Новая задача</h2>
+          <form @submit.prevent="createTask()" class="space-y-3">
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div class="md:col-span-6">
+                <label class="block text-[11px] font-semibold text-gray-500 mb-1">Название задачи *</label>
+                <input
+                  type="text"
+                  x-model="newTask.title"
+                  placeholder="Что нужно сделать?"
+                  required
+                  maxlength="255"
+                  class="w-full h-11 px-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
+              </div>
+              <div class="md:col-span-3">
+                <label class="block text-[11px] font-semibold text-gray-500 mb-1">Дедлайн</label>
+                <input
+                  type="datetime-local"
+                  x-model="newTask.deadline"
+                  class="w-full h-11 px-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-gray-700"
+                />
+              </div>
+              <div class="md:col-span-3">
+                <label class="block text-[11px] font-semibold text-gray-500 mb-1 flex justify-between">
+                  <span>Напомнить</span>
+                  <span class="text-[10px] text-gray-400 font-normal" x-text="isPremium ? '👑 PRO ∞' : 'Free: до 3 акт.'"></span>
+                </label>
+                <input
+                  type="datetime-local"
+                  x-model="newTask.reminder_at"
+                  :disabled="!isVerified"
+                  :title="!isVerified ? 'Подтвердите email для получения напоминаний' : ''"
+                  class="w-full h-11 px-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-xs text-gray-700 disabled:opacity-50"
+                />
+              </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-3 items-end">
+              <div class="md:col-span-6">
+                <label class="block text-[11px] font-semibold text-gray-500 mb-1">Описание (необязательно)</label>
+                <input
+                  type="text"
+                  x-model="newTask.description"
+                  placeholder="Детали или ссылка"
+                  maxlength="2000"
+                  class="w-full h-11 px-4 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm"
+                />
+              </div>
+              <div class="md:col-span-3">
+                <label class="block text-[11px] font-semibold text-gray-500 mb-1">Категория</label>
+                <select
+                  x-model="newTask.category_id"
+                  class="w-full h-11 px-3 border border-gray-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-indigo-500 text-sm text-gray-700 bg-white"
+                >
+                  <option :value="null">Без категории</option>
+                  <template x-for="cat in categories" :key="cat.id">
+                    <option :value="cat.id" x-text="cat.name"></option>
+                  </template>
+                </select>
+              </div>
+              <div class="md:col-span-3">
+                <button
+                  type="submit"
+                  :disabled="loadingCreate"
+                  class="w-full h-11 bg-indigo-600 hover:bg-indigo-700 disabled:bg-indigo-300 text-white font-bold px-4 rounded-xl transition shadow-xs flex items-center justify-center gap-1.5"
+                >
+                  <span x-show="!loadingCreate"><span>+</span> Добавить задачу</span>
+                  <span x-show="loadingCreate">Добавление...</span>
+                </button>
+              </div>
+            </div>
+          </form>
+        </div>
+
+            <!-- Категории -->
+            <!-- Категории -->
+        <div
+          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
+        >
           <div class="flex items-center justify-between mb-4">
-            <h2 class="text-lg font-semibold text-gray-800">
-              Pomodoro Таймер
-              <span x-show="pomodoro.activeSession && pomodoro.activeSession.task_id" class="text-sm font-normal text-gray-500 mx-2" x-text="'Фокус: ' + (pomodoro.taskTitle || 'Задача #' + pomodoro.activeSession.task_id)"></span>
-            </h2>
-            <span x-show="pomodoro.completedCount > 0" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold" x-text="'🍅 x ' + pomodoro.completedCount"></span>
-          </div>
-          
-          <!-- Start Screen -->
-          <div x-show="!pomodoro.activeSession" 
-               x-transition:enter="transition-all duration-500 ease-out" 
-               x-transition:enter-start="opacity-0 scale-95" 
-               x-transition:enter-end="opacity-100 scale-100" 
-               x-transition:leave="transition-all duration-300 ease-in absolute w-full" 
-               x-transition:leave-start="opacity-100 scale-100" 
-               x-transition:leave-end="opacity-0 scale-95"
-               class="relative bg-indigo-50/50 border border-indigo-100 rounded-3xl p-8 flex flex-col items-center justify-center gap-5 w-full min-h-[14rem]">
-            <div class="bg-indigo-100 p-4 rounded-full text-indigo-500 mb-2 text-2xl">🍅</div>
-            <h3 class="text-xl font-bold text-indigo-900 mb-1 text-center">Готовы сфокусироваться?</h3>
-            <button @click="startPomodoro()" class="bg-indigo-600 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-md hover:-translate-y-0.5 mt-2">
-              Свободный Помодоро
-            </button>
-            <p class="text-xs text-indigo-500 mt-2 text-center max-w-sm">Или нажмите 🍅 на конкретной задаче ниже, чтобы запустить жесткий режим.</p>
-          </div>
-
-          <!-- Active Timer -->
-          <div x-show="pomodoro.activeSession" 
-               x-transition:enter="transition-all duration-500 delay-300 ease-out" 
-               x-transition:enter-start="opacity-0 scale-105" 
-               x-transition:enter-end="opacity-100 scale-100" 
-               x-transition:leave="transition-all duration-300 ease-in absolute w-full" 
-               x-transition:leave-start="opacity-100 scale-100" 
-               x-transition:leave-end="opacity-0 scale-95"
-               class="relative border bg-white rounded-3xl p-8 flex flex-col items-center justify-center gap-6 shadow-sm min-h-[16rem]">
-            <div class="absolute top-6 left-6 text-sm font-bold uppercase tracking-wider" :class="pomodoro.mode === 'focus' ? 'text-red-500' : 'text-blue-500'" x-text="pomodoro.mode === 'focus' ? 'ФОКУС' : 'ПЕРЕРЫВ'"></div>
-            
-            <div class="mt-4 text-[4rem] sm:text-[5rem] font-mono font-bold leading-none" :class="pomodoro.mode === 'focus' ? 'text-red-600' : 'text-blue-600'" x-text="formatPomodoroTime()"></div>
-            
-            <div class="flex flex-col sm:flex-row gap-3 w-full sm:w-auto">
-              <template x-if="pomodoro.mode === 'focus'">
-                <button @click="clickStopPomodoro()" class="w-full sm:w-auto bg-red-500 hover:bg-red-600 text-white px-6 py-2.5 rounded-xl font-bold shadow-sm transition block">
-                  Остановить
-                </button>
-              </template>
-              <template x-if="pomodoro.mode === 'break'">
-                 <div class="flex flex-col sm:flex-row gap-3 w-full">
-                   <button @click="returnToWork()" class="w-full sm:w-auto bg-blue-600 hover:bg-blue-700 text-white px-6 py-2.5 border border-transparent rounded-xl font-bold shadow-sm transition block">
-                     Продолжить работу
-                   </button>
-                   <button @click="finishPomodoroSession('completed', false)" class="w-full sm:w-auto bg-white text-gray-500 hover:bg-gray-100 px-4 py-2.5 border border-gray-200 rounded-xl font-bold shadow-sm transition block">
-                     Закончить
-                   </button>
-                 </div>
-              </template>
+            <h2 class="text-lg font-semibold text-gray-800">Категории</h2>
+            <div class="flex items-center gap-2">
+              <span x-show="!isPremium" class="text-xs font-semibold px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 border border-blue-100" x-text="`Лимит: ${categories.length}/3 (Free)`"></span>
+              <span x-show="isPremium" class="text-xs font-bold px-2.5 py-1 rounded-full bg-amber-50 text-amber-700 border border-amber-200 flex items-center gap-1">
+                <span>👑</span>
+                <span x-text="`Категорий: ${categories.length} (Безлимитно PRO)`"></span>
+              </span>
             </div>
           </div>
-        </div>
-
-        <!-- Модалка досрочной остановки -->
-        <div x-show="pomodoro.showStopModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-          <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" @click.outside="pomodoro.showStopModal = false">
-            <div class="p-6">
-              <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-2xl mb-4">⚠️</div>
-              <h3 class="text-xl font-bold text-gray-900 mb-2">Досрочная остановка</h3>
-              <p class="text-gray-600 text-sm mb-6">Вы в режиме жесткой фокусировки на задаче. Отказаться просто так нельзя. Выберите действие:</p>
-              <div class="space-y-3">
-                <button 
-                  x-show="pomodoro.activeSession && (pomodoro.activeSession.breaks_used === undefined || pomodoro.activeSession.breaks_used === 0)"
-                  @click="extraPauseAction()" 
-                  class="w-full text-left bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl transition-colors">
-                  <span class="font-bold block">1. Взять дополнительную паузу</span>
-                  <span class="text-xs opacity-80 mt-1 block">5 минут передышки (1 попытка на помидорку)</span>
-                </button>
-                <button 
-                  @click="finishPomodoroSession('completed', true)" 
-                  class="w-full text-left bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded-xl transition-colors">
-                  <span class="font-bold block">2. Пометить задачу как выполненную</span>
-                  <span class="text-xs opacity-80 mt-1 block">Уже выполнено? Верим вам.</span>
-                </button>
-                <button 
-                  @click="finishPomodoroSession('abandoned', true)" 
-                  class="w-full text-left bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 px-4 py-3 rounded-xl transition-colors">
-                  <span class="font-bold block">3. Сдаться</span>
-                  <span class="text-xs opacity-80 mt-1 block">Помидорка провалена, задача сжигается.</span>
-                </button>
-              </div>
-              <div class="mt-6 flex justify-end">
-                <button @click="pomodoro.showStopModal = false" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium">Отмена, продолжить таймер</button>
-              </div>
-            </div>
-          </div>
-        </div><!-- Статистика -->
-        <div
-          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
-        >
-          <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Статистика</h2>
-              <p class="text-xs text-gray-500 mt-1">
-                Данные подтягиваются из профиля пользователя
-              </p>
-            </div>
-            <div class="flex items-center gap-2 self-start sm:self-auto">
-              <button
-                @click="loadStats()"
-                class="text-sm text-blue-600 hover:text-blue-800 flex items-center gap-1"
-                title="Обновить статистику"
-              >
-                <span :class="loadingStats ? 'animate-spin' : ''">↻</span>
-                Обновить
-              </button>
-              <button
-                @click="toggleStatsDebug()"
-                class="text-sm text-gray-500 hover:text-gray-700"
-                title="Служебный режим"
-              >
-                Debug
-              </button>
-            </div>
-          </div>
-
-          <div
-            x-show="loadingStats && !stats"
-            class="text-sm text-gray-400 mt-4"
-          >
-            Загрузка статистики...
-          </div>
-
-          <div x-show="stats" class="grid grid-cols-2 sm:grid-cols-3 gap-3 mt-4">
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Очки</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.points)"
-              ></div>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Уровень</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.level)"
-              ></div>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Помодоро</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.total_pomodoros)"
-              ></div>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Сожжённые задачи</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.total_burnt_tasks)"
-              ></div>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Текущий стрик</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.current_streak)"
-              ></div>
-            </div>
-            <div class="bg-gray-50 border border-gray-200 rounded-xl p-3">
-              <div class="text-xs text-gray-500">Лучший стрик</div>
-              <div
-                class="text-lg font-semibold text-gray-800"
-                x-text="statsValue(stats?.best_streak)"
-              ></div>
-            </div>
-          </div>
-
-          <div x-show="stats" class="mt-3 text-xs text-gray-400">
-            Обновлено:
-            <span x-text="formatDate(stats?.updated_at)"></span>
-          </div>
-
-          <!-- Служебная debug-панель -->
-          <div
-            x-show="statsDebugEnabled"
-            x-cloak
-            class="mt-5 border-t border-gray-200 pt-5"
-          >
-            <div class="flex flex-col sm:flex-row sm:items-start justify-between gap-4">
-              <div>
-                <h3 class="text-sm font-semibold text-gray-800">
-                  Debug: обновление статистики
-                </h3>
-                <p class="text-xs text-gray-500 mt-1">
-                  Отправляет `PATCH /me/stats`. Пустые поля не отправляются.
-                </p>
-              </div>
-              <button
-                @click="resetStatsDebugForm()"
-                class="text-xs text-gray-500 hover:text-gray-700"
-              >
-                Сбросить форму
-              </button>
-            </div>
-
-            <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-4">
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Очки (points)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.points"
-                  placeholder="например 120"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Уровень (level)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.level"
-                  placeholder="например 3"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Помодоро (total_pomodoros)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.total_pomodoros"
-                  placeholder="например 10"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Сожжённые (total_burnt_tasks)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.total_burnt_tasks"
-                  placeholder="например 2"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Текущий стрик (current_streak)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.current_streak"
-                  placeholder="например 5"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div>
-                <label class="block text-xs text-gray-500 mb-1"
-                  >Лучший стрик (best_streak)</label
-                >
-                <input
-                  type="number"
-                  x-model="statsUpdateForm.best_streak"
-                  placeholder="например 12"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-            </div>
-
-            <div class="flex flex-wrap gap-2 mt-4">
-              <button
-                @click="submitStatsUpdate()"
-                :disabled="loadingStatsUpdate"
-                class="bg-gray-900 hover:bg-black disabled:bg-gray-400 text-white text-sm font-medium px-4 py-2 rounded-lg transition-colors"
-              >
-                <span x-show="!loadingStatsUpdate">Отправить PATCH</span>
-                <span x-show="loadingStatsUpdate">Отправка...</span>
-              </button>
-              <button
-                @click="applyStatsDelta({ total_pomodoros: 1 })"
-                class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-sm font-medium px-3 py-2 rounded-lg border border-indigo-200"
-                title="Прибавить 1 помодоро (через PATCH текущего значения + 1)"
-              >
-                +1 помодоро
-              </button>
-              <button
-                @click="applyStatsDelta({ total_burnt_tasks: 1 })"
-                class="bg-rose-50 hover:bg-rose-100 text-rose-700 text-sm font-medium px-3 py-2 rounded-lg border border-rose-200"
-                title="Прибавить 1 'сожжённую' задачу"
-              >
-                +1 burnt
-              </button>
-              <button
-                @click="applyStatsDelta({ points: 10 })"
-                class="bg-amber-50 hover:bg-amber-100 text-amber-700 text-sm font-medium px-3 py-2 rounded-lg border border-amber-200"
-                title="Прибавить 10 очков"
-              >
-                +10 points
-              </button>
-            </div>
-          </div>
-        </div>
-
-        <!-- Категории -->
-        <div
-          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
-        >
-          <h2 class="text-lg font-semibold text-gray-800 mb-4">Категории</h2>
           <div class="flex flex-col sm:flex-row gap-3 mb-4">
             <input
               type="text"
@@ -684,6 +620,7 @@
               placeholder="Новая категория"
               maxlength="255"
               class="flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
+              @keydown.enter="createCategory()"
             />
             <button
               @click="createCategory()"
@@ -754,112 +691,8 @@
           </div>
         </div>
 
-        <!-- Подписка и Тарифы -->
-        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
-          <div class="flex flex-col sm:flex-row items-center justify-between gap-4">
-            <div>
-              <h2 class="text-lg font-semibold text-gray-800">Ваша подписка</h2>
-              <p class="text-sm text-gray-500 mt-1">Здесь вы можете управлять своим тарифом и доступом к функциям.</p>
-            </div>
-            <div class="bg-blue-50 text-blue-700 px-3 py-1 rounded-full text-sm font-semibold border border-blue-100">
-              Стартовый (Базовый)
-            </div>
-          </div>
-          
-          <div class="mt-6 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-xl p-5 text-white shadow-lg relative overflow-hidden">
-            <div class="relative z-10 flex flex-col md:flex-row items-center justify-between gap-4">
-              <div>
-                <h3 class="text-xl font-bold mb-2 flex items-center gap-2">
-                  Премиум <span class="bg-gradient-to-r from-orange-400 to-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Хит продаж</span>
-                </h3>
-                <ul class="space-y-1 text-sm text-blue-100 mb-4 md:mb-0">
-                  <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Всё из Стартового тарифа</li>
-                  <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Полная история активности и детали</li>
-                  <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Безлимитные категории и трекинг</li>
-                  <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Уведомления</li>
-                  <li class="flex items-center"><span class="text-green-400 mr-2">✓</span> Приоритетная поддержка</li>
-                </ul>
-                <div class="text-sm text-blue-200 mb-4 text-center">
-              Доступ предоставляется автоматически сразу после оплаты.
-            </div>
-              </div>
-              <div class="flex flex-col items-center md:items-end w-full md:w-auto">
-                <div class="text-2xl font-extrabold mb-3">49 ₽ <span class="text-blue-200 text-sm font-normal">/ навсегда</span></div>
-                <button @click="alert('Переход к оплате...')" class="w-full md:w-auto px-6 py-2 bg-white text-blue-600 hover:bg-blue-50 rounded-lg font-bold transition shadow-md">
-                  Оплатить Премиум
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <!-- Создание задачи -->
-        <div
-          class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6"
-        >
-          <h2 class="text-lg font-semibold text-gray-800 mb-4">Новая задача</h2>
-          <form @submit.prevent="createTask()" class="space-y-3">
-            <div class="flex flex-col sm:flex-row gap-3 items-stretch sm:items-end">
-              <input
-                type="text"
-                x-model="newTask.title"
-                placeholder="Название задачи *"
-                required
-                maxlength="255"
-                class="w-full sm:flex-1 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-              />
-              <div class="flex flex-col gap-1 w-full sm:w-52">
-                <label class="text-xs text-gray-500">Дедлайн</label>
-                <input
-                  type="datetime-local"
-                  x-model="newTask.deadline"
-                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-              <div class="flex flex-col gap-1 w-full sm:w-52">
-                <label class="text-xs text-gray-500">Напомнить</label>
-                <input
-                  type="datetime-local"
-                  x-model="newTask.reminder_at"
-                  :disabled="!isVerified"
-                  :title="!isVerified ? 'Подтвердите email для получения напоминаний' : ''"
-                  class="w-full px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                />
-              </div>
-            </div>
-            <div class="flex flex-col sm:flex-row gap-3">
-              <textarea
-                x-model="newTask.description"
-                placeholder="Описание (необязательно)"
-                maxlength="2000"
-                rows="2"
-                class="w-full sm:flex-1 min-w-0 px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm resize-none"
-              ></textarea>
-              <div class="flex flex-col gap-1 w-full sm:w-auto sm:self-end">
-                <label class="text-xs text-gray-500">Категория</label>
-                <select
-                  x-model="newTask.category_id"
-                  class="w-full sm:w-auto px-4 py-2.5 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 text-sm"
-                >
-                  <option :value="null">Без категории</option>
-                  <template x-for="cat in categories" :key="cat.id">
-                    <option :value="cat.id" x-text="cat.name"></option>
-                  </template>
-                </select>
-              </div>
-              <button
-                type="submit"
-                :disabled="loadingCreate"
-                class="w-full sm:w-auto self-stretch sm:self-end bg-blue-600 hover:bg-blue-700 disabled:bg-blue-300 text-white font-medium px-6 py-2.5 rounded-lg transition-colors whitespace-nowrap"
-              >
-                <span x-show="!loadingCreate">+ Добавить</span>
-                <span x-show="loadingCreate">...</span>
-              </button>
-            </div>
-          </form>
-        </div>
-
-        <!-- Фильтры и статистика -->
+            <!-- Фильтры и статистика -->
+            <!-- Фильтры и статистика -->
         <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
           <div class="flex flex-wrap gap-2">
             <button
@@ -908,7 +741,8 @@
           </button>
         </div>
 
-        <!-- Список задач -->
+            <!-- Список задач -->
+            <!-- Список задач -->
         <div
           x-show="loadingTasks && tasks.length === 0 && filter !== 'logs'"
           class="text-center py-12 text-gray-400"
@@ -955,36 +789,34 @@
               :class="{
                 'opacity-70': task.status === 'done',
                 'bg-red-50 border-red-200': task.status === 'burnt',
-                'bg-white border-gray-200': task.status !== 'burnt'
+                'bg-white border-gray-200': task.status !== 'burnt',
+                'task-burning': burningTaskId === task.id
               }"
               class="rounded-xl shadow-sm border p-4 transition-all hover:shadow-md"
             >
               <div class="flex items-start gap-3">
-                <!-- Чекбокс статуса -->
-                <!-- В режиме редактирования: меняет только локальный editForm.status без API вызова -->
-                <!-- Вне режима редактирования: сразу сохраняет в БД -->
+                <!-- Чекбокс статуса с анимацией нажатия и SVG прорисовкой -->
                 <button
                   @click="editingTaskId === task.id
                   ? (editForm.status = editForm.status === 'done' ? 'pending' : 'done')
-                  : toggleTaskStatus(task)"
+                  : handleTaskClick(task, $event)"
                   :class="{
-                    'bg-green-500 border-green-500 text-white': (editingTaskId === task.id ? editForm.status : task.status) === 'done',
+                    'bg-green-500 border-green-500 text-white bouncy-btn shadow-xs': (editingTaskId === task.id ? editForm.status : task.status) === 'done',
                     'border-red-300 bg-red-100 hover:border-red-400 text-red-500': (editingTaskId === task.id ? editForm.status : task.status) === 'burnt',
-                    'border-gray-300 hover:border-green-400': (editingTaskId === task.id ? editForm.status : task.status) === 'pending'
+                    'border-gray-300 hover:border-green-400 hover:scale-110 active:scale-95': (editingTaskId === task.id ? editForm.status : task.status) === 'pending'
                   }"
-                  class="mt-0.5 w-5 h-5 rounded border-2 flex items-center justify-center flex-shrink-0 transition-colors"
+                  class="mt-0.5 w-6 h-6 rounded-lg border-2 flex items-center justify-center flex-shrink-0 transition-all duration-200 transform"
                   :title="editingTaskId === task.id ? 'Статус изменится после сохранения' : 'Изменить статус'"
                 >
-                  <span
-                    x-show="(editingTaskId === task.id ? editForm.status : task.status) === 'done'"
-                    class="text-xs"
-                    >✓</span
-                  >
+                  <template x-if="(editingTaskId === task.id ? editForm.status : task.status) === 'done'">
+                    <svg class="w-3.5 h-3.5 checkmark-svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="20 6 9 17 4 12"></polyline>
+                    </svg>
+                  </template>
                   <span
                     x-show="(editingTaskId === task.id ? editForm.status : task.status) === 'burnt'"
-                    class="text-[10px]"
-                    >🔥</span
-                  >
+                    class="text-[11px]"
+                    >🔥</span>
                 </button>
 
                 <!-- Контент задачи -->
@@ -994,7 +826,7 @@
                     <div class="flex items-start justify-between gap-2">
                       <h3
                         :class="task.status === 'done' ? 'line-through text-gray-400' : (task.status === 'burnt' ? 'text-red-800 line-through decoration-red-300' : 'text-gray-800')"
-                        class="font-medium text-sm transition-colors break-words"
+                        class="font-medium text-sm transition-all duration-300 break-words"
                         x-text="task.title"
                       ></h3>
                       <div class="flex items-center gap-1 flex-shrink-0">
@@ -1096,7 +928,10 @@
                         />
                       </div>
                       <div class="flex flex-col gap-1 flex-1">
-                        <label class="text-xs text-gray-500">Напомнить</label>
+                        <label class="text-xs text-gray-500 flex justify-between">
+                          <span>Напомнить</span>
+                          <span class="text-[10px] text-gray-400 font-medium" x-text="isPremium ? '👑 PRO ∞' : 'Free: до 3 акт.'"></span>
+                        </label>
                         <input
                           type="datetime-local"
                           x-model="editForm.reminder_at"
@@ -1147,7 +982,8 @@
           </template>
         </div>
 
-        <!-- Пагинация задач -->
+            <!-- Пагинация задач -->
+            <!-- Пагинация задач -->
         <div
           x-show="filter !== 'logs' && pagination.total > pagination.limit"
           class="flex items-center justify-center gap-2 mt-6"
@@ -1177,7 +1013,8 @@
           </button>
         </div>
 
-        <!-- Контейнер для истории активности -->
+            <!-- Контейнер для истории активности -->
+            <!-- Контейнер для истории активности -->
         <div class="space-y-4 relative" x-show="filter === 'logs'">
           <div class="relative border-l-2 border-indigo-200 ml-4 pl-6 pb-2" x-init="$watch('logs', () => {})">
             <template x-for="log in logs" :key="log.id">
@@ -1214,7 +1051,942 @@
             </button>
           </div>
         </div>
+          </div>
+
+          <!-- RIGHT SIDEBAR: Фокус, Профиль, Стрик, Подписка (Sticky Companion) -->
+          <div class="lg:col-span-5 xl:col-span-4 space-y-6 lg:sticky lg:top-6 self-start">
+            <!-- XP Hub & Прогресс -->
+            <!-- XP HUB / ПРОФИЛЬ И ПРОГРЕСС -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <span class="text-xl">🏆</span>
+              <h2 class="text-base font-bold text-gray-800">Профиль и прогресс</h2>
+            </div>
+            <div class="flex items-center gap-2">
+              <button 
+                @click="openAchievementsModal()"
+                class="bg-indigo-50 hover:bg-indigo-100 text-indigo-700 text-xs font-bold px-2.5 py-1.5 rounded-xl transition-all flex items-center gap-1 border border-indigo-200 shadow-2xs"
+                title="Зал достижений">
+                <span>🏆</span>
+                <span>Награды</span>
+                <span class="bg-indigo-200 text-indigo-900 px-1.5 py-0.2 rounded-full text-[10px]" x-text="`${unlockedAchievementsCount}/${totalAchievementsCount}`"></span>
+              </button>
+              <button
+                @click="loadStats()"
+                class="text-xs text-gray-500 hover:text-indigo-600 p-1.5 rounded-lg hover:bg-gray-100 transition-colors"
+                title="Обновить данные"
+              >
+                <span :class="loadingStats ? 'animate-spin' : ''">↻</span>
+              </button>
+            </div>
+          </div>
+
+          <div x-show="loadingStats && !stats" class="text-xs text-gray-400 py-4 text-center">
+            Загрузка профиля...
+          </div>
+
+          <div x-show="stats" class="space-y-4">
+            <!-- 1. Профиль уровня и ранга (XP Prestige Bar) -->
+            <div class="bg-gradient-to-br from-indigo-900 via-indigo-800 to-purple-900 text-white rounded-2xl p-5 shadow-md relative overflow-hidden">
+              <div class="absolute -right-4 -bottom-4 text-8xl opacity-10 select-none" x-text="gamification?.rank_icon || '🌱'"></div>
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 relative z-10">
+                <div class="flex items-center gap-3">
+                  <div class="w-14 h-14 rounded-2xl bg-white/10 backdrop-blur-sm border border-white/20 flex items-center justify-center text-3xl shadow-inner" x-text="gamification?.rank_icon || '🌱'"></div>
+                  <div>
+                    <div class="flex items-center gap-2">
+                      <span class="text-xs font-bold uppercase tracking-wider text-purple-200" x-text="gamification?.rank_title || 'Новичок'"></span>
+                      <span class="bg-amber-400 text-gray-900 text-[10px] font-black px-2 py-0.5 rounded-full" x-text="`LVL ${gamification?.level || stats?.level || 1}`"></span>
+                    </div>
+                    <h3 class="text-xl font-black mt-0.5 flex items-center gap-2">
+                      <span x-text="`${stats?.points || 0} XP`"></span>
+                      <span class="text-xs font-normal text-purple-200">всего заработано</span>
+                    </h3>
+                  </div>
+                </div>
+
+                <div class="flex items-center gap-2">
+                  <div class="bg-white/10 text-amber-300 border border-white/10 px-2.5 py-1 rounded-xl text-xs font-bold flex items-center gap-1">
+                    <span>🪙</span>
+                    <span x-text="`${coins} коинов`"></span>
+                  </div>
+                </div>
+              </div>
+
+              <!-- XP шкала прогресса -->
+              <div class="mt-4 relative z-10">
+                <div class="flex items-center justify-between text-xs mb-1.5">
+                  <span class="font-medium text-purple-200">Прогресс до следующего уровня</span>
+                  <span class="font-bold text-amber-300" x-text="`${gamification?.current_level_xp || 0} / ${gamification?.next_level_xp || 100} XP (${gamification?.progress_percent || 0}%)`"></span>
+                </div>
+                <div class="w-full bg-black/30 rounded-full h-3.5 p-0.5 border border-white/10 overflow-hidden">
+                  <div 
+                    class="bg-gradient-to-r from-amber-400 via-orange-400 to-yellow-300 h-full rounded-full transition-all duration-700 shimmer-bar shadow-sm"
+                    :style="`width: ${Math.max(4, Math.min(100, gamification?.progress_percent || 0))}%`"
+                  ></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Ключевые показатели -->
+            <div class="grid grid-cols-2 gap-2.5 pt-1">
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-center">
+                <div class="text-[11px] text-gray-500">Помодоро</div>
+                <div class="text-base font-bold text-gray-800 mt-0.5" x-text="statsValue(stats?.total_pomodoros)"></div>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-center">
+                <div class="text-[11px] text-gray-500">Сожжено</div>
+                <div class="text-base font-bold text-red-600 mt-0.5" x-text="statsValue(stats?.total_burnt_tasks)"></div>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-center">
+                <div class="text-[11px] text-gray-500">Стрик</div>
+                <div class="text-base font-bold text-orange-600 mt-0.5" x-text="`${statsValue(stats?.current_streak)} дн.`"></div>
+              </div>
+              <div class="bg-gray-50 border border-gray-200 rounded-xl p-2.5 text-center">
+                <div class="text-[11px] text-gray-500">Рекорд</div>
+                <div class="text-base font-bold text-indigo-600 mt-0.5" x-text="`${statsValue(stats?.best_streak)} дн.`"></div>
+              </div>
+            </div>
+
+            <div class="text-[10px] text-gray-400 text-right">
+              Синхронизировано: <span x-text="formatDate(stats?.updated_at)"></span>
+            </div>
+          </div>
+        </div>
+
+            <!-- Pomodoro Focus Station -->
+            <!-- POMODORO WIDGET -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 mb-6">
+          <div class="flex items-center justify-between mb-4">
+            <h2 class="text-lg font-semibold text-gray-800">
+              Pomodoro Таймер
+              <span x-show="pomodoro.activeSession && pomodoro.activeSession.task_id" class="text-sm font-normal text-gray-500 mx-2" x-text="'Фокус: ' + (pomodoro.taskTitle || 'Задача #' + pomodoro.activeSession.task_id)"></span>
+            </h2>
+            <span x-show="pomodoro.completedCount > 0" class="text-xs bg-red-100 text-red-600 px-2 py-1 rounded-full font-bold" x-text="'🍅 x ' + pomodoro.completedCount"></span>
+          </div>
+          
+          <!-- Start Screen -->
+          <div x-show="!pomodoro.activeSession" 
+               x-transition:enter="transition-all duration-500 ease-out" 
+               x-transition:enter-start="opacity-0 scale-95" 
+               x-transition:enter-end="opacity-100 scale-100" 
+               x-transition:leave="transition-all duration-300 ease-in absolute w-full" 
+               x-transition:leave-start="opacity-100 scale-100" 
+               x-transition:leave-end="opacity-0 scale-95"
+               class="relative bg-indigo-50/50 border border-indigo-100 rounded-3xl p-8 flex flex-col items-center justify-center gap-5 w-full min-h-[14rem]">
+            <div class="bg-indigo-100 p-4 rounded-full text-indigo-500 mb-2 text-2xl">🍅</div>
+            <h3 class="text-xl font-bold text-indigo-900 mb-1 text-center">Готовы сфокусироваться?</h3>
+            <button @click="startPomodoro()" class="bg-indigo-600 text-white font-semibold py-3 px-8 rounded-xl transition-all shadow-md hover:-translate-y-0.5 mt-2">
+              Свободный Помодоро
+            </button>
+            <p class="text-xs text-indigo-500 mt-2 text-center max-w-sm">Или нажмите 🍅 на конкретной задаче ниже, чтобы запустить жесткий режим.</p>
+          </div>
+
+          <!-- Active Timer -->
+          <div x-show="pomodoro.activeSession" 
+               x-transition:enter="transition-all duration-500 delay-300 ease-out" 
+               x-transition:enter-start="opacity-0 scale-105" 
+               x-transition:enter-end="opacity-100 scale-100" 
+               x-transition:leave="transition-all duration-300 ease-in absolute w-full" 
+               x-transition:leave-start="opacity-100 scale-100" 
+               x-transition:leave-end="opacity-0 scale-95"
+               class="relative border bg-white rounded-3xl p-6 sm:p-8 flex flex-col items-center justify-center gap-4 shadow-sm min-h-[19rem]">
+            <div class="absolute top-6 left-6 text-xs sm:text-sm font-bold uppercase tracking-wider px-3 py-1 rounded-full border"
+                 :class="pomodoro.mode === 'focus' ? 'text-red-600 bg-red-50 border-red-200' : 'text-blue-600 bg-blue-50 border-blue-200'" 
+                 x-text="pomodoro.mode === 'focus' ? '🎯 Фокус концентрации' : (pomodoro.completedCount % 4 === 0 ? '🌴 Долгий перерыв (15 мин)' : '☕ Перерыв (5 мин)')"></div>
+
+            <!-- Векторное дыхательное кольцо Pomodoro -->
+            <div class="relative flex items-center justify-center mt-3">
+              <svg class="w-56 h-56 sm:w-64 sm:h-64 transform -rotate-90" viewBox="0 0 240 240">
+                <!-- Фоновая дорожка -->
+                <circle cx="120" cy="120" r="100" stroke="currentColor" stroke-width="10" fill="transparent" class="text-gray-100" />
+                <!-- Анимированное пульсирующее кольцо -->
+                <circle cx="120" cy="120" r="100" stroke="currentColor" stroke-width="10" stroke-linecap="round" fill="transparent"
+                  :class="pomodoro.mode === 'focus' ? 'text-red-500 breathing-halo-focus' : 'text-blue-500 breathing-halo-break'"
+                  stroke-dasharray="628.32"
+                  :stroke-dashoffset="getPomodoroRingOffset()"
+                  style="transition: stroke-dashoffset 0.8s ease, stroke 0.4s ease;"
+                />
+              </svg>
+              <!-- Таймер внутри кольца -->
+              <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none select-none">
+                <div class="text-[3.2rem] sm:text-[4rem] font-mono font-black tracking-tight leading-none" 
+                     :class="pomodoro.mode === 'focus' ? 'text-red-600' : 'text-blue-600'" 
+                     x-text="formatPomodoroTime()"></div>
+                <div class="text-[11px] font-semibold text-gray-400 mt-2 tracking-wider uppercase" 
+                     x-text="pomodoro.mode === 'focus' ? 'Без отвлечений' : (pomodoro.completedCount % 4 === 0 ? 'Большой отдых' : 'Отдыхайте')"></div>
+              </div>
+            </div>
+            
+            <div class="flex flex-col sm:flex-row gap-2.5 w-full sm:w-auto mt-2">
+              <template x-if="pomodoro.mode === 'focus'">
+                <div class="flex flex-wrap items-center justify-center gap-2 w-full">
+                  <button @click="clickStopPomodoro()" class="bg-red-500 hover:bg-red-600 text-white px-5 py-2.5 rounded-xl font-bold shadow-sm transition">
+                    Остановить
+                  </button>
+                  <button 
+                    x-show="pomodoro.activeSession && pomodoro.activeSession.task_id"
+                    @click="finishPomodoroSession('completed', true)" 
+                    class="bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-sm transition flex items-center gap-1.5">
+                    <span>✓</span>
+                    <span>Завершить задачу</span>
+                  </button>
+                  <button 
+                    x-show="pomodoro.activeSession && !pomodoro.activeSession.task_id"
+                    @click="finishPomodoroSession('completed', false)" 
+                    class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold transition">
+                    Закончить
+                  </button>
+                </div>
+              </template>
+              <template x-if="pomodoro.mode === 'break'">
+                 <div class="flex flex-wrap items-center justify-center gap-2 w-full">
+                   <button @click="returnToWork()" class="bg-blue-600 hover:bg-blue-700 text-white px-5 py-2.5 rounded-xl font-bold shadow-sm transition flex items-center gap-1.5">
+                     <span>⚡</span>
+                     <span>Продолжить работу</span>
+                   </button>
+                   <button @click="finishBreak()" class="bg-gray-100 hover:bg-gray-200 text-gray-700 px-4 py-2.5 rounded-xl font-bold transition">
+                     Закончить
+                   </button>
+                 </div>
+              </template>
+            </div>
+          </div>
+        </div>
+
+            <!-- Стрик и Ежедневные квесты -->
+            <!-- СТРИК И ЕЖЕДНЕВНЫЕ КВЕСТЫ -->
+        <div class="space-y-4" x-show="stats">
+          <!-- 2. Стрик и множитель опыта (Smart Streak Flame) -->
+              <div class="bg-gradient-to-br from-amber-50 to-orange-50 border border-orange-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                <div class="flex items-start justify-between">
+                  <div class="flex items-center gap-3">
+                    <span class="text-3xl flame-glow">🔥</span>
+                    <div>
+                      <div class="flex items-center gap-2">
+                        <div class="text-xs font-semibold text-orange-600 uppercase tracking-wide">Серия активности</div>
+                        <span x-show="inventory.boosters && inventory.boosters.streak_freeze > 0" class="text-[10px] bg-blue-100 text-blue-800 border border-blue-200 px-1.5 py-0.2 rounded-full font-bold" title="Серия защищена от сброса при пропуске 1 дня">🧊 Защита</span>
+                      </div>
+                      <div class="text-2xl font-black text-gray-900 mt-0.5">
+                        <span x-text="stats?.current_streak || 0"></span>
+                        <span class="text-sm font-semibold text-gray-500">дней подряд</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- Множитель опыта -->
+                  <div 
+                    class="border px-2.5 py-1 rounded-xl text-center shadow-xs"
+                    :class="(gamification?.streak_multiplier || 1.0) > 1.0 ? 'bg-amber-400 text-gray-900 border-amber-500 font-black animate-pulse' : 'bg-white text-gray-600 border-orange-200 font-bold'"
+                  >
+                    <div class="text-[10px] uppercase tracking-wider">Множитель</div>
+                    <div class="text-sm font-black" x-text="`x${(gamification?.streak_multiplier || 1.0).toFixed(1)} XP`"></div>
+                  </div>
+                </div>
+
+                <!-- Недельный трекер дней -->
+                <div class="mt-4 pt-3 border-t border-orange-200/60">
+                  <div class="text-[11px] text-gray-500 flex items-center justify-between mb-2">
+                    <span>Недельная цель</span>
+                    <span class="font-bold text-orange-700" x-text="`Рекорд: ${stats?.best_streak || 0} дн.`"></span>
+                  </div>
+                  <div class="grid grid-cols-7 gap-1 text-center">
+                    <template x-for="(day, idx) in ['Пн', 'Вт', 'Ср', 'Чт', 'Пт', 'Сб', 'Вс']" :key="idx">
+                      <div class="flex flex-col items-center gap-1">
+                        <div 
+                          class="w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold transition-all"
+                          :class="idx <= ((stats?.current_streak || 0) % 7) && (stats?.current_streak || 0) > 0 ? 'bg-orange-500 text-white shadow-xs' : 'bg-orange-100 text-orange-400'"
+                        >
+                          <span x-text="(idx < ((stats?.current_streak || 0) % 7) || ((stats?.current_streak || 0) % 7 === 0 && (stats?.current_streak || 0) > 0)) ? '✓' : '•'"></span>
+                        </div>
+                        <span class="text-[9px] text-gray-400" x-text="day"></span>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+              </div>
+          <!-- 3. Ежедневные квесты (Daily Quests) -->
+              <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4 shadow-xs flex flex-col justify-between">
+                <div>
+                  <div class="flex items-center justify-between mb-2.5">
+                    <div class="flex items-center gap-1.5">
+                      <span class="text-base">🎯</span>
+                      <h4 class="text-xs font-bold uppercase tracking-wide text-gray-700">Квесты дня</h4>
+                    </div>
+                    <span class="text-[10px] bg-gray-200 text-gray-600 px-2 py-0.5 rounded-full font-medium">Сброс в 00:00</span>
+                  </div>
+
+                  <div class="space-y-2">
+                    <template x-for="q in (gamification?.daily_quests || defaultDailyQuests)" :key="q.code">
+                      <div class="bg-white border rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-2xs transition-colors"
+                           :class="q.completed ? 'border-green-200 bg-green-50/40' : 'border-gray-200'">
+                        <div class="flex items-center gap-2 min-w-0">
+                          <span class="text-lg flex-shrink-0" x-text="q.icon"></span>
+                          <div class="min-w-0">
+                            <div class="text-xs font-bold text-gray-800 truncate" x-text="q.title"></div>
+                            <div class="text-[10px] text-gray-400" x-text="`Прогресс: ${Math.min(q.current, q.target)} / ${q.target}`"></div>
+                          </div>
+                        </div>
+
+                        <div class="flex items-center gap-2 flex-shrink-0">
+                          <span class="text-[11px] font-bold text-indigo-600" x-text="`+${q.reward_xp} XP`"></span>
+                          <span 
+                            class="w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold"
+                            :class="q.completed ? 'bg-green-500 text-white' : 'bg-gray-200 text-gray-400'"
+                            x-text="q.completed ? '✓' : '○'"
+                          ></span>
+                        </div>
+                      </div>
+                    </template>
+                  </div>
+                </div>
+
+                <!-- Сундук дня -->
+                <div class="mt-3 pt-2.5 border-t border-gray-200 flex items-center justify-between">
+                  <div class="text-xs font-medium text-gray-600 flex items-center gap-1.5">
+                    <span>🎁</span>
+                    <span>Сундук дня:</span>
+                    <span class="font-bold text-indigo-700" x-text="isDailyChestClaimable() ? 'Готов к открытию!' : 'Выполните все 3 квеста'"></span>
+                  </div>
+                  <button 
+                    @click="claimDailyChest()"
+                    :disabled="!isDailyChestClaimable() || dailyChestClaimed"
+                    class="text-xs font-bold px-3 py-1.5 rounded-lg transition-all"
+                    :class="isDailyChestClaimable() && !dailyChestClaimed ? 'bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 text-white shadow-sm animate-bounce' : 'bg-gray-200 text-gray-400 cursor-not-allowed'"
+                  >
+                    <span x-text="dailyChestClaimed ? '✓ Забрано' : 'Забрать +50 XP'"></span>
+                  </button>
+                </div>
+              </div>
+        </div>
+
+            <!-- Компактная плашка тарифа -->
+            <!-- Компактная карточка тарифа -->
+        <div class="bg-white rounded-2xl shadow-sm border border-gray-200 p-4">
+          <div class="flex items-center justify-between">
+            <div class="flex items-center gap-2.5">
+              <span class="text-2xl" x-text="isPremium ? '👑' : '📦'"></span>
+              <div>
+                <div class="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Тариф</div>
+                <div class="text-sm font-bold text-gray-900" x-text="isPremium ? 'Премиум (PRO)' : 'Базовый (Free)'"></div>
+              </div>
+            </div>
+            <button 
+              @click="subscriptionModal.show = true"
+              class="text-xs font-bold px-3 py-1.5 rounded-xl transition-all"
+              :class="isPremium ? 'bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200' : 'bg-gradient-to-r from-amber-500 to-yellow-500 hover:from-amber-600 hover:to-yellow-600 text-white shadow-xs'">
+              <span x-text="isPremium ? 'Управление' : 'Купить PRO • 49 ₽'"></span>
+            </button>
+          </div>
+        </div>
+          </div>
+        </div>
+      
       </main>
+
+      <!-- Модалка досрочной остановки Pomodoro -->
+      <!-- Модалка досрочной остановки -->
+        <div x-show="pomodoro.showStopModal" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75">
+          <div class="bg-white rounded-2xl shadow-xl w-full max-w-md overflow-hidden" @click.outside="pomodoro.showStopModal = false">
+            <div class="p-6">
+              <div class="w-12 h-12 rounded-full bg-red-100 text-red-600 flex items-center justify-center text-2xl mb-4">⚠️</div>
+              <h3 class="text-xl font-bold text-gray-900 mb-2">Досрочная остановка</h3>
+              <p class="text-gray-600 text-sm mb-6">Вы в режиме жесткой фокусировки на задаче. Отказаться просто так нельзя. Выберите действие:</p>
+              <div class="space-y-3">
+                <button 
+                  x-show="pomodoro.activeSession && (pomodoro.activeSession.breaks_used === undefined || pomodoro.activeSession.breaks_used === 0)"
+                  @click="extraPauseAction()" 
+                  class="w-full text-left bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-800 px-4 py-3 rounded-xl transition-colors">
+                  <span class="font-bold block">1. Взять дополнительную паузу</span>
+                  <span class="text-xs opacity-80 mt-1 block">5 минут передышки (1 попытка на помидорку)</span>
+                </button>
+                <button 
+                  @click="finishPomodoroSession('completed', true)" 
+                  class="w-full text-left bg-green-50 hover:bg-green-100 border border-green-200 text-green-800 px-4 py-3 rounded-xl transition-colors">
+                  <span class="font-bold block">2. Пометить задачу как выполненную</span>
+                  <span class="text-xs opacity-80 mt-1 block">Уже выполнено? Верим вам.</span>
+                </button>
+                <button 
+                  @click="handleBurnTask(pomodoro.activeSession?.task_id)" 
+                  class="w-full text-left bg-red-50 hover:bg-red-100 border border-red-200 text-red-800 px-4 py-3 rounded-xl transition-colors">
+                  <span class="font-bold flex items-center gap-1.5 text-red-700"><span>💀</span> 3. Сдаться и сжечь задачу</span>
+                  <span class="text-xs text-red-600/80 mt-1 block">Помидорка провалена, задача сжигается (-30 очков, сброс серии).</span>
+                </button>
+              </div>
+              <div class="mt-6 flex justify-end">
+                <button @click="pomodoro.showStopModal = false" class="px-4 py-2 text-sm text-gray-500 hover:text-gray-700 font-medium">Отмена, продолжить таймер</button>
+              </div>
+            </div>
+          </div>
+        </div>
+
+      <!-- LEVEL UP MODAL -->
+      <!-- LEVEL UP MODAL -->
+        <div x-show="levelUpModal.show" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80">
+          <div class="bg-gradient-to-b from-indigo-950 via-purple-900 to-indigo-900 text-white rounded-3xl shadow-2xl w-full max-w-sm overflow-hidden border border-amber-400/40 p-6 text-center relative transform transition-all"
+               @click.outside="levelUpModal.show = false">
+            <div class="text-6xl mb-2 animate-bounce">🏆</div>
+            <div class="text-xs uppercase tracking-widest text-amber-300 font-extrabold mb-1">Поздравляем!</div>
+            <h3 class="text-2xl font-black text-white">НОВЫЙ УРОВЕНЬ!</h3>
+            
+            <div class="my-5 bg-white/10 rounded-2xl p-4 border border-white/10 backdrop-blur-sm">
+              <div class="text-5xl font-black text-amber-400 tracking-tight" x-text="`УРОВЕНЬ ${levelUpModal.level}`"></div>
+              <div class="mt-2 text-base font-bold text-purple-200 flex items-center justify-center gap-1.5">
+                <span x-text="levelUpModal.icon"></span>
+                <span x-text="levelUpModal.rank"></span>
+              </div>
+            </div>
+
+            <p class="text-xs text-purple-200 mb-6">Ваша продуктивность растёт! Множители опыта и новые достижения уже ждут вас.</p>
+            <button 
+              @click="levelUpModal.show = false"
+              class="w-full bg-gradient-to-r from-amber-400 via-orange-500 to-yellow-400 hover:from-amber-500 hover:to-orange-600 text-gray-950 font-black py-3 px-6 rounded-xl shadow-lg transition-all transform hover:scale-[1.02] active:scale-[0.98]">
+              Вперёд к новым вершинам! ⚡
+            </button>
+          </div>
+        </div>
+
+      <!-- ACHIEVEMENTS GALLERY MODAL (60 FPS Optimized) -->
+      <!-- ACHIEVEMENTS GALLERY MODAL -->
+        <div x-show="achievementsModal.show" x-cloak class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80" style="contain: paint;">
+          <div class="bg-white rounded-3xl shadow-2xl w-full max-w-2xl max-h-[85vh] flex flex-col overflow-hidden border border-gray-100"
+               @click.outside="achievementsModal.show = false">
+            <!-- Modal Header -->
+            <div class="p-6 bg-gradient-to-r from-indigo-900 to-purple-900 text-white flex items-center justify-between">
+              <div class="flex items-center gap-3">
+                <span class="text-3xl">🏆</span>
+                <div>
+                  <h3 class="text-xl font-bold">Зал Достижений</h3>
+                  <p class="text-xs text-purple-200 mt-0.5" x-text="`Открыто ${unlockedAchievementsCount} из ${totalAchievementsCount} наград`"></p>
+                </div>
+              </div>
+              <button @click="achievementsModal.show = false" class="text-white/70 hover:text-white text-2xl font-bold leading-none p-1">✕</button>
+            </div>
+
+            <!-- Filters -->
+            <div class="px-6 py-3 bg-gray-50 border-b border-gray-200 flex gap-2">
+              <button 
+                @click="achievementsModal.filter = 'all'; updateFilteredAchievements()"
+                :class="achievementsModal.filter === 'all' ? 'bg-indigo-600 text-white' : 'bg-white text-gray-600 border border-gray-200'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                Все
+              </button>
+              <button 
+                @click="achievementsModal.filter = 'unlocked'; updateFilteredAchievements()"
+                :class="achievementsModal.filter === 'unlocked' ? 'bg-green-600 text-white' : 'bg-white text-gray-600 border border-gray-200'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                Полученные
+              </button>
+              <button 
+                @click="achievementsModal.filter = 'locked'; updateFilteredAchievements()"
+                :class="achievementsModal.filter === 'locked' ? 'bg-amber-600 text-white' : 'bg-white text-gray-600 border border-gray-200'"
+                class="px-3 py-1.5 rounded-lg text-xs font-bold transition-colors">
+                В процессе
+              </button>
+            </div>
+
+            <!-- Achievements Grid -->
+            <div class="p-6 overflow-y-auto flex-1 space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <template x-for="ach in cachedFilteredAchievements" :key="ach.code">
+                  <div 
+                    class="rounded-2xl p-4 border transition-all flex items-start gap-3.5 relative overflow-hidden"
+                    :class="ach.unlocked ? 'bg-amber-50/50 border-amber-200 shadow-xs' : 'bg-gray-50/70 border-gray-200 opacity-60'"
+                  >
+                    <div 
+                      class="w-12 h-12 rounded-xl flex items-center justify-center text-2xl flex-shrink-0 shadow-xs border"
+                      :class="ach.unlocked ? 'bg-amber-100 border-amber-300' : 'bg-gray-200 border-gray-300 grayscale'"
+                      x-text="ach.icon"
+                    ></div>
+                    <div class="flex-1 min-w-0">
+                      <div class="flex items-center justify-between gap-1">
+                        <h4 class="text-sm font-bold text-gray-900 truncate" x-text="ach.title"></h4>
+                        <span 
+                          class="text-[10px] font-black px-2 py-0.5 rounded-full whitespace-nowrap"
+                          :class="ach.unlocked ? 'bg-amber-400 text-gray-950' : 'bg-gray-200 text-gray-600'"
+                          x-text="`+${ach.points} XP`"
+                        ></span>
+                      </div>
+                      <p class="text-xs text-gray-600 mt-1" x-text="ach.description"></p>
+                      <div class="mt-2 text-[10px] text-gray-400 font-medium" x-show="ach.unlocked">
+                        <span class="text-green-600 font-semibold">✓ Открыто</span>
+                      </div>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+            
+            <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+              <button @click="achievementsModal.show = false" class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+                Закрыть
+              </button>
+            </div>
+          </div>
+        </div>
+
+      <!-- SUBSCRIPTION MODAL (Full plans & checkout) -->
+      
+      <!-- REWARDS SHOP MODAL (Focus Coins & Niwtyachki) -->
+      <div x-show="shopModal.show" 
+           x-cloak 
+           class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
+           style="contain: paint;"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-amber-100"
+             @click.outside="shopModal.show = false"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+          <!-- Header -->
+          <div class="p-6 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">🛍️</span>
+              <div>
+                <h3 class="text-xl font-bold">Магазин наград</h3>
+                <p class="text-xs text-amber-100 mt-0.5">Тратьте заработанные монеты на полезные бустеры и личные награды</p>
+              </div>
+            </div>
+            <div class="flex items-center gap-3">
+              <div class="bg-black/25 text-amber-200 px-3 py-1.5 rounded-xl border border-white/20 font-black text-sm flex items-center gap-1.5 shadow-inner">
+                <span>🪙</span>
+                <span x-text="coins"></span>
+                <span class="text-xs font-normal">коинов</span>
+              </div>
+              <button @click="shopModal.show = false" class="text-white/70 hover:text-white text-2xl font-bold leading-none p-1">✕</button>
+            </div>
+          </div>
+
+          <!-- Tabs -->
+          <div class="px-6 py-3 bg-gray-50 border-b border-gray-200 flex gap-2 overflow-x-auto">
+            <button 
+              @click="shopModal.tab = 'boosters'"
+              :class="shopModal.tab === 'boosters' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-gray-700 border border-gray-200'"
+              class="px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+              <span>⚡ Бустеры</span>
+            </button>
+            <button 
+              @click="shopModal.tab = 'rewards'"
+              :class="shopModal.tab === 'rewards' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-gray-700 border border-gray-200'"
+              class="px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+              <span>🎁 Мои награды</span>
+            </button>
+            <button 
+              @click="shopModal.tab = 'themes'"
+              :class="shopModal.tab === 'themes' ? 'bg-amber-600 text-white shadow-xs' : 'bg-white text-gray-700 border border-gray-200'"
+              class="px-4 py-1.5 rounded-xl text-xs font-bold transition flex items-center gap-1.5">
+              <span>🎨 Оформление и звуки</span>
+            </button>
+          </div>
+
+          <!-- Body -->
+          <div class="p-6 overflow-y-auto space-y-4 flex-1">
+            <!-- Tab 1: Бустеры -->
+            <div x-show="shopModal.tab === 'boosters'" class="space-y-3">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Streak Freeze -->
+                <div class="bg-blue-50/50 border border-blue-200 rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-3xl">🧊</span>
+                      <span class="text-xs bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full" x-text="`У вас: ${inventory?.boosters?.streak_freeze || 0}`"></span>
+                    </div>
+                    <h4 class="font-bold text-sm text-gray-900">Заморозка стрика</h4>
+                    <p class="text-xs text-gray-600 mt-1">Спасает вашу серию активности от обнуления при пропуске 1 дня.</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-blue-200/60">
+                    <span class="font-black text-sm text-amber-700">100 🪙</span>
+                    <button 
+                      @click="buyBooster('streak_freeze', 100)"
+                      :disabled="coins < 100"
+                      class="px-3 py-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition shadow-xs">
+                      Купить
+                    </button>
+                  </div>
+                </div>
+
+                <!-- 2x XP Booster -->
+                <div class="bg-purple-50/50 border border-purple-200 rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-3xl">⚡</span>
+                      <span class="text-xs bg-purple-100 text-purple-800 font-bold px-2 py-0.5 rounded-full" x-text="`У вас: ${inventory?.boosters?.xp_booster || 0}`"></span>
+                    </div>
+                    <h4 class="font-bold text-sm text-gray-900">Двойной опыт (2x XP)</h4>
+                    <p class="text-xs text-gray-600 mt-1">Удваивает весь опыт за задачи и сессии фокуса на следующие 24 часа.</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-purple-200/60">
+                    <span class="font-black text-sm text-amber-700">75 🪙</span>
+                    <button 
+                      @click="buyBooster('xp_booster', 75)"
+                      :disabled="coins < 75"
+                      class="px-3 py-1.5 bg-purple-600 hover:bg-purple-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition shadow-xs">
+                      Купить
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Focus Shield -->
+                <div class="bg-emerald-50/50 border border-emerald-200 rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-3xl">🛡️</span>
+                      <span class="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded-full" x-text="`У вас: ${inventory?.boosters?.shield || 0}`"></span>
+                    </div>
+                    <h4 class="font-bold text-sm text-gray-900">Щит концентрации</h4>
+                    <p class="text-xs text-gray-600 mt-1">Защищает от штрафа при случайной досрочной остановке сессии фокуса.</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-emerald-200/60">
+                    <span class="font-black text-sm text-amber-700">60 🪙</span>
+                    <button 
+                      @click="buyBooster('shield', 60)"
+                      :disabled="coins < 60"
+                      class="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition shadow-xs">
+                      Купить
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Super Chest -->
+                <div class="bg-amber-50/50 border border-amber-200 rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <div class="flex items-center justify-between mb-2">
+                      <span class="text-3xl">🎁</span>
+                      <span class="text-xs bg-amber-100 text-amber-800 font-bold px-2 py-0.5 rounded-full">Удача</span>
+                    </div>
+                    <h4 class="font-bold text-sm text-gray-900">Золотой сундук сюрприз</h4>
+                    <p class="text-xs text-gray-600 mt-1">Случайная порция опыта от +100 до +300 XP прямо в профиль!</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-amber-200/60">
+                    <span class="font-black text-sm text-amber-700">80 🪙</span>
+                    <button 
+                      @click="buySuperChest(80)"
+                      :disabled="coins < 80"
+                      class="px-3 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition shadow-xs">
+                      Открыть
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Tab 2: Личные награды (Wishlist) -->
+            <div x-show="shopModal.tab === 'rewards'" class="space-y-4">
+              <div class="bg-amber-50 border border-amber-200 rounded-2xl p-4 text-xs text-amber-900">
+                💡 <strong>Система личных наград:</strong> Добавьте то, что радует вас в реальной жизни (кофе, отдых, любимое блюдо, покупка). Накопите коины трудом и официально разрешите себе это!
+              </div>
+
+              <!-- Форма добавления своей награды -->
+              <div class="bg-gray-50 border border-gray-200 rounded-2xl p-4">
+                <h4 class="text-xs font-bold text-gray-700 uppercase tracking-wide mb-3">+ Добавить свою награду</h4>
+                <div class="flex flex-col sm:flex-row gap-2">
+                  <input 
+                    type="text" 
+                    x-model="newCustomReward.title" 
+                    placeholder="Например: Капучино с корицей" 
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                  />
+                  <div class="flex items-center gap-2">
+                    <input 
+                      type="number" 
+                      x-model.number="newCustomReward.price" 
+                      min="10" 
+                      step="10" 
+                      placeholder="Цена 🪙" 
+                      class="w-24 px-3 py-2 border border-gray-300 rounded-xl text-xs focus:ring-2 focus:ring-amber-500 outline-none"
+                    />
+                    <button 
+                      @click="addCustomReward()"
+                      class="bg-amber-600 hover:bg-amber-700 text-white font-bold px-4 py-2 rounded-xl text-xs transition whitespace-nowrap shadow-xs">
+                      Сохранить
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Список наград -->
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <template x-for="r in (inventory?.customRewards || defaultCustomRewards)" :key="r.id">
+                  <div class="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-between shadow-2xs hover:shadow-sm transition">
+                    <div class="flex items-center gap-3 min-w-0">
+                      <span class="text-3xl" x-text="r.icon || '☕'"></span>
+                      <div class="min-w-0">
+                        <h4 class="font-bold text-sm text-gray-900 truncate" x-text="r.title"></h4>
+                        <div class="text-xs font-black text-amber-600 mt-0.5" x-text="`${r.price} 🪙`"></div>
+                      </div>
+                    </div>
+                    <div class="flex items-center gap-2">
+                      <button 
+                        @click="claimCustomReward(r)"
+                        :disabled="coins < r.price"
+                        class="px-3.5 py-1.5 bg-gradient-to-r from-amber-500 to-orange-500 hover:from-amber-600 hover:to-orange-600 disabled:opacity-40 text-white font-bold text-xs rounded-xl transition shadow-xs whitespace-nowrap">
+                        Забрать 🎉
+                      </button>
+                      <button 
+                        x-show="r.isCustom" 
+                        @click="deleteCustomReward(r.id)"
+                        class="text-gray-400 hover:text-red-500 p-1 rounded text-xs" title="Удалить">
+                        ✕
+                      </button>
+                    </div>
+                  </div>
+                </template>
+              </div>
+            </div>
+
+            <!-- Tab 3: Оформление и звуки -->
+            <div x-show="shopModal.tab === 'themes'" class="space-y-4">
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <!-- Theme 1 -->
+                <div class="bg-gray-900 text-white rounded-2xl p-4 flex flex-col justify-between border border-gray-700">
+                  <div>
+                    <span class="text-xs bg-indigo-500 text-white font-bold px-2 py-0.5 rounded-full uppercase">Стиль</span>
+                    <h4 class="font-bold text-base mt-2">Киберпанк Неон</h4>
+                    <p class="text-xs text-gray-400 mt-1">Футуристичная неоновая подсветка и звуки из будущего.</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-gray-800">
+                    <span class="font-black text-sm text-amber-400">120 🪙</span>
+                    <button 
+                      @click="buyTheme('cyberpunk', 120)"
+                      class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs rounded-xl transition">
+                      <span x-text="inventory?.activeTheme === 'cyberpunk' ? 'Активна' : 'Выбрать'"></span>
+                    </button>
+                  </div>
+                </div>
+
+                <!-- Sound 1 -->
+                <div class="bg-indigo-50/50 border border-indigo-200 rounded-2xl p-4 flex flex-col justify-between">
+                  <div>
+                    <span class="text-xs bg-indigo-100 text-indigo-700 font-bold px-2 py-0.5 rounded-full uppercase">Аудио</span>
+                    <h4 class="font-bold text-base mt-2 text-gray-900">Дзен-колокол</h4>
+                    <p class="text-xs text-gray-600 mt-1">Мягкий тибетский колокол для медитативного завершения сессий.</p>
+                  </div>
+                  <div class="mt-4 flex items-center justify-between pt-3 border-t border-indigo-200/60">
+                    <span class="font-black text-sm text-amber-700">50 🪙</span>
+                    <button 
+                      @click="buySound('zen_bell', 50)"
+                      class="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl transition">
+                      <span x-text="inventory?.activeSound === 'zen_bell' ? 'Активен' : 'Купить'"></span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+            <button @click="shopModal.show = false" class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SUBSCRIPTION MODAL -->
+      <div x-show="subscriptionModal.show" 
+           x-cloak 
+           class="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80"
+           style="contain: paint;"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0"
+           x-transition:enter-end="opacity-100"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100"
+           x-transition:leave-end="opacity-0">
+        <div class="bg-white rounded-3xl shadow-2xl max-w-xl w-full max-h-[90vh] flex flex-col overflow-hidden border border-gray-100"
+             @click.outside="subscriptionModal.show = false"
+             x-transition:enter="transition ease-out duration-300"
+             x-transition:enter-start="opacity-0 scale-95"
+             x-transition:enter-end="opacity-100 scale-100"
+             x-transition:leave="transition ease-in duration-200"
+             x-transition:leave-start="opacity-100 scale-100"
+             x-transition:leave-end="opacity-0 scale-95">
+          <div class="p-6 bg-gradient-to-r from-gray-900 to-indigo-900 text-white flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <span class="text-3xl">👑</span>
+              <div>
+                <h3 class="text-xl font-bold">Тарифные планы</h3>
+                <p class="text-xs text-indigo-200 mt-0.5">Управление подпиской и безлимитными возможностями</p>
+              </div>
+            </div>
+            <button @click="subscriptionModal.show = false" class="text-white/70 hover:text-white text-2xl font-bold leading-none p-1">✕</button>
+          </div>
+
+          <div class="p-6 overflow-y-auto space-y-4">
+            <div class="flex items-center justify-between p-3.5 bg-gray-50 rounded-xl border border-gray-200">
+              <div class="text-sm">
+                <span class="text-gray-500">Текущий тариф:</span>
+                <span class="font-bold ml-1" :class="isPremium ? 'text-amber-600' : 'text-blue-600'" x-text="isPremium ? 'Премиум PRO (Навсегда)' : 'Стартовый (Базовый)'"></span>
+              </div>
+              <div x-show="isPremium" class="text-xs bg-amber-100 text-amber-800 font-bold px-2.5 py-1 rounded-full border border-amber-300">
+                Активен
+              </div>
+            </div>
+
+            <!-- Карточка покупки для Free -->
+            <div x-show="!isPremium" class="bg-gradient-to-br from-blue-600 to-indigo-700 rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
+              <div class="relative z-10">
+                <div class="flex items-center justify-between mb-3">
+                  <h3 class="text-xl font-bold flex items-center gap-2">
+                    Премиум <span class="bg-gradient-to-r from-orange-400 to-red-500 text-white text-[10px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider">Хит продаж</span>
+                  </h3>
+                  <div class="text-2xl font-black">49 ₽ <span class="text-blue-200 text-xs font-normal">/ навсегда</span></div>
+                </div>
+                <ul class="space-y-2 text-sm text-blue-100 mb-6">
+                  <li class="flex items-center"><span class="text-green-400 mr-2 font-bold">✓</span> Всё из Стартового тарифа</li>
+                  <li class="flex items-center"><span class="text-green-400 mr-2 font-bold">✓</span> Безлимитные категории задач (вместо 3)</li>
+                  <li class="flex items-center"><span class="text-green-400 mr-2 font-bold">✓</span> Безлимитные email-напоминания (вместо 3)</li>
+                  <li class="flex items-center"><span class="text-green-400 mr-2 font-bold">✓</span> Полная история активности и аудит-логи</li>
+                  <li class="flex items-center"><span class="text-green-400 mr-2 font-bold">✓</span> Статус PRO в профиле и приоритетная поддержка</li>
+                </ul>
+                <button 
+                  @click="buyPremium()" 
+                  :disabled="loadingPayment"
+                  class="w-full py-3 bg-white hover:bg-blue-50 text-blue-600 rounded-xl font-black text-sm transition shadow-lg flex items-center justify-center gap-2 disabled:opacity-50">
+                  <span x-show="!loadingPayment">Оплатить 49 ₽ через ЮKassa</span>
+                  <span x-show="loadingPayment" class="animate-spin">↻</span>
+                  <span x-show="loadingPayment">Переход к оплате...</span>
+                </button>
+                <div class="text-[11px] text-blue-200 text-center mt-2">
+                  Доступ предоставляется автоматически сразу после успешной оплаты.
+                </div>
+              </div>
+            </div>
+
+            <!-- Карточка активного Премиума для PRO -->
+            <div x-show="isPremium" class="bg-gradient-to-br from-amber-500 via-amber-600 to-yellow-600 rounded-2xl p-6 text-white shadow-md relative overflow-hidden">
+              <div class="relative z-10">
+                <div class="flex items-center gap-2 mb-2">
+                  <span class="text-2xl">👑</span>
+                  <h3 class="text-xl font-bold">Тариф «Премиум» активен навсегда</h3>
+                </div>
+                <p class="text-sm text-amber-100 mb-4">Спасибо за поддержку проекта! Все ограничения сняты:</p>
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 text-sm text-white mb-5">
+                  <div class="flex items-center gap-1.5"><span class="text-yellow-200 font-bold">✓</span> Безлимитные категории</div>
+                  <div class="flex items-center gap-1.5"><span class="text-yellow-200 font-bold">✓</span> Безлимитные напоминания</div>
+                  <div class="flex items-center gap-1.5"><span class="text-yellow-200 font-bold">✓</span> Полная история действий</div>
+                  <div class="flex items-center gap-1.5"><span class="text-yellow-200 font-bold">✓</span> Статус PRO в профиле</div>
+                </div>
+                <div class="flex justify-end">
+                  <button 
+                    @click="syncPaymentStatus()"
+                    class="text-xs bg-white/20 hover:bg-white/30 text-white px-4 py-2 rounded-xl border border-white/30 transition-colors flex items-center gap-1.5 shadow-xs font-semibold">
+                    <span>↻</span>
+                    <span>Обновить статус оплаты</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="p-4 bg-gray-50 border-t border-gray-200 flex justify-end">
+            <button @click="subscriptionModal.show = false" class="bg-gray-200 hover:bg-gray-300 text-gray-700 text-xs font-bold px-4 py-2 rounded-xl transition-colors">
+              Закрыть
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- SECRET DEV CONSOLE (Localhost only, Ctrl+Shift+D or 5 clicks on Beta) -->
+      <!-- SECRET DEV CONSOLE (Localhost only, Ctrl+Shift+D or 5 clicks on Beta) -->
+      <div x-show="statsDebugEnabled && isLocal" 
+           x-cloak 
+           class="fixed bottom-4 right-4 z-50 max-w-md w-full bg-gray-900/95 text-white rounded-2xl shadow-2xl border border-gray-700 p-5 backdrop-blur-md"
+           x-transition:enter="transition ease-out duration-300"
+           x-transition:enter-start="opacity-0 translate-y-4 scale-95"
+           x-transition:enter-end="opacity-100 translate-y-0 scale-100"
+           x-transition:leave="transition ease-in duration-200"
+           x-transition:leave-start="opacity-100 translate-y-0 scale-100"
+           x-transition:leave-end="opacity-0 translate-y-4 scale-95">
+        <div class="flex items-center justify-between pb-3 border-b border-gray-700">
+          <div class="flex items-center gap-2">
+            <span class="text-lg">🛠️</span>
+            <h3 class="text-sm font-bold text-white tracking-wide">Developer Console</h3>
+            <span class="text-[10px] bg-red-500/20 text-red-300 border border-red-500/30 px-1.5 py-0.5 rounded font-mono font-bold">DEV ONLY</span>
+          </div>
+          <button @click="toggleStatsDebug()" class="text-gray-400 hover:text-white text-lg font-bold leading-none p-1">✕</button>
+        </div>
+
+        <!-- Quick Fast-Forward & DEV Actions -->
+        <div class="mt-3 grid grid-cols-2 gap-2">
+          <button 
+            @click="fastForwardPomodoro()" 
+            class="bg-amber-500/20 hover:bg-amber-500/30 border border-amber-500/40 text-amber-300 text-xs font-bold py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+            <span>⚡</span>
+            <span>Срезать таймер (10с)</span>
+          </button>
+
+          <button 
+            @click="togglePremiumDev()" 
+            class="bg-indigo-500/20 hover:bg-indigo-500/30 border border-indigo-500/40 text-indigo-300 text-xs font-bold py-2 px-2.5 rounded-xl transition flex items-center justify-center gap-1.5 shadow-sm">
+            <span>👑</span>
+            <span x-text="isPremium ? 'PRO (Вкл)' : 'PRO (Выкл)'"></span>
+          </button>
+
+          <button 
+            @click="applyStatsDelta({ points: 50 })" 
+            class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold py-1.5 px-2 rounded-lg transition text-center">
+            +50 XP
+          </button>
+
+          <button 
+            @click="applyStatsDelta({ points: 200 })" 
+            class="bg-purple-500/20 hover:bg-purple-500/30 border border-purple-500/40 text-purple-300 text-xs font-bold py-1.5 px-2 rounded-lg transition text-center">
+            +200 XP (Level Up)
+          </button>
+        </div>
+
+        <!-- Collapsible Details for PATCH /me/stats -->
+        <details class="mt-3 text-xs border-t border-gray-800 pt-2">
+          <summary class="cursor-pointer text-gray-400 hover:text-gray-200 select-none font-medium flex items-center justify-between py-1">
+            <span>Ручная настройка полей (PATCH /me/stats)</span>
+            <span class="text-[10px]">▼</span>
+          </summary>
+          <div class="grid grid-cols-2 gap-2 mt-2">
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Очки</label>
+              <input type="number" x-model="statsUpdateForm.points" placeholder="например 120" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Уровень</label>
+              <input type="number" x-model="statsUpdateForm.level" placeholder="например 3" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Помодоро</label>
+              <input type="number" x-model="statsUpdateForm.total_pomodoros" placeholder="например 10" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Сожжено</label>
+              <input type="number" x-model="statsUpdateForm.total_burnt_tasks" placeholder="например 2" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Стрик</label>
+              <input type="number" x-model="statsUpdateForm.current_streak" placeholder="например 5" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+            <div>
+              <label class="block text-[10px] text-gray-400 mb-0.5">Рекорд</label>
+              <input type="number" x-model="statsUpdateForm.best_streak" placeholder="например 12" class="w-full bg-gray-800 border border-gray-700 rounded px-2 py-1 text-xs text-white" />
+            </div>
+          </div>
+          <div class="mt-3 flex items-center justify-between">
+            <button @click="resetStatsDebugForm()" class="text-gray-400 hover:text-gray-300 text-[11px]">Сбросить форму</button>
+            <button @click="submitStatsUpdate()" :disabled="loadingStatsUpdate" class="bg-indigo-600 hover:bg-indigo-500 text-white font-bold px-3 py-1.5 rounded-lg text-xs transition">
+              <span x-show="!loadingStatsUpdate">Отправить PATCH</span>
+              <span x-show="loadingStatsUpdate">Отправка...</span>
+            </button>
+          </div>
+        </details>
+      </div>
+
+
 
       <!-- Подвал (Футер) -->
       <footer class="bg-gray-900 text-gray-400 py-10 text-sm mt-auto">
@@ -1242,7 +2014,7 @@
         </div>
         <div class="max-w-6xl mx-auto px-4 mt-8 pt-8 border-t border-gray-800 text-center md:text-left flex flex-col md:flex-row justify-between items-center text-gray-500">
           <p>© 2026 ToDo Notificator. Все права защищены.</p>
-          <p class="mt-2 md:mt-0">Сервис работает в бета-тесте</p>
+          <p @click="handleBetaClick()" class="mt-2 md:mt-0 cursor-pointer select-none hover:text-gray-400 transition-colors" title="ToDo Notificator Beta (5 кликов для Dev Mode)">Сервис работает в бета-тесте</p>
         </div>
       </footer>
     </div>
@@ -1253,9 +2025,267 @@
         ? "http://localhost:8082/api/v1"
         : "https://todoapi.chkpnk.ru/api/v1";
 
+      // Web Audio API Synthesizer (Zero MP3 files, 100% pure audio synthesis)
+      const soundEngine = {
+        ctx: null,
+        init() {
+          if (!this.ctx && (window.AudioContext || window.webkitAudioContext)) {
+            const AudioCtx = window.AudioContext || window.webkitAudioContext;
+            this.ctx = new AudioCtx();
+          }
+          if (this.ctx && this.ctx.state === 'suspended') {
+            this.ctx.resume();
+          }
+        },
+        playTaskDone() {
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            [523.25, 659.25, 783.99].forEach((freq, idx) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(freq, now + idx * 0.06);
+              gain.gain.setValueAtTime(0, now + idx * 0.06);
+              gain.gain.linearRampToValueAtTime(0.2, now + idx * 0.06 + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + idx * 0.06 + 0.4);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now + idx * 0.06);
+              osc.stop(now + idx * 0.06 + 0.45);
+            });
+          } catch(e) {}
+        },
+        playLevelUp() {
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const notes = [261.63, 329.63, 392.00, 523.25, 659.25, 783.99, 1046.50];
+            notes.forEach((freq, i) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(freq, now + i * 0.08);
+              gain.gain.setValueAtTime(0, now + i * 0.08);
+              gain.gain.linearRampToValueAtTime(0.25, now + i * 0.08 + 0.02);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + i * 0.08 + 0.55);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now + i * 0.08);
+              osc.stop(now + i * 0.08 + 0.6);
+            });
+          } catch(e) {}
+        },
+        playAchievement() {
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            [440, 554.37, 659.25, 880].forEach((freq, i) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'triangle';
+              osc.frequency.setValueAtTime(freq, now + i * 0.06);
+              gain.gain.setValueAtTime(0.2, now + i * 0.06);
+              gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.06 + 0.5);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now + i * 0.06);
+              osc.stop(now + i * 0.06 + 0.55);
+            });
+          } catch(e) {}
+        },
+        playBurn() {
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            const osc = this.ctx.createOscillator();
+            const gain = this.ctx.createGain();
+            osc.type = 'sawtooth';
+            osc.frequency.setValueAtTime(160, now);
+            osc.frequency.exponentialRampToValueAtTime(35, now + 0.55);
+            gain.gain.setValueAtTime(0.3, now);
+            gain.gain.exponentialRampToValueAtTime(0.001, now + 0.6);
+            osc.connect(gain);
+            gain.connect(this.ctx.destination);
+            osc.start(now);
+            osc.stop(now + 0.65);
+          } catch(e) {}
+        },
+        playPomodoroEnd() {
+          try {
+            this.init();
+            if (!this.ctx) return;
+            const now = this.ctx.currentTime;
+            [432, 864, 1296].forEach((f, idx) => {
+              const osc = this.ctx.createOscillator();
+              const gain = this.ctx.createGain();
+              osc.type = 'sine';
+              osc.frequency.setValueAtTime(f, now);
+              gain.gain.setValueAtTime(idx === 0 ? 0.25 : 0.07, now);
+              gain.gain.exponentialRampToValueAtTime(0.0001, now + 1.8);
+              osc.connect(gain);
+              gain.connect(this.ctx.destination);
+              osc.start(now);
+              osc.stop(now + 1.9);
+            });
+          } catch(e) {}
+        }
+      };
+
+      // HTML5 Canvas 2D Particles & Confetti Engine
+      const fxEngine = {
+        canvas: null,
+        ctx: null,
+        particles: [],
+        animId: null,
+        init() {
+          if (this.canvas) return;
+          this.canvas = document.createElement('canvas');
+          this.canvas.id = 'fx-canvas';
+          this.canvas.style.cssText = 'position:fixed;top:0;left:0;width:100vw;height:100vh;pointer-events:none;z-index:9998;';
+          document.body.appendChild(this.canvas);
+          this.ctx = this.canvas.getContext('2d');
+          this.resize();
+          window.addEventListener('resize', () => this.resize());
+        },
+        resize() {
+          if (!this.canvas) return;
+          this.canvas.width = window.innerWidth;
+          this.canvas.height = window.innerHeight;
+        },
+        confetti(x = window.innerWidth / 2, y = window.innerHeight / 2, count = 75) {
+          this.init();
+          const colors = ['#f59e0b', '#10b981', '#3b82f6', '#ec4899', '#8b5cf6', '#ef4444', '#fcd34d'];
+          for (let i = 0; i < count; i++) {
+            const angle = (Math.PI * 2 * i) / count + (Math.random() - 0.5);
+            const speed = Math.random() * 8 + 4;
+            this.particles.push({
+              x,
+              y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed - 4,
+              size: Math.random() * 7 + 5,
+              color: colors[Math.floor(Math.random() * colors.length)],
+              rotation: Math.random() * 360,
+              vr: (Math.random() - 0.5) * 16,
+              gravity: 0.2,
+              life: 1,
+              decay: Math.random() * 0.015 + 0.01,
+              shape: Math.random() > 0.4 ? 'rect' : 'circle'
+            });
+          }
+          this.startLoop();
+        },
+        sparks(x, y, color = '#f59e0b', count = 30) {
+          this.init();
+          for (let i = 0; i < count; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const speed = Math.random() * 6 + 2;
+            this.particles.push({
+              x,
+              y,
+              vx: Math.cos(angle) * speed,
+              vy: Math.sin(angle) * speed,
+              size: Math.random() * 4 + 2,
+              color,
+              gravity: 0.1,
+              life: 1,
+              decay: Math.random() * 0.035 + 0.02,
+              shape: 'spark'
+            });
+          }
+          this.startLoop();
+        },
+        startLoop() {
+          if (this.animId) return;
+          const loop = () => {
+            if (this.particles.length === 0) {
+              if (this.ctx && this.canvas) {
+                this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+              }
+              this.animId = null;
+              return;
+            }
+            this.ctx.clearRect(0, 0, this.canvas.width, this.canvas.height);
+            for (let i = this.particles.length - 1; i >= 0; i--) {
+              const p = this.particles[i];
+              p.x += p.vx;
+              p.y += p.vy;
+              p.vy += p.gravity;
+              p.life -= p.decay;
+              if (p.rotation !== undefined) p.rotation += p.vr;
+
+              if (p.life <= 0 || p.y > window.innerHeight + 50) {
+                this.particles.splice(i, 1);
+                continue;
+              }
+
+              this.ctx.save();
+              this.ctx.globalAlpha = Math.max(0, p.life);
+              this.ctx.fillStyle = p.color;
+              this.ctx.translate(p.x, p.y);
+              if (p.rotation) this.ctx.rotate((p.rotation * Math.PI) / 180);
+
+              if (p.shape === 'rect') {
+                this.ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size * 0.6);
+              } else {
+                this.ctx.beginPath();
+                this.ctx.arc(0, 0, p.size / 2, 0, Math.PI * 2);
+                this.ctx.fill();
+              }
+              this.ctx.restore();
+            }
+            this.animId = requestAnimationFrame(loop);
+          };
+          this.animId = requestAnimationFrame(loop);
+        }
+      };
+
       function app() {
         return {
           loadingPayment: false,
+
+          // Gamification 2.0 & Layout State
+          soundEnabled: localStorage.getItem('sound_enabled') !== '0',
+          gamification: null,
+          burningTaskId: null,
+          dailyChestClaimed: false,
+          achievements: [],
+          cachedFilteredAchievements: [],
+          loadingAchievements: false,
+          achievementsModal: { show: false, filter: 'all' },
+          subscriptionModal: { show: false },
+          devClicks: 0,
+          devClickTimer: null,
+          isLocal: (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1'),
+          levelUpModal: { show: false, level: 1, rank: 'Новичок', icon: '🌱' },
+          previousLevel: null,
+          defaultDailyQuests: [
+            { code: 'create_task', title: 'Планировщик', icon: '📝', target: 1, current: 0, completed: false, reward_xp: 10 },
+            { code: 'pomodoro_focus', title: 'Глубокий фокус', icon: '🍅', target: 1, current: 0, completed: false, reward_xp: 20 },
+            { code: 'complete_tasks', title: 'Продуктивный рывок', icon: '✅', target: 3, current: 0, completed: false, reward_xp: 30 }
+          ],
+
+          get unlockedAchievementsCount() {
+            return this.achievements.filter(a => a.unlocked).length || (this.gamification?.unlocked_count || 0);
+          },
+          get totalAchievementsCount() {
+            return this.achievements.length || (this.gamification?.total_achievements || 12);
+          },
+          get filteredAchievements() {
+            if (!this.achievements || this.achievements.length === 0) return [];
+            if (this.achievementsModal.filter === 'unlocked') {
+              return this.achievements.filter(a => a.unlocked);
+            }
+            if (this.achievementsModal.filter === 'locked') {
+              return this.achievements.filter(a => !a.unlocked);
+            }
+            return this.achievements;
+          },
           
           // Состояние активности (логов)
           logs: [],
@@ -1319,14 +2349,41 @@
           // Состояние аутентификации
           isAuthenticated: false,
           isVerified: false,
+          isPremium: false,
+          loadingPayment: false,
 
           authTab: "login",
           userEmail: "",
-          loginForm: { email: "", password: "" },
-          registerForm: { email: "", password: "" },
+          authForm: { email: "", password: "" },
+          showPassword: false,
+
+          // Геттеры/сеттеры для обратной совместимости
+          get loginForm() { return this.authForm; },
+          set loginForm(v) { this.authForm = v; },
+          get registerForm() { return this.authForm; },
+          set registerForm(v) { this.authForm = v; },
+          get showLoginPassword() { return this.showPassword; },
+          set showLoginPassword(v) { this.showPassword = v; },
+          get showRegisterPassword() { return this.showPassword; },
+          set showRegisterPassword(v) { this.showPassword = v; },
 
           
                         // POMODORO STATE
+            // COINS & REWARDS SHOP STATE
+            coins: parseInt(localStorage.getItem('focus_coins') || '50', 10),
+            shopModal: {
+              show: false,
+              tab: 'boosters'
+            },
+            inventory: JSON.parse(localStorage.getItem('user_inventory') || '{"boosters":{"streak_freeze":0,"xp_booster":0,"shield":0},"activeTheme":"default","activeSound":"default","customRewards":[]}'),
+            newCustomReward: { title: '', price: 50, icon: '☕' },
+            defaultCustomRewards: [
+              { id: 'def_1', title: 'Чашка ароматного кофе', price: 50, icon: '☕' },
+              { id: 'def_2', title: '1 час отдыха за играми / фильмом', price: 100, icon: '🎮' },
+              { id: 'def_3', title: 'Вкусный праздничный ужин / пицца', price: 250, icon: '🍕' }
+            ],
+
+            // POMODORO STATE
             pomodoro: {
               activeSession: null,
               mode: 'focus',
@@ -1334,7 +2391,10 @@
               timerInterval: null,
               completedCount: 0,
               showStopModal: false,
-              taskTitle: ''
+              taskTitle: '',
+              targetTaskId: null,
+              targetTaskTitle: '',
+              breakTotalSeconds: 300
             },
             
             async startPomodoro(taskId = null, taskTitle = '') {
@@ -1351,6 +2411,8 @@
                   this.pomodoro.activeSession = data.session;
                   this.pomodoro.mode = 'focus';
                   this.pomodoro.taskTitle = taskTitle;
+                  this.pomodoro.targetTaskId = taskId;
+                  this.pomodoro.targetTaskTitle = taskTitle;
                   this.startPomodoroTimer(data.session.duration_minutes * 60);
                   this.showToast('Таймер запущен!', 'success');
                   window.scrollTo({ top: 0, behavior: 'smooth' });
@@ -1416,13 +2478,19 @@
                 
                 if (action === 'abandoned' && finish_task) {
                    this.showToast('Вы сдались. Задача сожжена!', 'error');
+                   if (this.soundEnabled) soundEngine.playBurn();
+                   fxEngine.sparks(window.innerWidth / 2, window.innerHeight / 2, '#ef4444', 45);
                    this.spawnParticles('error', '-30 💔');
                 } else if (action === 'completed' && finish_task) {
                    this.showToast('Отлично! Задача выполнена.', 'success');
+                   if (this.soundEnabled) soundEngine.playTaskDone();
+                   fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 70);
                    this.spawnParticles('success', '+20 🏆');
                 } else if (action === 'completed') {
                    this.showToast('Помидорка пройдена!', 'success');
-                   this.spawnParticles('success', '+20 🪙');
+                   if (this.soundEnabled) soundEngine.playPomodoroEnd();
+                   fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 60);
+                   this.spawnParticles('success', '+20 🍅');
                 } else {
                    this.showToast('Таймер остановлен.', 'info');
                 }
@@ -1435,19 +2503,27 @@
             },
 
             returnToWork() {
-             if (!this.pomodoro.activeSession) return;
-             this.pomodoro.mode = 'focus';
-             this.startPomodoroTimer(this.pomodoro.activeSession.duration_minutes * 60);
-          },
+              const taskId = this.pomodoro.activeSession?.task_id || this.pomodoro.targetTaskId;
+              const taskTitle = this.pomodoro.taskTitle || this.pomodoro.targetTaskTitle;
+              this.startPomodoro(taskId, taskTitle);
+            },
 
-          startPomodoroTimer(seconds) {
-            this.clearPomodoroTimer();
-            if (seconds === undefined) return;
-            this.pomodoro.timeLeft = seconds;
-            this.pomodoro.timerInterval = setInterval(() => {
-              if (this.pomodoro.timeLeft > 0) {
-                this.pomodoro.timeLeft--;
-              } else if (this.pomodoro.timeLeft === 0) {
+            finishBreak() {
+              this.clearPomodoroTimer();
+              this.pomodoro.activeSession = null;
+              this.pomodoro.mode = 'focus';
+              this.pomodoro.timeLeft = 0;
+              this.showToast('Сессия завершена. Отличная работа!', 'info');
+            },
+
+            startPomodoroTimer(seconds) {
+              this.clearPomodoroTimer();
+              if (seconds === undefined) return;
+              this.pomodoro.timeLeft = seconds;
+              this.pomodoro.timerInterval = setInterval(() => {
+                if (this.pomodoro.timeLeft > 0) {
+                  this.pomodoro.timeLeft--;
+                } else if (this.pomodoro.timeLeft === 0) {
                   this.handlePomodoroTimerEnd();
                 }
               }, 1000);
@@ -1455,12 +2531,43 @@
 
             handlePomodoroTimerEnd() {
                if (this.pomodoro.mode === 'focus') {
-                  this.pomodoro.completedCount++;
-                  this.showToast('Помидорка завершена! Время для перерыва.', 'success');
-                  this.finishPomodoroSession('completed', false);
+                  this.pomodoro.completedCount = (this.pomodoro.completedCount || 0) + 1;
+                  
+                  // Начисляем монеты за фокус
+                  this.addCoins(15, 'Помидорка завершена');
+                  
+                  // Уведомляем бэкенд о завершении сессии
+                  if (this.pomodoro.activeSession && this.pomodoro.activeSession.id) {
+                     this.apiRequest(`/pomodoros/${this.pomodoro.activeSession.id}/stop`, {
+                       method: 'POST',
+                       body: JSON.stringify({ action: 'completed', finish_task: false })
+                     }).catch(() => {});
+                  }
+                  
+                  if (this.soundEnabled) soundEngine.playPomodoroEnd();
+                  fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 60);
+                  this.spawnParticles('success', '+20 🍅 +15 🪙');
+                  this.loadStats();
+                  
+                  // Расчет перерыва: 15 минут для каждой 4-й помидорки, 5 минут для обычных
+                  const isLongBreak = (this.pomodoro.completedCount % 4 === 0);
+                  const breakSeconds = isLongBreak ? 15 * 60 : 5 * 60;
+                  
+                  this.pomodoro.mode = 'break';
+                  this.pomodoro.breakTotalSeconds = breakSeconds;
+                  this.startPomodoroTimer(breakSeconds);
+                  
+                  this.showToast(
+                    isLongBreak 
+                      ? '🌴 4-я помидорка! Время для большого отдыха (15 минут).'
+                      : '☕ Помидорка завершена! Время для короткого перерыва (5 минут).',
+                    'success'
+                  );
                } else {
-                  this.showToast('Перерыв окончен! Возвращайтесь к работе.', 'info');
-                  this.pomodoro.mode = 'focus';
+                  this.clearPomodoroTimer();
+                  this.pomodoro.timeLeft = 0;
+                  if (this.soundEnabled) soundEngine.playTone(523.25, 'sine', 0.8);
+                  this.showToast('🔔 Перерыв окончен! Готовы продолжить работу?', 'info');
                }
             },
 
@@ -1521,6 +2628,126 @@
               const mins = Math.floor(this.pomodoro.timeLeft / 60).toString().padStart(2, '0');
               const secs = (this.pomodoro.timeLeft % 60).toString().padStart(2, '0');
               return `${mins}:${secs}`;
+            },
+
+            toggleSound() {
+              this.soundEnabled = !this.soundEnabled;
+              localStorage.setItem('sound_enabled', this.soundEnabled ? '1' : '0');
+              this.showToast(this.soundEnabled ? 'Звуковые эффекты включены 🔊' : 'Звук выключен 🔇', 'info');
+              if (this.soundEnabled) soundEngine.playTaskDone();
+            },
+
+            getPomodoroRingOffset() {
+              let total = 1500;
+              if (this.pomodoro.mode === 'break') {
+                total = this.pomodoro.breakTotalSeconds || ((this.pomodoro.completedCount % 4 === 0) ? 900 : 300);
+              } else if (this.pomodoro.activeSession?.duration_minutes) {
+                total = this.pomodoro.activeSession.duration_minutes * 60;
+              }
+              const left = this.pomodoro.timeLeft || 0;
+              const progress = Math.max(0, Math.min(1, left / total));
+              const circumference = 628.32;
+              return (circumference * (1 - progress)).toFixed(2);
+            },
+
+            spawnFloatingBadge(x, y, text, color = '#10b981') {
+              const el = document.createElement('div');
+              el.className = 'floating-xp text-sm sm:text-base flex items-center gap-1.5 bg-white/95 px-3 py-1.5 rounded-full shadow-lg border border-gray-100 font-black';
+              el.style.left = `${Math.min(window.innerWidth - 150, Math.max(20, x || (window.innerWidth / 2 - 50)))}px`;
+              el.style.top = `${y ? y - 35 : (window.innerHeight / 2)}px`;
+              el.style.color = color;
+              el.innerHTML = text;
+              document.body.appendChild(el);
+              setTimeout(() => el.remove(), 1250);
+            },
+
+            async handleTaskClick(task, event) {
+              if (task.status !== 'done') {
+                this.addCoins(5, 'Задача выполнена');
+              if (this.soundEnabled) soundEngine.playTaskDone();
+                const mult = this.gamification?.streak_multiplier || 1.0;
+                const xpGain = Math.round(10 * mult);
+                const badgeText = mult > 1.0 ? `+${xpGain} XP 🔥 x${mult.toFixed(1)}` : `+${xpGain} XP 🏆`;
+                const clientX = event?.clientX || (window.innerWidth / 2);
+                const clientY = event?.clientY || (window.innerHeight / 2);
+                this.spawnFloatingBadge(clientX, clientY, badgeText, '#059669');
+                fxEngine.sparks(clientX, clientY, '#10b981', 18);
+              }
+              await this.toggleTaskStatus(task);
+            },
+
+            async handleBurnTask(taskId) {
+              this.pomodoro.showStopModal = false;
+              if (this.soundEnabled) soundEngine.playBurn();
+              this.burningTaskId = taskId;
+              fxEngine.sparks(window.innerWidth / 2, window.innerHeight / 2, '#ef4444', 45);
+              this.spawnFloatingBadge(window.innerWidth / 2 - 80, window.innerHeight / 2, '-30 💔 Стрик сброшен!', '#dc2626');
+              
+              setTimeout(() => {
+                this.finishPomodoroSession('abandoned', true);
+                setTimeout(() => { this.burningTaskId = null; }, 1200);
+              }, 600);
+            },
+
+            isDailyChestClaimable() {
+              const quests = this.gamification?.daily_quests || [];
+              return quests.length > 0 && quests.every(q => q.completed);
+            },
+
+            async claimDailyChest() {
+              if (!this.isDailyChestClaimable() || this.dailyChestClaimed) return;
+              this.dailyChestClaimed = true;
+              if (this.soundEnabled) soundEngine.playAchievement();
+              fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 85);
+              this.showToast('🎁 Сундук дня открыт! +50 XP за верность делу!', 'success');
+              await this.applyStatsDelta({ points: 50 });
+            },
+
+            async openAchievementsModal() {
+              this.achievementsModal.show = true;
+              await this.loadAchievements();
+              this.updateFilteredAchievements();
+            },
+
+            async loadAchievements() {
+              this.loadingAchievements = true;
+              try {
+                const res = await this.apiRequest('/me/achievements', { method: 'GET' });
+                if (res && res.ok) {
+                  const data = await res.json();
+                  this.achievements = data.achievements || [];
+                  this.updateFilteredAchievements();
+                }
+              } catch (e) {
+                console.warn('Failed to load achievements', e);
+              } finally {
+                this.loadingAchievements = false;
+              }
+            },
+
+            updateFilteredAchievements() {
+              if (!this.achievements || this.achievements.length === 0) {
+                this.cachedFilteredAchievements = [];
+                return;
+              }
+              if (this.achievementsModal.filter === 'unlocked') {
+                this.cachedFilteredAchievements = this.achievements.filter(a => a.unlocked);
+              } else if (this.achievementsModal.filter === 'locked') {
+                this.cachedFilteredAchievements = this.achievements.filter(a => !a.unlocked);
+              } else {
+                this.cachedFilteredAchievements = this.achievements;
+              }
+            },
+
+            triggerLevelUp(level, rankTitle, rankIcon) {
+              this.levelUpModal = {
+                show: true,
+                level: level,
+                rank: rankTitle || 'Мастер',
+                icon: rankIcon || '⭐'
+              };
+              if (this.soundEnabled) soundEngine.playLevelUp();
+              fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 100);
             },// Задачи
           tasks: [],
           categories: [],
@@ -1598,7 +2825,7 @@
           },
 
           get passwordStrength() {
-            const p = this.registerForm.password;
+            const p = (this.authForm && this.authForm.password) ? this.authForm.password : "";
             if (p.length === 0) return 0;
             let score = 0;
             if (p.length >= 8) score++;
@@ -1608,8 +2835,17 @@
             return score;
           },
 
+          refreshTokenPromise: null,
+
           // Инициализация
-          init() {
+          async init() {
+            // Глобальный хоткей для Dev Console (Ctrl + Shift + D)
+            window.addEventListener('keydown', (e) => {
+              if (e.ctrlKey && e.shiftKey && (e.key === 'D' || e.key === 'd' || e.code === 'KeyD')) {
+                e.preventDefault();
+                this.toggleStatsDebug();
+              }
+            });
             const urlParams = new URLSearchParams(window.location.search);
             const verifyToken = urlParams.get("token");
             if (verifyToken) {
@@ -1618,19 +2854,59 @@
               this.verifyEmail(verifyToken);
             }
 
-            const accessToken = localStorage.getItem("access_token");
+            const rawAccessToken = localStorage.getItem("access_token");
+            const rawRefreshToken = localStorage.getItem("refresh_token");
             const email = localStorage.getItem("user_email");
+
+            const isValidToken = (t) => t && t !== "undefined" && t !== "null" && t.trim() !== "";
+            const accessToken = isValidToken(rawAccessToken) ? rawAccessToken : null;
+            const refreshToken = isValidToken(rawRefreshToken) ? rawRefreshToken : null;
+
             const debugFlag =
               localStorage.getItem("stats_debug") === "1" ||
               new URLSearchParams(window.location.search).get("debug") === "1" ||
               window.location.hash.includes("debug");
             this.statsDebugEnabled = debugFlag;
-            if (accessToken) {
+
+            // Если токенов нет вообще — остаёмся на лендинге без единого запроса к бэкенду
+            if (!accessToken && !refreshToken) {
+              this.handleLogout(false);
+              return;
+            }
+
+            const nowSec = Math.floor(Date.now() / 1000);
+            const claims = accessToken ? this.parseJwt(accessToken) : null;
+
+            // Сценарий 1: Access-токен валиден и не истекает в ближайшие 15 секунд
+            if (claims && claims.exp && claims.exp > nowSec + 15) {
               this.isAuthenticated = true;
-                this.isVerified = !!this.parseJwt(localStorage.getItem("access_token"))?.is_verified;
+              this.isVerified = !!claims.is_verified;
+              this.isPremium = !!claims.is_premium;
               this.userEmail = email || "";
-              this.loadCategories().then(() => this.loadTasks());
-              this.loadStats();
+              await this.bootstrap();
+            } else if (refreshToken) {
+              // Сценарий 2: Access-токен истек, но есть refresh-токен: тихо обновляем ДО отправки запросов
+              const refreshed = await this.refreshToken();
+              if (refreshed) {
+                this.isAuthenticated = true;
+                this.userEmail = email || "";
+                await this.bootstrap();
+              } else {
+                this.handleLogout(false);
+                return;
+              }
+            } else {
+              // Сценарий 3: Токен испорчен или просрочен без refresh-токена
+              this.handleLogout(false);
+              return;
+            }
+
+            const paymentParam = new URLSearchParams(window.location.search).get("payment");
+            if (paymentParam === "check" || paymentParam === "success") {
+              const url = new URL(window.location.href);
+              url.searchParams.delete("payment");
+              window.history.replaceState({}, document.title, url.pathname + (url.search || '') + url.hash);
+              this.syncPaymentStatus();
             }
           },
 
@@ -1648,31 +2924,59 @@
             }, 3000);
           },
 
-          // API запрос с автоматическим обновлением токена
+          // API запрос с автоматическим обновлением токена и защитой от спама 401
           async apiRequest(path, options = {}) {
-            const accessToken = localStorage.getItem("access_token");
+            let accessToken = localStorage.getItem("access_token");
+            if (accessToken === "undefined" || accessToken === "null") accessToken = null;
+
+            // Защита: если токена нет, проверяем возможность тихо обновиться перед сетевым запросом
+            if (!accessToken) {
+              const hasRefresh = !!localStorage.getItem("refresh_token");
+              if (!hasRefresh) {
+                return null;
+              }
+              const refreshed = await this.refreshToken();
+              if (!refreshed) {
+                this.handleLogout(false);
+                return null;
+              }
+              accessToken = localStorage.getItem("access_token");
+            } else {
+              // Proactive refresh: если токен истекает в ближайшие 5 секунд, обновляем заранее
+              const claims = this.parseJwt(accessToken);
+              const nowSec = Math.floor(Date.now() / 1000);
+              if (claims && claims.exp && claims.exp <= nowSec + 5) {
+                const refreshed = await this.refreshToken();
+                if (refreshed) {
+                  accessToken = localStorage.getItem("access_token");
+                }
+              }
+            }
 
             const config = {
               headers: {
                 "Content-Type": "application/json",
-                ...(accessToken
-                  ? { Authorization: `Bearer ${accessToken}` }
-                  : {}),
+                ...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
                 ...options.headers,
               },
               ...options,
             };
 
-            let response = await fetch(`${API_BASE}${path}`, config);
+            let response;
+            try {
+              response = await fetch(`${API_BASE}${path}`, config);
+            } catch (err) {
+              throw err;
+            }
 
-            // Если 401 - пробуем обновить токен
+            // Если всё же получен 401 - пробуем однократно обновить токен через singleflight
             if (response.status === 401) {
               const refreshed = await this.refreshToken();
               if (refreshed) {
                 config.headers.Authorization = `Bearer ${localStorage.getItem("access_token")}`;
                 response = await fetch(`${API_BASE}${path}`, config);
               } else {
-                this.handleLogout();
+                this.handleLogout(true);
                 return null;
               }
             }
@@ -1680,31 +2984,93 @@
             return response;
           },
 
-          // Обновление токена
+          // Обновление токена с Singleflight (мьютекс предотвращает параллельные вызовы /refresh)
           async refreshToken() {
-            const refreshTokenValue = localStorage.getItem("refresh_token");
-            if (!refreshTokenValue) return false;
+            if (this.refreshTokenPromise) {
+              return this.refreshTokenPromise;
+            }
 
-            try {
-              const response = await fetch(`${API_BASE}/refresh`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ refresh_token: refreshTokenValue }),
-              });
-
-              if (!response.ok) return false;
-
-              const data = await response.json();
-              if (data.access_token) {
-                localStorage.setItem("access_token", data.access_token);
-                localStorage.setItem("refresh_token", data.refresh_token);
-                return true;
+            this.refreshTokenPromise = (async () => {
+              const rawRefreshToken = localStorage.getItem("refresh_token");
+              if (!rawRefreshToken || rawRefreshToken === "undefined" || rawRefreshToken === "null") {
+                return false;
               }
 
-              return false;
-            } catch {
-              return false;
+              try {
+                const response = await fetch(`${API_BASE}/refresh`, {
+                  method: "POST",
+                  headers: { "Content-Type": "application/json" },
+                  body: JSON.stringify({ refresh_token: rawRefreshToken }),
+                });
+
+                if (!response.ok) return false;
+
+                const data = await response.json();
+                if (data.access_token) {
+                  localStorage.setItem("access_token", data.access_token);
+                  if (data.refresh_token) {
+                    localStorage.setItem("refresh_token", data.refresh_token);
+                  }
+                  const claims = this.parseJwt(data.access_token);
+                  if (claims) {
+                    this.isVerified = !!claims.is_verified;
+                    this.isPremium = !!claims.is_premium;
+                  }
+                  return true;
+                }
+
+                return false;
+              } catch {
+                return false;
+              } finally {
+                this.refreshTokenPromise = null;
+              }
+            })();
+
+            return this.refreshTokenPromise;
+          },
+
+          // Агрегированная начальная загрузка (1 запрос вместо 4-5)
+          async bootstrap() {
+            try {
+              const response = await this.apiRequest("/me/bootstrap", { method: "GET" });
+              if (response && response.ok) {
+                const data = await response.json();
+                if (data.user) {
+                  this.isVerified = !!data.user.is_verified;
+                  this.isPremium = !!data.user.is_premium;
+                  this.userEmail = data.user.email || this.userEmail;
+                }
+                this.categories = data.categories || [];
+                this.tasks = data.tasks || [];
+                this.pagination.total = data.pagination?.total ?? (data.tasks ? data.tasks.length : 0);
+                this.stats = data.stats || null;
+                if (data.gamification) {
+                  this.gamification = data.gamification;
+                  this.previousLevel = data.gamification.level;
+                }
+                if (data.active_pomodoro) {
+                  this.pomodoro.activeSession = data.active_pomodoro;
+                  this.pomodoro.mode = data.active_pomodoro.breaks_used > 0 ? 'break' : 'focus';
+                  this.pomodoro.taskTitle = data.active_pomodoro.task_title || '';
+                  if (!this.pomodoro.timerInterval) {
+                    const elapsed = Math.floor((Date.now() - new Date(data.active_pomodoro.started_at).getTime()) / 1000);
+                    const totalSec = data.active_pomodoro.duration_minutes * 60;
+                    const remain = Math.max(0, totalSec - elapsed);
+                    this.startPomodoroTimer(remain);
+                  }
+                }
+                return;
+              }
+            } catch (err) {
+              console.warn("Bootstrap endpoint not available, falling back to separate calls", err);
             }
+
+            // Fallback для обратной совместимости
+            await Promise.all([
+              this.loadCategories().then(() => this.loadTasks()),
+              this.loadStats()
+            ]);
           },
 
           // Аутентификация
@@ -1765,52 +3131,19 @@
           },
 
           async login() {
-            this.loading = true;
-            try {
-              const response = await fetch(`${API_BASE}/login`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(this.loginForm),
-              });
-
-              const data = await response.json();
-
-              if (!response.ok) {
-                this.showToast(data.error || "Ошибка входа", "error");
-                return;
-              }
-
-              localStorage.setItem(
-                "access_token",
-                data.access_token || data.token,
-              );
-              if (data.refresh_token)
-                localStorage.setItem("refresh_token", data.refresh_token);
-              localStorage.setItem("user_email", this.loginForm.email);
-
-              this.userEmail = this.loginForm.email;
-                this.isVerified = !!this.parseJwt(data.access_token || data.token)?.is_verified;
-              this.isAuthenticated = true;
-              this.loginForm = { email: "", password: "" };
-
-              this.showToast("Добро пожаловать!", "success");
-              this.loadCategories();
-              this.loadTasks();
-              this.loadStats();
-            } catch (err) {
-              this.showToast("Ошибка подключения к серверу", "error");
-            } finally {
-              this.loading = false;
-            }
+            return this.performLogin(this.authForm.email, this.authForm.password, false);
           },
 
           async register() {
             this.loading = true;
             try {
+              const email = (this.authForm.email || "").trim();
+              const password = this.authForm.password;
+
               const response = await fetch(`${API_BASE}/register`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify(this.registerForm),
+                body: JSON.stringify({ email, password }),
               });
 
               const data = await response.json();
@@ -1820,10 +3153,56 @@
                 return;
               }
 
-              this.showToast("Аккаунт создан! Теперь войдите.", "success");
-              this.authTab = "login";
-              this.loginForm.email = this.registerForm.email;
-              this.registerForm = { email: "", password: "" };
+              this.showToast("Аккаунт создан! Выполняем вход...", "success");
+
+              // Автоматический вход сразу после успешной регистрации
+              await this.performLogin(email, password, true);
+            } catch (err) {
+              this.showToast("Ошибка подключения к серверу", "error");
+            } finally {
+              this.loading = false;
+            }
+          },
+
+          async performLogin(email, password, isAfterRegister = false) {
+            this.loading = true;
+            try {
+              const cleanEmail = (email || "").trim();
+              const response = await fetch(`${API_BASE}/login`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ email: cleanEmail, password }),
+              });
+
+              const data = await response.json();
+
+              if (!response.ok) {
+                this.showToast(data.error || "Ошибка входа", "error");
+                return;
+              }
+
+              const token = data.access_token || data.token;
+              localStorage.setItem("access_token", token);
+              if (data.refresh_token) {
+                localStorage.setItem("refresh_token", data.refresh_token);
+              }
+              localStorage.setItem("user_email", cleanEmail);
+
+              this.userEmail = cleanEmail;
+              const claims = this.parseJwt(token);
+              this.isVerified = !!claims?.is_verified;
+              this.isPremium = !!claims?.is_premium;
+              this.isAuthenticated = true;
+              this.authForm = { email: "", password: "" };
+
+              if (isAfterRegister) {
+                this.showToast("Добро пожаловать! Подтвердите почту для включения напоминаний.", "info");
+              } else {
+                this.showToast("Добро пожаловать!", "success");
+              }
+
+              // Начальная загрузка через единый bootstrap-запрос
+              await this.bootstrap();
             } catch (err) {
               this.showToast("Ошибка подключения к серверу", "error");
             } finally {
@@ -1841,10 +3220,10 @@
                 });
               }
             } catch {}
-            this.handleLogout();
+            this.handleLogout(true);
           },
 
-          handleLogout() {
+          handleLogout(showNotice = true) {
             this.clearPomodoroTimer();
             localStorage.removeItem("access_token");
             localStorage.removeItem("refresh_token");
@@ -1854,7 +3233,9 @@
             this.categories = [];
             this.stats = null;
             this.userEmail = "";
-            this.showToast("Вы вышли из системы", "info");
+            if (showNotice) {
+              this.showToast("Вы вышли из системы", "info");
+            }
           },
 
           // Статистика
@@ -1864,13 +3245,128 @@
             return String(v);
           },
 
+          // SHOP & COINS METHODS
+            openShopModal() {
+              this.shopModal.show = true;
+            },
+
+            addCoins(amount, reason = '') {
+              this.coins = (this.coins || 0) + amount;
+              localStorage.setItem('focus_coins', this.coins);
+              this.spawnFloatingBadge(window.innerWidth - 140, 60, `+${amount} 🪙`, '#f59e0b');
+              if (reason) {
+                this.showToast(`+${amount} 🪙 (${reason})`, 'success');
+              }
+            },
+
+            spendCoins(amount) {
+              if ((this.coins || 0) < amount) {
+                this.showToast('Недостаточно коинов 🪙!', 'error');
+                return false;
+              }
+              this.coins -= amount;
+              localStorage.setItem('focus_coins', this.coins);
+              return true;
+            },
+
+            buyBooster(type, price) {
+              if (!this.spendCoins(price)) return;
+              if (!this.inventory.boosters) this.inventory.boosters = {};
+              this.inventory.boosters[type] = (this.inventory.boosters[type] || 0) + 1;
+              localStorage.setItem('user_inventory', JSON.stringify(this.inventory));
+              if (this.soundEnabled) soundEngine.playTaskDone();
+              fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 50);
+              this.showToast('Бустер успешно приобретен!', 'success');
+            },
+
+            buySuperChest(price) {
+              if (!this.spendCoins(price)) return;
+              const bonusXP = Math.floor(Math.random() * 200) + 100;
+              this.applyStatsDelta({ points: bonusXP });
+              if (this.soundEnabled) soundEngine.playTaskDone();
+              fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 80);
+              this.spawnParticles('success', `+${bonusXP} XP! 🎁`);
+              this.showToast(`Сундук открыт: +${bonusXP} XP начислено!`, 'success');
+            },
+
+            addCustomReward() {
+              const title = (this.newCustomReward.title || '').trim();
+              if (!title) {
+                this.showToast('Введите название награды', 'error');
+                return;
+              }
+              const price = Math.max(10, parseInt(this.newCustomReward.price || 50, 10));
+              if (!this.inventory.customRewards) this.inventory.customRewards = [];
+              this.inventory.customRewards.push({
+                id: 'custom_' + Date.now(),
+                title: title,
+                price: price,
+                icon: '🎁',
+                isCustom: true
+              });
+              localStorage.setItem('user_inventory', JSON.stringify(this.inventory));
+              this.newCustomReward = { title: '', price: 50, icon: '☕' };
+              this.showToast('Личная награда добавлена!', 'success');
+            },
+
+            claimCustomReward(reward) {
+              if (!this.spendCoins(reward.price)) return;
+              if (this.soundEnabled) soundEngine.playTaskDone();
+              fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 80);
+              this.spawnParticles('success', `🎉 ${reward.title}!`);
+              this.showToast(`🎉 Вы заслужили это: «${reward.title}»! Наслаждайтесь!`, 'success');
+            },
+
+            deleteCustomReward(rewardId) {
+              if (!this.inventory.customRewards) return;
+              this.inventory.customRewards = this.inventory.customRewards.filter(r => r.id !== rewardId);
+              localStorage.setItem('user_inventory', JSON.stringify(this.inventory));
+              this.showToast('Награда удалена', 'info');
+            },
+
+            buyTheme(themeId, price) {
+              this.inventory.activeTheme = themeId;
+              localStorage.setItem('user_inventory', JSON.stringify(this.inventory));
+              this.showToast(`Стиль «${themeId}» активирован!`, 'success');
+            },
+
+            buySound(soundId, price) {
+              this.inventory.activeSound = soundId;
+              localStorage.setItem('user_inventory', JSON.stringify(this.inventory));
+              this.showToast(`Звуковой пак активирован!`, 'success');
+            },
+
+          fastForwardPomodoro() {
+            if (!this.pomodoro.activeSession) {
+              this.showToast('Нет активной сессии Pomodoro', 'info');
+              return;
+            }
+            this.pomodoro.timeLeft = 10;
+            this.showToast('⚡ Таймер перемотан: осталось 10 секунд!', 'success');
+          },
+
+          handleBetaClick() {
+            if (!this.isLocal) return;
+            this.devClicks = (this.devClicks || 0) + 1;
+            if (this.devClickTimer) clearTimeout(this.devClickTimer);
+            this.devClickTimer = setTimeout(() => { this.devClicks = 0; }, 2500);
+            if (this.devClicks >= 5) {
+              this.devClicks = 0;
+              this.toggleStatsDebug();
+            }
+          },
+
           toggleStatsDebug() {
+            if (!this.isLocal) {
+              this.showToast('Режим разработчика доступен только локально', 'info');
+              return;
+            }
             this.statsDebugEnabled = !this.statsDebugEnabled;
             localStorage.setItem("stats_debug", this.statsDebugEnabled ? "1" : "0");
             this.showToast(
               this.statsDebugEnabled
-                ? "Debug-панель статистики включена"
-                : "Debug-панель статистики выключена",
+                ? "🛠️ Режим разработчика включен (Ctrl+Shift+D)"
+                : "Режим разработчика выключен",
               "info",
             );
           },
@@ -1887,14 +3383,24 @@
           },
 
           parseJwt(token) {
+            try {
+              const parts = (token || '').split('.');
+              if (parts.length !== 3) return null;
+              const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+              const jsonPayload = decodeURIComponent(atob(base64).split('').map(c => {
+                return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+              }).join(''));
+              return JSON.parse(jsonPayload);
+            } catch (e) {
               try {
                 const parts = (token || '').split('.');
-                if (parts.length !== 3) return null;
-                return JSON.parse(atob(parts[1]));
-              } catch (e) {
+                const base64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+                return JSON.parse(atob(base64));
+              } catch {
                 return null;
               }
-            },
+            }
+          },
 
             toOptionalInt(v) {
             if (v === null || v === undefined) return undefined;
@@ -1946,6 +3452,21 @@
               } else {
                 this.stats = newStats;
               }
+
+              // Синхронизация профиля геймификации и проверка Level Up
+              try {
+                const bRes = await this.apiRequest("/me/bootstrap", { method: "GET" });
+                if (bRes && bRes.ok) {
+                  const bData = await bRes.json();
+                  if (bData.gamification) {
+                    if (this.previousLevel && bData.gamification.level > this.previousLevel) {
+                      this.triggerLevelUp(bData.gamification.level, bData.gamification.rank_title, bData.gamification.rank_icon);
+                    }
+                    this.previousLevel = bData.gamification.level;
+                    this.gamification = bData.gamification;
+                  }
+                }
+              } catch(e) {}
             } catch {
               this.stats = null;
               this.showToast("Ошибка подключения к серверу (stats)", "error");
@@ -2040,6 +3561,12 @@
             const name = this.newCategoryName.trim();
             if (!name) return;
 
+            if (!this.isPremium && this.categories.length >= 3) {
+              this.showToast("В бесплатном тарифе доступно до 3 категорий. Перейдите на Премиум!", "info");
+              this.scrollToSubscription();
+              return;
+            }
+
             try {
               const response = await this.apiRequest("/categories", {
                 method: "POST",
@@ -2050,6 +3577,9 @@
               const data = await response.json();
               if (!response.ok) {
                 this.showToast(data.error || "Ошибка создания категории", "error");
+                if (response.status === 403) {
+                  this.scrollToSubscription();
+                }
                 return;
               }
 
@@ -2179,6 +3709,9 @@
 
               if (!response.ok) {
                 this.showToast(data.error || "Ошибка создания задачи", "error");
+                if (response.status === 403) {
+                  this.scrollToSubscription();
+                }
                 return;
               }
 
@@ -2228,6 +3761,58 @@
               this.showToast("Ошибка подключения к серверу", "error");
               this.loadingPayment = false;
             }
+          },
+
+          async syncPaymentStatus() {
+            try {
+              const response = await this.apiRequest("/payments/sync", {
+                method: "POST",
+              });
+              if (!response) return;
+
+              const data = await response.json();
+              if (data.is_premium) {
+                await this.refreshToken();
+                this.isPremium = true;
+                this.showToast("🎉 Поздравляем! Премиум навсегда успешно активирован!", "success");
+                this.spawnParticles('success', '👑 PRO АКТИВИРОВАН!');
+              } else if (data.payment_status === "pending") {
+                this.showToast("Платеж еще обрабатывается банком. Статус обновится в ближайшее время.", "info");
+              } else {
+                this.showToast("Платеж не завершен или отменен", "error");
+              }
+            } catch (err) {
+              console.error("Payment sync error:", err);
+            }
+          },
+
+          async togglePremiumDev() {
+            try {
+              const response = await this.apiRequest("/dev/toggle-premium", {
+                method: "POST",
+              });
+              if (!response) return;
+
+              const data = await response.json();
+              if (response.ok) {
+                await this.refreshToken();
+                this.isPremium = !!data.is_premium;
+                if (this.isPremium) {
+                  this.showToast("👑 Премиум включен (Dev режим)", "success");
+                  this.spawnParticles('success', '👑 PRO DEV');
+                } else {
+                  this.showToast("Статус переключен на Базовый (Dev режим)", "info");
+                }
+              } else {
+                this.showToast(data.error || "Ошибка переключения статуса", "error");
+              }
+            } catch {
+              this.showToast("Ошибка подключения к dev эндпоинту", "error");
+            }
+          },
+
+          scrollToSubscription() {
+            this.subscriptionModal.show = true;
           },
 
           async deleteTask(taskId) {
@@ -2305,6 +3890,9 @@
 
               if (!response.ok) {
                 this.showToast(data.error || "Ошибка обновления", "error");
+                if (response.status === 403) {
+                  this.scrollToSubscription();
+                }
                 return;
               }
 
@@ -2313,7 +3901,10 @@
 
               if (fields.status === "done" && !oldClaimed) {
                 await this.loadStats();
-                this.spawnParticles('success', '+10 🏆');
+                const mult = this.gamification?.streak_multiplier || 1.0;
+                const xpGain = Math.round(10 * mult);
+                this.spawnParticles('success', mult > 1.0 ? `+${xpGain} XP 🔥 x${mult.toFixed(1)}` : `+${xpGain} XP 🏆`);
+                fxEngine.confetti(window.innerWidth / 2, window.innerHeight / 2, 50);
               }
             } catch (err) {
               this.showToast("Ошибка подключения к серверу", "error");

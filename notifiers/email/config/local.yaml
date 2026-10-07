@@ -1,12 +1,14 @@
 env: "local"
 
-app_url: "http://localhost:3030/frontend"
+app_url: "http://localhost:3030"
 
 smtp:
-  host: "smtp.mail.ru"
+  host: "smtp-relay.brevo.com"
   port: 587
   username: ""
   password: ""
+  from: ""
+  sender_name: "ToDoNotificator"
 
 webhook:
   address: "localhost:8084"

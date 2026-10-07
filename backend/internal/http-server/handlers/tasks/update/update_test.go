@@ -26,11 +26,20 @@ type mockUpdater struct {
 
 	getTaskFunc         func(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 	applyStatsDeltaFunc func(ctx context.Context, userID int64, delta domain.StatsDelta) error
+	remindersCount      int
+	countErr            error
 }
 
 func (m *mockUpdater) UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error {
 	m.called = true
 	return m.err
+}
+
+func (m *mockUpdater) CountActiveReminders(ctx context.Context, userID int64) (int, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.remindersCount, nil
 }
 
 func (m *mockUpdater) GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
@@ -211,3 +220,54 @@ func TestUpdate_WithCategory(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 	require.True(t, updater.called)
 }
+
+func TestUpdate_ActiveRemindersLimit_FreeUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com", IsPremium: false}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{
+		remindersCount: 3,
+		getTaskFunc: func(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
+			return domain.Task{ID: 1, ReminderAt: nil}, nil // task had no reminder
+		},
+	}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+
+	future := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"reminder_at":"`+future+`"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "не более 3 активных напоминаний")
+}
+
+func TestUpdate_ActiveRemindersLimit_PremiumUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "u@test.com", IsPremium: true}, secret, time.Hour)
+	require.NoError(t, err)
+
+	updater := &mockUpdater{
+		remindersCount: 3,
+		getTaskFunc: func(ctx context.Context, userID int64, taskID int64) (domain.Task, error) {
+			return domain.Task{ID: 1, ReminderAt: nil}, nil
+		},
+	}
+	r := chi.NewRouter()
+	r.Use(authmw.New(secret))
+	r.Patch("/tasks/{task_id}", New(slog.New(slog.DiscardHandler), updater, "", "", nil))
+
+	future := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	req := httptest.NewRequest(http.MethodPatch, "/tasks/1", strings.NewReader(`{"reminder_at":"`+future+`"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	r.ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code)
+	require.True(t, updater.called)
+}
+

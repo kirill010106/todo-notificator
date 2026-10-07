@@ -1,7 +1,7 @@
 $ErrorActionPreference = "Stop"
 
 $localDbContainer = "todo-local-pg-alt"
-$localDbPort = 55432
+$localDbPort = 5433
 $localDbName = "todo"
 $localDbUser = "postgres"
 $localDbPassword = "postgres"
@@ -29,6 +29,16 @@ function Ensure-LocalPostgres {
         throw "failed to query docker containers"
     }
 
+    if ($containerId) {
+        # Check if existing container has matching port binding
+        $portOutput = (docker port $Container "5432/tcp" 2>$null) -join " "
+        if ($portOutput -and $portOutput -notmatch ":$Port(\s|$)") {
+            Write-Host "Container '$Container' has ports '$portOutput', but requested $Port. Recreating..." -ForegroundColor Yellow
+            docker rm -f $Container | Out-Null
+            $containerId = $null
+        }
+    }
+
     if (-not $containerId) {
         Write-Host "Creating local Postgres container '$Container' on port $Port..." -ForegroundColor Yellow
         docker run --name $Container `
@@ -51,7 +61,14 @@ function Ensure-LocalPostgres {
             Write-Host "Starting local Postgres container '$Container'..." -ForegroundColor Yellow
             docker start $Container | Out-Null
             if ($LASTEXITCODE -ne 0) {
-                throw "failed to start local postgres container '$Container'"
+                Write-Host "Failed to start existing container '$Container'. Recreating..." -ForegroundColor Yellow
+                docker rm -f $Container | Out-Null
+                docker run --name $Container `
+                    -e "POSTGRES_USER=$User" `
+                    -e "POSTGRES_PASSWORD=$Password" `
+                    -e "POSTGRES_DB=$Database" `
+                    -p "${Port}:5432" `
+                    -d postgres:16-alpine | Out-Null
             }
         }
     }
@@ -123,6 +140,9 @@ Write-Host "Starting all services on local DB..." -ForegroundColor Green
 Write-Host "DATABASE_URL=$localDbURL" -ForegroundColor DarkGray
 Write-Host "MONGO_URL=$localMongoURL" -ForegroundColor DarkGray
 
+# Ensure no stale app.exe processes from previous runs are holding ports
+Get-Process app -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | Stop-Process -Force -ErrorAction SilentlyContinue
+
 $backendDir = Join-Path $PSScriptRoot "backend"
 $emailDir = Join-Path $PSScriptRoot "notifiers\email"
 $activityLoggerDir = Join-Path $PSScriptRoot "activity-logger"
@@ -167,8 +187,9 @@ Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
 try {
     Wait-Process -Id $backend.Id
 } finally {
-    Stop-Process -Id $backend.Id -ErrorAction SilentlyContinue
-    Stop-Process -Id $email.Id   -ErrorAction SilentlyContinue
-    Stop-Process -Id $activityLogger.Id   -ErrorAction SilentlyContinue
+    Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue
+    Stop-Process -Id $email.Id   -Force -ErrorAction SilentlyContinue
+    Stop-Process -Id $activityLogger.Id   -Force -ErrorAction SilentlyContinue
+    Get-Process app -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | Stop-Process -Force -ErrorAction SilentlyContinue
     Write-Host "All services stopped" -ForegroundColor Red
 }

@@ -1,7 +1,6 @@
 package config
 
 import (
-	"cmp"
 	"log"
 	"os"
 	"time"
@@ -24,10 +23,12 @@ type Webhook struct {
 }
 
 type SMTP struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Username string `yaml:"username" env:"SMTP_USERNAME" env-required:"TRUE"`
-	Password string `yaml:"password" env:"SMTP_PASSWORD" env-required:"TRUE"`
+	Host       string `yaml:"host" env:"SMTP_HOST" env-default:"smtp-relay.brevo.com"`
+	Port       int    `yaml:"port" env:"SMTP_PORT" env-default:"587"`
+	Username   string `yaml:"username" env:"SMTP_USERNAME" env-required:"TRUE"`
+	Password   string `yaml:"password" env:"SMTP_PASSWORD" env-required:"TRUE"`
+	From       string `yaml:"from" env:"SMTP_FROM"`
+	SenderName string `yaml:"sender_name" env:"SMTP_SENDER_NAME" env-default:"ToDoNotificator"`
 }
 
 type Database struct {
@@ -35,13 +36,21 @@ type Database struct {
 }
 
 func MustLoad() *Config {
-	if err := godotenv.Load(); err != nil {
-		log.Println("no .env file found, reading from environment")
+	// Load environment variables without overwriting already set vars (like DATABASE_URL from dev.ps1)
+	_ = godotenv.Load()
+	_ = godotenv.Load("../../.env")
+	_ = godotenv.Load("../.env")
+	_ = godotenv.Load("../backend/.env")
+	_ = godotenv.Load("../../backend/.env")
+
+	configPath := os.Getenv("EMAIL_CONFIG_PATH")
+	if configPath == "" || !fileExists(configPath) {
+		configPath = "config/local.yaml"
 	}
-
-	configPath := cmp.Or(os.Getenv("EMAIL_CONFIG_PATH"), "config/local.yaml")
-
-	if _, err := os.Stat(configPath); os.IsNotExist(err) {
+	if !fileExists(configPath) {
+		configPath = "notifiers/email/config/local.yaml"
+	}
+	if !fileExists(configPath) {
 		log.Fatalf("config file not found: %s", configPath)
 	}
 
@@ -51,5 +60,9 @@ func MustLoad() *Config {
 	}
 
 	return &cfg
+}
 
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }

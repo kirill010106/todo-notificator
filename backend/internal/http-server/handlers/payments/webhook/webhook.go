@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	yoopayment "github.com/rvinnie/yookassa-sdk-go/yookassa/payment"
 	webhook "github.com/rvinnie/yookassa-sdk-go/yookassa/webhook"
@@ -34,18 +35,29 @@ func init() {
 	}
 }
 
+func isPrivateOrLoopbackIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate()
+}
+
 func getClientIP(r *http.Request) string {
-	if ip := r.Header.Get("X-Real-IP"); ip != "" {
-		return ip
-	}
-	if ips := r.Header.Get("X-Forwarded-For"); ips != "" {
-		return strings.Split(ips, ",")[0]
-	}
-	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		remoteHost = r.RemoteAddr
 	}
-	return ip
+	remoteIP := net.ParseIP(strings.TrimSpace(remoteHost))
+
+	// Only trust forwarded headers if the connection comes from a loopback or private proxy
+	if remoteIP != nil && isPrivateOrLoopbackIP(remoteIP) {
+		if ip := r.Header.Get("X-Real-IP"); ip != "" {
+			return strings.TrimSpace(ip)
+		}
+		if ips := r.Header.Get("X-Forwarded-For"); ips != "" {
+			parts := strings.Split(ips, ",")
+			return strings.TrimSpace(parts[0])
+		}
+	}
+
+	return remoteHost
 }
 
 func isAllowedIP(ipStr string) bool {
@@ -66,14 +78,18 @@ type PaymentUpdater interface {
 	GrantPremium(ctx context.Context, userID int64) error
 }
 
-func New(log *slog.Logger, updater PaymentUpdater) http.HandlerFunc {
+type PaymentFinder interface {
+	FindPayment(ctx context.Context, id string) (*yoopayment.Payment, error)
+}
+
+func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.payments.webhook.New"
 		log := log.With(slog.String("op", op))
 
 		clientIP := getClientIP(r)
 		if clientIP != "127.0.0.1" && clientIP != "::1" && !isAllowedIP(clientIP) {
-			log.Warn("rejected webhook from unauthorized IP", slog.String("ip", clientIP))
+			log.Warn("rejected webhook from unauthorized IP", slog.String("ip", clientIP), slog.String("remote_addr", r.RemoteAddr))
 			http.Error(w, "forbidden", http.StatusForbidden)
 			return
 		}
@@ -88,15 +104,33 @@ func New(log *slog.Logger, updater PaymentUpdater) http.HandlerFunc {
 
 		log.Info("received webhook", slog.String("event", string(event.Event)), slog.String("payment_id", event.Object.ID))
 
-		if event.Event == webhook.EventPaymentSucceeded {
-			userID, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, "succeeded")
+		switch event.Event {
+		case webhook.EventPaymentSucceeded:
+			// Verify payment directly with YooKassa API if finder is configured
+			if finder != nil {
+				verifiedPayment, err := finder.FindPayment(r.Context(), event.Object.ID)
+				if err != nil {
+					log.Error("failed to verify payment with yookassa api", sl.Err(err), slog.String("payment_id", event.Object.ID))
+					http.Error(w, "payment verification failed", http.StatusBadGateway)
+					return
+				}
+				if verifiedPayment == nil || verifiedPayment.Status != yoopayment.Succeeded {
+					log.Warn("payment verification mismatch: status is not succeeded in yookassa",
+						slog.String("payment_id", event.Object.ID),
+						slog.Any("actual_status", verifiedPayment.Status))
+					http.Error(w, "invalid payment status", http.StatusBadRequest)
+					return
+				}
+			}
+
+			userID, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusSucceeded)
 			if err != nil {
 				log.Error("failed to update payment status", sl.Err(err))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
 
-			// Выдаем премиум
+			// Grant premium
 			err = updater.GrantPremium(r.Context(), userID)
 			if err != nil {
 				log.Error("failed to grant premium", sl.Err(err))
@@ -105,10 +139,18 @@ func New(log *slog.Logger, updater PaymentUpdater) http.HandlerFunc {
 			}
 
 			log.Info("payment succeeded and premium granted", slog.Int64("user_id", userID))
-		} else if event.Event == webhook.EventPaymentCanceled {
-			_, _ = updater.UpdatePaymentStatus(r.Context(), event.Object.ID, "canceled")
+		case webhook.EventPaymentCanceled:
+			if _, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusCanceled); err != nil {
+				log.Error("failed to update payment status to canceled",
+					sl.Err(err),
+					slog.String("payment_id", event.Object.ID))
+				http.Error(w, "failed to update payment status", http.StatusInternalServerError)
+				return
+			}
 		}
 
+		// Успешная обработка (включая события, которые нас не касаются): подтверждаем доставку,
+		// чтобы YooKassa не повторяла запрос. До этой точки доходят только успешные пути.
 		w.WriteHeader(http.StatusOK)
 	}
 }
