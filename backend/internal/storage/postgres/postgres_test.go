@@ -512,11 +512,11 @@ func TestUser_Success(t *testing.T) {
 	email := "test@example.com"
 	passHash := []byte("hashed_password")
 
-	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified FROM users WHERE email = $1`)
+	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium FROM users WHERE email = $1`)
 	mock.ExpectQuery(query).
 		WithArgs(email).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified"}).
-			AddRow(int64(42), email, passHash, false))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
+			AddRow(int64(42), email, passHash, false, true))
 
 	user, err := s.User(context.Background(), email)
 	require.NoError(t, err)
@@ -524,6 +524,7 @@ func TestUser_Success(t *testing.T) {
 	require.Equal(t, email, user.Email)
 	require.Equal(t, passHash, user.PassHash)
 	require.False(t, user.IsVerified)
+	require.True(t, user.IsPremium)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -535,7 +536,7 @@ func TestUser_NotFound(t *testing.T) {
 	s := &Storage{DB: db}
 	email := "notfound@example.com"
 
-	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified FROM users WHERE email = $1`)
+	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium FROM users WHERE email = $1`)
 	mock.ExpectQuery(query).
 		WithArgs(email).
 		WillReturnError(sql.ErrNoRows)
@@ -558,13 +559,13 @@ func TestGetUserByID_Success(t *testing.T) {
 	passHash := []byte("hashed_password")
 
 	query := regexp.QuoteMeta(`
-	SELECT id, email, password_hash, is_verified FROM users
+	SELECT id, email, password_hash, is_verified, is_premium FROM users
 	WHERE id = $1
 	`)
 	mock.ExpectQuery(query).
 		WithArgs(userID).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified"}).
-			AddRow(userID, email, passHash, true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
+			AddRow(userID, email, passHash, true, true))
 
 	user, err := s.GetUserByID(context.Background(), userID)
 	require.NoError(t, err)
@@ -572,6 +573,7 @@ func TestGetUserByID_Success(t *testing.T) {
 	require.Equal(t, userID, user.ID)
 	require.Equal(t, email, user.Email)
 	require.True(t, user.IsVerified)
+	require.True(t, user.IsPremium)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -584,7 +586,7 @@ func TestGetUserByID_NotFound(t *testing.T) {
 	userID := int64(999)
 
 	query := regexp.QuoteMeta(`
-	SELECT id, email, password_hash, is_verified FROM users
+	SELECT id, email, password_hash, is_verified, is_premium FROM users
 	WHERE id = $1
 	`)
 	mock.ExpectQuery(query).
@@ -957,15 +959,15 @@ func TestRotateRefreshToken_Success(t *testing.T) {
 			WHERE token = $1 AND expires_at > NOW()
 			RETURNING user_id
 		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified
+		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
 		FROM rotated r
 		JOIN users u ON u.id = r.user_id
 	`)
 
 	mock.ExpectQuery(query).
 		WithArgs(oldToken, newToken, expiresAt).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified"}).
-			AddRow(int64(42), "user@example.com", passHash, true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
+			AddRow(int64(42), "user@example.com", passHash, true, true))
 
 	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
 	require.NoError(t, err)
@@ -974,6 +976,7 @@ func TestRotateRefreshToken_Success(t *testing.T) {
 	require.Equal(t, "user@example.com", user.Email)
 	require.Equal(t, passHash, user.PassHash)
 	require.True(t, user.IsVerified)
+	require.True(t, user.IsPremium)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -995,7 +998,7 @@ func TestRotateRefreshToken_Invalid(t *testing.T) {
 			WHERE token = $1 AND expires_at > NOW()
 			RETURNING user_id
 		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified
+		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
 		FROM rotated r
 		JOIN users u ON u.id = r.user_id
 	`)
@@ -1029,7 +1032,7 @@ func TestRotateRefreshToken_DBError(t *testing.T) {
 			WHERE token = $1 AND expires_at > NOW()
 			RETURNING user_id
 		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified
+		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
 		FROM rotated r
 		JOIN users u ON u.id = r.user_id
 	`)
@@ -1187,3 +1190,205 @@ func TestStorage_GetTask(t *testing.T) {
 		require.ErrorIs(t, err, storage.ErrTaskNotFound)
 	})
 }
+
+func TestCountCategories(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(10)
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM categories WHERE user_id = $1")).
+		WithArgs(userID).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+
+	count, err := s.CountCategories(context.Background(), userID)
+	require.NoError(t, err)
+	require.Equal(t, 3, count)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestCountActiveReminders(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(10)
+
+	mock.ExpectQuery(regexp.QuoteMeta("SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND reminder_at IS NOT NULL AND status != 'done'")).
+		WithArgs(userID).
+		WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+
+	count, err := s.CountActiveReminders(context.Background(), userID)
+	require.NoError(t, err)
+	require.Equal(t, 2, count)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestSetPremiumStatus(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(10)
+
+	mock.ExpectExec(regexp.QuoteMeta("UPDATE users SET is_premium = $2 WHERE id = $1")).
+		WithArgs(userID, true).
+		WillReturnResult(sqlmock.NewResult(1, 1))
+
+	err = s.SetPremiumStatus(context.Background(), userID, true)
+	require.NoError(t, err)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetLatestPendingPayment(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(10)
+
+	query := regexp.QuoteMeta(`
+		SELECT yookassa_payment_id FROM payments
+		WHERE user_id = $1 AND status = 'pending'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`)
+
+	mock.ExpectQuery(query).
+		WithArgs(userID).
+		WillReturnRows(sqlmock.NewRows([]string{"yookassa_payment_id"}).AddRow("yoo-123"))
+
+	paymentID, err := s.GetLatestPendingPayment(context.Background(), userID)
+	require.NoError(t, err)
+	require.Equal(t, "yoo-123", paymentID)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBulkDeleteTasks(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(1)
+
+	// Empty list returns 0, nil without DB call
+	deleted, err := s.BulkDeleteTasks(context.Background(), userID, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), deleted)
+
+	taskIDs := []int64{10, 20}
+	query := regexp.QuoteMeta(`DELETE FROM tasks WHERE user_id = $1 AND id IN ($2, $3)`)
+	mock.ExpectExec(query).
+		WithArgs(userID, int64(10), int64(20)).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+
+	deleted, err = s.BulkDeleteTasks(context.Background(), userID, taskIDs)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), deleted)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestBulkCompleteTasks(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(1)
+
+	// Empty list returns 0, nil without DB call
+	completed, err := s.BulkCompleteTasks(context.Background(), userID, nil)
+	require.NoError(t, err)
+	require.Equal(t, int64(0), completed)
+
+	taskIDs := []int64{10, 20}
+	query := regexp.QuoteMeta(`UPDATE tasks SET status = $1, reminder_at = NULL WHERE user_id = $2 AND id IN ($3, $4) AND status != $1`)
+	mock.ExpectExec(query).
+		WithArgs(domain.TaskStatusDone, userID, int64(10), int64(20)).
+		WillReturnResult(sqlmock.NewResult(0, 2))
+
+	completed, err = s.BulkCompleteTasks(context.Background(), userID, taskIDs)
+	require.NoError(t, err)
+	require.Equal(t, int64(2), completed)
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestUnlockAchievement(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(1)
+
+	// Case 1: First time unlocked with points award
+	insertQuery := regexp.QuoteMeta(`INSERT INTO achievements (user_id, code) VALUES ($1, $2) ON CONFLICT (user_id, code) DO NOTHING RETURNING id`)
+	mock.ExpectQuery(insertQuery).
+		WithArgs(userID, "first_step").
+		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(100)))
+
+	ensureStatsQuery := regexp.QuoteMeta(`INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`)
+	mock.ExpectExec(ensureStatsQuery).
+		WithArgs(userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	statsQuery := regexp.QuoteMeta(`UPDATE user_stats`)
+	mock.ExpectQuery(statsQuery).
+		WithArgs(25, 0, 0, false, false, userID).
+		WillReturnRows(sqlmock.NewRows([]string{"points"}).AddRow(int64(25)))
+
+	levelQuery := regexp.QuoteMeta(`UPDATE user_stats SET level = $1 WHERE user_id = $2`)
+	mock.ExpectExec(levelQuery).
+		WithArgs(1, userID).
+		WillReturnResult(sqlmock.NewResult(0, 1))
+
+	unlocked, err := s.UnlockAchievement(context.Background(), userID, "first_step")
+	require.NoError(t, err)
+	require.True(t, unlocked)
+
+	// Case 2: Already unlocked (ON CONFLICT DO NOTHING returns no rows)
+	mock.ExpectQuery(insertQuery).
+		WithArgs(userID, "first_step").
+		WillReturnError(sql.ErrNoRows)
+
+	unlocked, err = s.UnlockAchievement(context.Background(), userID, "first_step")
+	require.NoError(t, err)
+	require.False(t, unlocked)
+
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+func TestGetDailyQuests(t *testing.T) {
+	db, mock, err := sqlmock.New()
+	require.NoError(t, err)
+	defer db.Close()
+
+	s := &Storage{DB: db}
+	userID := int64(1)
+
+	q1 := regexp.QuoteMeta(`SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND created_at >= CURRENT_DATE`)
+	mock.ExpectQuery(q1).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+
+	q2 := regexp.QuoteMeta(`SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND completed_at >= CURRENT_DATE`)
+	mock.ExpectQuery(q2).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+
+	q3 := regexp.QuoteMeta(`SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done' AND updated_at >= CURRENT_DATE`)
+	mock.ExpectQuery(q3).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+
+	quests, err := s.GetDailyQuests(context.Background(), userID)
+	require.NoError(t, err)
+	require.Len(t, quests, 3)
+	require.True(t, quests[0].Completed) // 2 >= 1
+	require.True(t, quests[1].Completed) // 1 >= 1
+	require.True(t, quests[2].Completed) // 3 >= 3
+	require.NoError(t, mock.ExpectationsWereMet())
+}
+
+
+

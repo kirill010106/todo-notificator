@@ -17,6 +17,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -40,6 +41,7 @@ type TaskUpdater interface {
 	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error
 	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
+	CountActiveReminders(ctx context.Context, userID int64) (int, error)
 }
 
 var validate = validator.New()
@@ -163,6 +165,26 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			render.JSON(w, r, resp.Error("failed to get task"))
 			return
 		}
+
+		if req.ReminderAt != nil {
+			isPremium, _ := auth.GetPremiumStatus(r.Context())
+			if !isPremium && existingTask.ReminderAt == nil {
+				remindersCount, err := taskUpdater.CountActiveReminders(r.Context(), userID)
+				if err != nil {
+					log.Error("failed to count active reminders", sl.Err(err))
+					render.Status(r, http.StatusInternalServerError)
+					render.JSON(w, r, resp.Error("internal server error"))
+					return
+				}
+				if remindersCount >= 3 {
+					log.Warn("active reminders limit reached for free user", slog.Int("count", remindersCount))
+					render.Status(r, http.StatusForbidden)
+					render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 активных напоминаний. Перейдите на Премиум для снятия ограничений"))
+					return
+				}
+			}
+		}
+
 		if req.Status != nil && *req.Status == domain.TaskStatusDone && existingTask.Status != domain.TaskStatusDone {
 			if !existingTask.RewardClaimed {
 				statsDelta := domain.StatsDelta{

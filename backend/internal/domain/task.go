@@ -36,8 +36,11 @@ type TaskUpdate struct {
 
 // TaskFilter holds optional filters for listing tasks.
 type TaskFilter struct {
-	Status *string // nil or "all" = no filter; must be one of ValidTaskStatuses
-	Search *string // ILIKE search on title and description
+	Status     *string // nil or "all" = no filter; must be one of ValidTaskStatuses
+	Search     *string // ILIKE search on title and description
+	CategoryID *int64  // optional category filter
+	SortBy     *string // "created_at" (default), "deadline"
+	Order      *string // "desc" (default), "asc"
 }
 
 // ValidTaskStatuses is the set of allowed status values for filtering.

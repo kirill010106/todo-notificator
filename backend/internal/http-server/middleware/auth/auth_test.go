@@ -37,6 +37,15 @@ func TestAuthMiddleware_SetsUserIDWithValidToken(t *testing.T) {
 		uid, ok := GetUserID(r.Context())
 		require.True(t, ok)
 		require.Equal(t, int64(123), uid)
+
+		premium, okPrem := GetPremiumStatus(r.Context())
+		require.True(t, okPrem)
+		require.False(t, premium)
+
+		verified, okVer := GetVerificationStatus(r.Context())
+		require.True(t, okVer)
+		require.False(t, verified)
+
 		w.WriteHeader(http.StatusOK)
 	}))
 
@@ -48,3 +57,41 @@ func TestAuthMiddleware_SetsUserIDWithValidToken(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 }
+
+func TestAuthMiddleware_SetsPremiumAndVerifiedTrue(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{
+		ID:         777,
+		Email:      "vip@t.com",
+		IsVerified: true,
+		IsPremium:  true,
+	}, secret, time.Hour)
+	require.NoError(t, err)
+
+	mw := New(secret)
+
+	h := mw(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		uid, ok := GetUserID(r.Context())
+		require.True(t, ok)
+		require.Equal(t, int64(777), uid)
+
+		premium, okPrem := GetPremiumStatus(r.Context())
+		require.True(t, okPrem)
+		require.True(t, premium)
+
+		verified, okVer := GetVerificationStatus(r.Context())
+		require.True(t, okVer)
+		require.True(t, verified)
+
+		w.WriteHeader(http.StatusOK)
+	}))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	h.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusOK, w.Code)
+}
+

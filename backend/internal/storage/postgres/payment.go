@@ -2,6 +2,8 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
+	"errors"
 	"fmt"
 )
 
@@ -24,7 +26,7 @@ func (s *Storage) CreatePayment(ctx context.Context, yookassaID string, userID i
 }
 
 func (s *Storage) UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error) {
-	const op = "storage.postgres.CreatePayment"
+	const op = "storage.postgres.UpdatePaymentStatus"
 
 	query := `
         UPDATE payments
@@ -43,13 +45,39 @@ func (s *Storage) UpdatePaymentStatus(ctx context.Context, yookassaID string, st
 }
 
 func (s *Storage) GrantPremium(ctx context.Context, userID int64) error {
-	const op = "storage.postgres.GrantPremium"
+	return s.SetPremiumStatus(ctx, userID, true)
+}
 
-	stmt := `UPDATE users SET is_premium = true WHERE id = $1`
-	_, err := s.DB.ExecContext(ctx, stmt, userID)
+func (s *Storage) SetPremiumStatus(ctx context.Context, userID int64, isPremium bool) error {
+	const op = "storage.postgres.SetPremiumStatus"
+
+	stmt := `UPDATE users SET is_premium = $2 WHERE id = $1`
+	_, err := s.DB.ExecContext(ctx, stmt, userID, isPremium)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
 	return nil
 }
+
+func (s *Storage) GetLatestPendingPayment(ctx context.Context, userID int64) (string, error) {
+	const op = "storage.postgres.GetLatestPendingPayment"
+
+	query := `
+		SELECT yookassa_payment_id FROM payments
+		WHERE user_id = $1 AND status = 'pending'
+		ORDER BY created_at DESC
+		LIMIT 1
+	`
+	var paymentID string
+	err := s.DB.QueryRowContext(ctx, query, userID).Scan(&paymentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", nil
+		}
+		return "", fmt.Errorf("%s: %w", op, err)
+	}
+
+	return paymentID, nil
+}
+

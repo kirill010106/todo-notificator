@@ -131,5 +131,21 @@ func parseFilter(r *http.Request) (domain.TaskFilter, error) {
 		filter.Search = &raw
 	}
 
+	if raw := r.URL.Query().Get("category_id"); raw != "" {
+		catID, err := strconv.ParseInt(raw, 10, 64)
+		if err != nil {
+			return filter, errors.New("invalid category_id filter")
+		}
+		filter.CategoryID = &catID
+	}
+
+	if raw := r.URL.Query().Get("sort_by"); raw != "" {
+		filter.SortBy = &raw
+	}
+
+	if raw := r.URL.Query().Get("order"); raw != "" {
+		filter.Order = &raw
+	}
+
 	return filter, nil
 }

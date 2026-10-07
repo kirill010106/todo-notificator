@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"net/http"
+	"strconv"
+	"strings"
 
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
@@ -25,12 +27,19 @@ type Response struct {
 	ConfirmationURL string `json:"confirmation_url"`
 }
 
-func New(ctx context.Context, log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Client, returnURL string) http.HandlerFunc {
+func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Client, returnURL string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		const op = "handlers.payments.create.New"
 
 		log, userID, ok := helpers.LoggerWithAuth(w, r, log, op)
 		if !ok {
+			return
+		}
+
+		if yooClient == nil {
+			log.Warn("yookassa client is not configured")
+			render.Status(r, http.StatusServiceUnavailable)
+			render.JSON(w, r, resp.Error("payments are temporarily unavailable"))
 			return
 		}
 
@@ -41,17 +50,26 @@ func New(ctx context.Context, log *slog.Logger, paymentSaver PaymentSaver, yooCl
 		idempotencyKey := uuid.New().String()
 
 		paymentHandler := yookassa.NewPaymentHandler(yooClient).WithIdempotencyKey(idempotencyKey)
-		payment, err := paymentHandler.CreatePayment(ctx, &yoopayment.Payment{
+		redirectURL := returnURL
+		if strings.Contains(redirectURL, "?") {
+			redirectURL += "&payment=check"
+		} else {
+			redirectURL = strings.TrimRight(redirectURL, "/") + "/?payment=check"
+		}
+
+		payment, err := paymentHandler.CreatePayment(r.Context(), &yoopayment.Payment{
 			Amount: &yoocommon.Amount{
 				Value:    amount,
 				Currency: currency,
 			},
-			Capture:       true,
-			PaymentMethod: yoopayment.PaymentMethodType("bank_card"),
-			Description:   description,
+			Capture:     true,
+			Description: description,
 			Confirmation: yoopayment.Redirect{
 				Type:      "redirect",
-				ReturnURL: returnURL,
+				ReturnURL: redirectURL,
+			},
+			Metadata: map[string]string{
+				"user_id": strconv.FormatInt(userID, 10),
 			},
 		})
 		if err != nil {
@@ -67,7 +85,13 @@ func New(ctx context.Context, log *slog.Logger, paymentSaver PaymentSaver, yooCl
 		}
 		log.Info("payment created", slog.String("yookassa_id", payment.ID), slog.Int64("user_id", userID))
 
-		rawURL := payment.Confirmation.(map[string]interface{})["confirmation_url"].(string)
+		rawURL, err := paymentHandler.ParsePaymentLink(payment)
+		if err != nil {
+			log.Error("failed to parse payment link", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("Failed to get payment link"))
+			return
+		}
 
 		render.JSON(w, r, Response{
 			Response:        resp.OK(),

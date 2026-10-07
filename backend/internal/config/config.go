@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Env             string `yaml:"env" env:"ENV" env-default:"local"`
 	StoragePath     string `yaml:"storage_path" env:"STORAGE_PATH"`
+	ClientURL       string `yaml:"client_url" env:"CLIENT_URL" env-default:"http://localhost:3030"`
 	HTTPServer      `yaml:"http_server"`
 	AccessTokenTTL  time.Duration `yaml:"access_token_ttl" env-default:"15m"`
 	RefreshTokenTTL time.Duration `yaml:"refresh_token_ttl" env-default:"168h"`
@@ -21,8 +22,8 @@ type Config struct {
 }
 
 type YooKassa struct {
-	ShopID    string `yaml:"shop_id" env:"SHOP_ID" env-required:"true"`
-	SecretKey string `yaml:"secret_key" env:"SECRET_KEY" env-required:"true"`
+	ShopID    string `yaml:"shop_id" env:"SHOP_ID" env-default:""`
+	SecretKey string `yaml:"secret_key" env:"SECRET_KEY" env-default:""`
 }
 
 type Clients struct {

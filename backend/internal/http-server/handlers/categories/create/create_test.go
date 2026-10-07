@@ -21,6 +21,8 @@ import (
 type mockCategoryCreator struct {
 	id       int64
 	err      error
+	count    int
+	countErr error
 	category domain.Category
 }
 
@@ -30,6 +32,13 @@ func (m *mockCategoryCreator) CreateCategory(ctx context.Context, c domain.Categ
 		return 0, m.err
 	}
 	return m.id, nil
+}
+
+func (m *mockCategoryCreator) CountCategories(ctx context.Context, userID int64) (int, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.count, nil
 }
 
 func TestSave_Unauthorized(t *testing.T) {
@@ -128,3 +137,47 @@ func TestSave_Empty(t *testing.T) {
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
 }
+
+func TestSave_CategoryLimitReached_FreeUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com", IsPremium: false}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockCategoryCreator{count: 3}
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/categories", h)
+
+	req := httptest.NewRequest(http.MethodPost, "/categories", strings.NewReader(`{"name":"Fourth Category"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "не более 3 категорий")
+}
+
+func TestSave_CategoryLimitReached_PremiumUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com", IsPremium: true}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockCategoryCreator{id: 101, count: 3}
+	h := New(slog.New(slog.DiscardHandler), saver, nil)
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/categories", h)
+
+	req := httptest.NewRequest(http.MethodPost, "/categories", strings.NewReader(`{"name":"Fourth Category"}`))
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+}
+

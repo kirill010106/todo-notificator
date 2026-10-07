@@ -22,7 +22,10 @@ import (
 func TestGetLogsHandler(t *testing.T) {
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	secret := "test-secret"
-	tokenStr, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "test@example.com"}, secret, time.Hour)
+	tokenStr, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "test@example.com", IsPremium: true}, secret, time.Hour)
+	require.NoError(t, err)
+
+	freeTokenStr, err := jwt.NewAccessToken(domain.User{ID: 1, Email: "test@example.com", IsPremium: false}, secret, time.Hour)
 	require.NoError(t, err)
 
 	now := time.Now()
@@ -30,6 +33,7 @@ func TestGetLogsHandler(t *testing.T) {
 	tests := []struct {
 		name           string
 		userIDParam    string
+		token          string
 		limitQuery     string
 		offsetQuery    string
 		mockSetup      func(*mocks.LogsGetter)
@@ -42,6 +46,25 @@ func TestGetLogsHandler(t *testing.T) {
 			offsetQuery: "5",
 			mockSetup: func(m *mocks.LogsGetter) {
 				m.On("GetLogs", mock.Anything, int64(1), int32(10), int32(5)).Return(
+					[]domain.ActivityLog{
+						{
+							ID:        "id1",
+							UserID:    1,
+							Action:    "TASK_CREATED",
+							Timestamp: now,
+						},
+					}, nil)
+			},
+			expectedStatus: http.StatusOK,
+		},
+		{
+			name:        "Free user caps limit to 5 and offset to 0",
+			userIDParam: "1",
+			token:       freeTokenStr,
+			limitQuery:  "50",
+			offsetQuery: "10",
+			mockSetup: func(m *mocks.LogsGetter) {
+				m.On("GetLogs", mock.Anything, int64(1), int32(5), int32(0)).Return(
 					[]domain.ActivityLog{
 						{
 							ID:        "id1",
@@ -97,7 +120,11 @@ func TestGetLogsHandler(t *testing.T) {
 
 			req, err := http.NewRequest("GET", reqURL, nil)
 			require.NoError(t, err)
-			req.Header.Set("Authorization", "Bearer "+tokenStr)
+			tok := tokenStr
+			if tt.token != "" {
+				tok = tt.token
+			}
+			req.Header.Set("Authorization", "Bearer "+tok)
 
 			rr := httptest.NewRecorder()
 			r.ServeHTTP(rr, req)

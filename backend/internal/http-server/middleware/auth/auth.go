@@ -14,6 +14,7 @@ type contextKey string
 
 const userIDKey contextKey = "user_id"
 const isPremiumKey contextKey = "is_premium"
+const isVerifiedKey contextKey = "is_verified"
 
 func New(secret string) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
@@ -34,16 +35,16 @@ func New(secret string) func(next http.Handler) http.Handler {
 
 			tokenStr := parts[1]
 
-			uid, err := j.ParseAccessToken(tokenStr, secret)
-
+			claims, err := j.ParseAccessToken(tokenStr, secret)
 			if err != nil {
 				render.Status(r, http.StatusUnauthorized)
 				render.JSON(w, r, resp.Error("invalid token"))
 				return
 			}
 
-			ctx := context.WithValue(r.Context(), userIDKey, uid)
-			ctx = context.WithValue(ctx, isPremiumKey, true)
+			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			ctx = context.WithValue(ctx, isPremiumKey, claims.IsPremium)
+			ctx = context.WithValue(ctx, isVerifiedKey, claims.IsVerified)
 
 			next.ServeHTTP(w, r.WithContext(ctx))
 		})
@@ -51,11 +52,16 @@ func New(secret string) func(next http.Handler) http.Handler {
 }
 
 func GetUserID(ctx context.Context) (int64, bool) {
-	userID, zbs := ctx.Value(userIDKey).(int64)
-	return userID, zbs
+	userID, ok := ctx.Value(userIDKey).(int64)
+	return userID, ok
 }
 
 func GetPremiumStatus(ctx context.Context) (bool, bool) {
-	isPremium, zbs := ctx.Value(isPremiumKey).(bool)
-	return isPremium, zbs
+	isPremium, ok := ctx.Value(isPremiumKey).(bool)
+	return isPremium, ok
+}
+
+func GetVerificationStatus(ctx context.Context) (bool, bool) {
+	isVerified, ok := ctx.Value(isVerifiedKey).(bool)
+	return isVerified, ok
 }

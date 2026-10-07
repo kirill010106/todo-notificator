@@ -21,11 +21,12 @@ import (
 )
 
 type mockTaskSaver struct {
-	id  int64
-	err error
-
-	called bool
-	task   domain.Task
+	id             int64
+	err            error
+	called         bool
+	task           domain.Task
+	remindersCount int
+	countErr       error
 }
 
 func (m *mockTaskSaver) SaveTask(ctx context.Context, t domain.Task) (int64, error) {
@@ -35,6 +36,13 @@ func (m *mockTaskSaver) SaveTask(ctx context.Context, t domain.Task) (int64, err
 		return 0, m.err
 	}
 	return m.id, nil
+}
+
+func (m *mockTaskSaver) CountActiveReminders(ctx context.Context, userID int64) (int, error) {
+	if m.countErr != nil {
+		return 0, m.countErr
+	}
+	return m.remindersCount, nil
 }
 
 func TestSave_Unauthorized(t *testing.T) {
@@ -215,3 +223,58 @@ func TestSave_WithCategory(t *testing.T) {
 	require.Equal(t, utils.Int64Ptr(categoryID), saver.task.CategoryID)
 	require.Contains(t, w.Body.String(), `"id":42`)
 }
+
+func TestSave_ActiveRemindersLimit_FreeUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com", IsPremium: false}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockTaskSaver{remindersCount: 3}
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/tasks", h)
+
+	future := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/tasks",
+		strings.NewReader(`{"title":"Task with reminder","reminder_at":"`+future+`"}`),
+	)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusForbidden, w.Code)
+	require.Contains(t, w.Body.String(), "не более 3 активных напоминаний")
+}
+
+func TestSave_ActiveRemindersLimit_PremiumUser(t *testing.T) {
+	secret := "secret"
+	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com", IsPremium: true}, secret, time.Hour)
+	require.NoError(t, err)
+
+	saver := &mockTaskSaver{id: 99, remindersCount: 3}
+	h := New(slog.New(slog.DiscardHandler), saver, "", "", nil)
+
+	router := chi.NewRouter()
+	router.Use(authmw.New(secret))
+	router.Post("/tasks", h)
+
+	future := time.Now().Add(24 * time.Hour).Format(time.RFC3339)
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/tasks",
+		strings.NewReader(`{"title":"Task with reminder","reminder_at":"`+future+`"}`),
+	)
+	req.Header.Set("Authorization", "Bearer "+tok)
+	w := httptest.NewRecorder()
+
+	router.ServeHTTP(w, req)
+
+	require.Equal(t, http.StatusCreated, w.Code)
+	require.True(t, saver.called)
+}
+

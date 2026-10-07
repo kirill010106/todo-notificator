@@ -9,6 +9,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 )
@@ -45,6 +46,14 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 			if parsed, err := strconv.ParseInt(offsetRaw, 10, 32); err == nil && parsed >= 0 {
 				offset = int32(parsed)
 			}
+		}
+
+		isPremium, _ := auth.GetPremiumStatus(r.Context())
+		if !isPremium {
+			if limit > 5 {
+				limit = 5
+			}
+			offset = 0
 		}
 
 		logs, err := logsGetter.GetLogs(r.Context(), userID, limit, offset)

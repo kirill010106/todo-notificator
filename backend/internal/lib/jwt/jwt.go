@@ -32,7 +32,14 @@ func NewRefreshToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func ParseAccessToken(tokenString string, secret string) (int64, error) {
+type UserClaims struct {
+	UserID     int64
+	Email      string
+	IsVerified bool
+	IsPremium  bool
+}
+
+func ParseAccessToken(tokenString string, secret string) (*UserClaims, error) {
 	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (any, error) {
 		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
 			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
@@ -41,27 +48,36 @@ func ParseAccessToken(tokenString string, secret string) (int64, error) {
 	})
 
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
 
 	if !token.Valid {
-		return 0, fmt.Errorf("invalid token")
+		return nil, fmt.Errorf("invalid token")
 	}
 
 	claims, ok := token.Claims.(jwt.MapClaims)
 	if !ok {
-		return 0, fmt.Errorf("invalid token claims")
+		return nil, fmt.Errorf("invalid token claims")
 	}
 
 	tokenType, ok := claims["type"].(string)
 	if !ok || tokenType != "access" {
-		return 0, fmt.Errorf("invalid token type")
+		return nil, fmt.Errorf("invalid token type")
 	}
 
 	uid, ok := claims["uid"].(float64)
 	if !ok {
-		return 0, fmt.Errorf("uid not found in token")
+		return nil, fmt.Errorf("uid not found in token")
 	}
 
-	return int64(uid), nil
+	email, _ := claims["email"].(string)
+	isVerified, _ := claims["is_verified"].(bool)
+	isPremium, _ := claims["is_premium"].(bool)
+
+	return &UserClaims{
+		UserID:     int64(uid),
+		Email:      email,
+		IsVerified: isVerified,
+		IsPremium:  isPremium,
+	}, nil
 }

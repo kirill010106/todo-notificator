@@ -11,49 +11,17 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
+	"github.com/joho/godotenv"
 	todonotificator "github.com/kirill010106/todo-notificator"
 	"github.com/kirill010106/todo-notificator/clients/activitylogger"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/login"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/resend"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/verify"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
-	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
-	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
-	categoriesgetone "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/getone"
-	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
-	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
-	createpayment "github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/create"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/payments/webhook"
-	pomodoroactive "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/active"
-	pomodoropause "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/pause"
-	pomodorostart "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/start"
-	pomodorostop "github.com/kirill010106/todo-notificator/internal/http-server/handlers/pomodoros/stop"
-	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
-	statsupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/update"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/delete"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/get"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/save"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
-	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/config"
+	"github.com/kirill010106/todo-notificator/internal/http-server/router"
+	slogpretty "github.com/kirill010106/todo-notificator/internal/lib/handlers"
+	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
 	"github.com/pressly/goose/v3"
 	"github.com/rvinnie/yookassa-sdk-go/yookassa"
-
-	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/cors"
-	"github.com/go-chi/httprate"
-	"github.com/go-chi/render"
-	"github.com/joho/godotenv"
-	"github.com/kirill010106/todo-notificator/internal/config"
-	slogpretty "github.com/kirill010106/todo-notificator/internal/lib/handlers"
-	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 )
 
 const (
@@ -64,20 +32,17 @@ const (
 
 func main() {
 	if err := godotenv.Load(); err != nil {
-		// log.Fatalf("Error while loading .env file: %v", err)
 		log.Println("info: .env file not found, trying to read from system environment")
 	}
 	cfg := config.MustLoad()
 
-	log := setupLogger(cfg.Env)
+	appLog := setupLogger(cfg.Env)
+	appLog.Info("starting todo-notificator", slog.String("env", cfg.Env))
 
-	log.Info("starting todo-notificator", slog.String("env", cfg.Env))
-	log.Debug("debug messages are enabled")
-
-	DBUrl := os.Getenv("DATABASE_URL")
-	storage, err := postgres.New(DBUrl)
+	dbURL := os.Getenv("DATABASE_URL")
+	storage, err := postgres.New(dbURL)
 	if err != nil {
-		log.Error("failed to init db", sl.Err(err))
+		appLog.Error("failed to init db", sl.Err(err))
 		os.Exit(1)
 	}
 	defer storage.Close() //nolint:errcheck
@@ -85,127 +50,61 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	loggerClient, err := activitylogger.New(ctx, log, cfg.Clients.ActivityLogger.Address, cfg.Clients.ActivityLogger.Timeout)
+	loggerClient, err := activitylogger.New(ctx, appLog, cfg.Clients.ActivityLogger.Address, cfg.Clients.ActivityLogger.Timeout)
 	if err != nil {
-		log.Error("failed to init activity logger client", sl.Err(err))
+		appLog.Error("failed to init activity logger client", sl.Err(err))
 	}
 
-	cleanup.StartTokenCleanup(ctx, log, storage, 24*time.Hour)
+	cleanup.StartTokenCleanup(ctx, appLog, storage, 24*time.Hour)
 
+	// Database Migrations
 	goose.SetBaseFS(todonotificator.MigrationsFS)
-
 	if err := goose.SetDialect("postgres"); err != nil {
-		log.Error("failed to setup migrations", sl.Err(err))
+		appLog.Error("failed to setup migrations", sl.Err(err))
 		os.Exit(1)
 	}
 
-	log.Info("Running migrations...")
+	appLog.Info("Running migrations...")
 	if err := goose.Up(storage.DB, "migrations"); err != nil {
-		log.Error("failed to run migrations", sl.Err(err))
+		appLog.Error("failed to run migrations", sl.Err(err))
 		os.Exit(1)
 	}
-	log.Info("Migrations applied successfully!")
+	appLog.Info("Migrations applied successfully!")
 
-	yooClient := yookassa.NewClient(cfg.YooKassa.ShopID, cfg.YooKassa.SecretKey)
+	// YooKassa Client
+	var (
+		yooCli         *yookassa.Client
+		paymentHandler *yookassa.PaymentHandler
+	)
+	if cfg.YooKassa.ShopID != "" && cfg.YooKassa.SecretKey != "" {
+		yooCli = yookassa.NewClient(cfg.YooKassa.ShopID, cfg.YooKassa.SecretKey)
+		paymentHandler = yookassa.NewPaymentHandler(yooCli)
+		appLog.Info("yookassa client initialized")
+	} else {
+		appLog.Info("yookassa client skipped (no credentials configured)")
+	}
 
-	router := chi.NewRouter()
-
-	router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
-		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
-		AllowCredentials: false,
-		MaxAge:           300,
-	}))
-	router.Use(middleware.RequestID)
-	router.Use(middleware.Logger)
-	router.Use(middleware.Recoverer)
-	router.Use(middleware.URLFormat)
-	router.Use(middleware.RedirectSlashes)
-	router.Use(httprate.LimitByIP(100, 1*time.Minute))
-
-	router.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		helpers.SendError(w, http.StatusNotFound, "endpoint is not exist", "NOT_FOUND")
-	})
-
-	router.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		helpers.SendError(w, http.StatusMethodNotAllowed, "method is not allowed", "METHOD_NOT_ALLOWED")
-	})
-
-	router.Get("/", func(w http.ResponseWriter, r *http.Request) {
-		render.Status(r, http.StatusOK)
-		render.JSON(w, r, map[string]string{
-			"status":  "active",
-			"project": "todo-notificator",
-			"info":    "Use /api/v1 for requests",
-		})
-	})
-
-	router.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte("pong"))
-	})
-
-	router.Route("/api/v1", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
-			render.Status(r, http.StatusOK)
-			render.JSON(w, r, map[string]string{
-				"status":  "active",
-				"project": "todo-notificator",
-				"info":    "Use /api/v1/health for checking availibility of the service",
-			})
-		})
-
-		r.Post("/register", register.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
-		r.Post("/login", login.New(log, storage, cfg, loggerClient))
-		r.Get("/health", health.New(log, storage.DB))
-		r.Post("/refresh", refresh.New(log, storage, cfg))
-		r.Get("/verify", verify.New(log, storage))
-		r.Post("/webhooks/yookassa", webhook.New(log, storage))
-
-		r.Group(func(r chi.Router) {
-			r.Use(auth.New(cfg.AppSecret))
-
-			r.Post("/logout", logout.New(log, storage))
-			r.Get("/tasks", get.New(log, storage))
-			r.Post("/tasks", save.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
-			r.Delete("/tasks/{task_id}", delete.New(log, storage, loggerClient))
-			r.Patch("/tasks/{task_id}", update.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret, loggerClient))
-
-			r.Post("/categories", create.New(log, storage, loggerClient))
-			r.Get("/categories", categoriesget.New(log, storage))
-			r.Get("/categories/{category_id}", categoriesgetone.New(log, storage))
-			r.Patch("/categories/{category_id}", categoriesupdate.New(log, storage, loggerClient))
-			r.Delete("/categories/{category_id}", categoriesdelete.New(log, storage, loggerClient))
-
-			r.Get("/me/logs", logsget.New(log, loggerClient))
-			r.Get("/me/stats", statsget.New(log, storage))
-			r.Patch("/me/stats", statsupdate.New(log, storage))
-
-			r.Post("/pomodoros/start", pomodorostart.New(log, storage, loggerClient))
-			r.Get("/pomodoros/active", pomodoroactive.New(log, storage))
-			r.Post("/pomodoros/{id}/pause", pomodoropause.New(log, storage, loggerClient))
-			r.Post("/pomodoros/{id}/stop", pomodorostop.New(log, storage, loggerClient))
-
-			r.Post("/verify/resend", resend.New(log, storage, cfg.Webhook.URL, cfg.Webhook.Secret))
-
-			r.Post("/payments/create", createpayment.New(ctx, log, storage, yooClient, cfg.ClientURL))
-
-		})
-
+	// Application Router
+	appRouter := router.New(router.Config{
+		Log:            appLog,
+		Storage:        storage,
+		AppConfig:      cfg,
+		LoggerClient:   loggerClient,
+		YooClient:      yooCli,
+		PaymentHandler: paymentHandler,
 	})
 
 	srv := &http.Server{
 		Addr:        cfg.Address,
-		Handler:     router,
+		Handler:     appRouter,
 		ReadTimeout: cfg.Timeout,
 		IdleTimeout: cfg.IdleTimeout,
 	}
 
 	go func() {
-		log.Info("starting HTTP server", slog.String("address", cfg.Address))
-
+		appLog.Info("starting HTTP server", slog.String("address", cfg.Address))
 		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Error("server error", sl.Err(err))
+			appLog.Error("server error", sl.Err(err))
 			os.Exit(1)
 		}
 	}()
@@ -214,45 +113,34 @@ func main() {
 	signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
 	sig := <-quit
 
-	log.Info("shutdown signal received", slog.String("signal", sig.String()))
+	appLog.Info("shutdown signal received", slog.String("signal", sig.String()))
 
 	ctx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
 	if err := srv.Shutdown(ctx); err != nil {
-		log.Error("forced shutdown", sl.Err(err))
+		appLog.Error("forced shutdown", sl.Err(err))
 		os.Exit(1)
 	}
 
-	log.Info("server stopped gracefully")
+	appLog.Info("server stopped gracefully")
 }
 
 func setupLogger(env string) *slog.Logger {
-	var log *slog.Logger
+	var l *slog.Logger
 	switch env {
 	case envLocal:
-		log = setupPrettySlog()
-	case envDev:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: slog.LevelDebug,
-			}),
-		)
-	case envProd:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: slog.LevelInfo,
-			}),
-		)
+		l = setupPrettySlog()
+	case envDev, envProd:
+		level := slog.LevelInfo
+		if env == envDev {
+			level = slog.LevelDebug
+		}
+		l = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: level}))
 	default:
-		log = slog.New(
-			slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
-				Level: slog.LevelDebug,
-			}),
-		)
+		l = slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelDebug}))
 	}
-
-	return log
+	return l
 }
 
 func setupPrettySlog() *slog.Logger {
@@ -261,8 +149,6 @@ func setupPrettySlog() *slog.Logger {
 			Level: slog.LevelDebug,
 		},
 	}
-
 	handler := opts.NewPrettyHandler(os.Stdout)
-
 	return slog.New(handler)
 }
