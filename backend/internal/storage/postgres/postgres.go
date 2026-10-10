@@ -26,9 +26,10 @@ func New(storagePath string) (*Storage, error) {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}
 
-	db.SetMaxOpenConns(4)
-	db.SetMaxIdleConns(4)
+	db.SetMaxOpenConns(25)
+	db.SetMaxIdleConns(25)
 	db.SetConnMaxIdleTime(5 * time.Minute)
+	db.SetConnMaxLifetime(1 * time.Hour)
 	err = db.Ping()
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
@@ -261,7 +262,6 @@ func (s *Storage) BulkCompleteTasks(ctx context.Context, userID int64, taskIDs [
 
 	return rowsAffected, nil
 }
-
 
 func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) error {
 	const op = "storage.postgres.DeleteTask"
@@ -1141,4 +1141,3 @@ func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (dom
 		TotalAchievements: len(domain.AvailableAchievements),
 	}, nil
 }
-

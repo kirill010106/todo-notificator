@@ -1,195 +1,143 @@
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
+$OutputEncoding           = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-$localDbContainer = "todo-local-pg-alt"
-$localDbPort = 5433
-$localDbName = "todo"
-$localDbUser = "postgres"
-$localDbPassword = "postgres"
-$localDbURL = "postgres://{0}:{1}@127.0.0.1:{2}/{3}?sslmode=disable" -f $localDbUser, $localDbPassword, $localDbPort, $localDbName
+$ErrorActionPreference = "Stop"
+# Отключаем падение PowerShell от обычных сообщений Docker в stderr
+if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) {
+    $PSNativeCommandUseErrorActionPreference = $false
+}
 
-$localMongoContainer = "todo-mongodb"
-$localMongoPort = 27017
-$localMongoURL = "mongodb://127.0.0.1:{0}" -f $localMongoPort
+# --- Конфигурация локального окружения ---
+$pgContainer = "todo-local-pg-alt"
+$pgPort      = 5433
+$pgDb        = "todo"
+$pgUser      = "postgres"
+$pgPass      = "postgres"
+$dbUrl       = "postgres://${pgUser}:${pgPass}@127.0.0.1:${pgPort}/${pgDb}?sslmode=disable"
 
-function Ensure-LocalPostgres {
+$mongoContainer = "todo-mongodb"
+$mongoPort      = 27017
+$mongoUrl       = "mongodb://127.0.0.1:${mongoPort}"
+
+# --- Универсальная функция запуска контейнеров ---
+function Ensure-Container {
     param(
-        [string]$Container,
-        [int]$Port,
-        [string]$Database,
-        [string]$User,
-        [string]$Password
+        [string]$Name,
+        [scriptblock]$RunCommand,
+        [scriptblock]$HealthCheck,
+        [string]$SuccessMessage
     )
 
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "docker is not available in PATH"
+    $status = (docker inspect -f '{{.State.Running}}' $Name 2>$null)
+
+    if ($null -eq $status) {
+        Write-Host "Creating container '$Name'..." -ForegroundColor Yellow
+        & $RunCommand
+    } elseif ($status -ne "true") {
+        Write-Host "Starting existing container '$Name'..." -ForegroundColor Yellow
+        docker start $Name | Out-Null
+    } else {
+        Write-Host "Container '$Name' is already running." -ForegroundColor DarkGray
     }
 
-    $containerId = docker ps -aq --filter "name=^/$Container$"
-    if ($LASTEXITCODE -ne 0) {
-        throw "failed to query docker containers"
-    }
-
-    if ($containerId) {
-        # Check if existing container has matching port binding
-        $portOutput = (docker port $Container "5432/tcp" 2>$null) -join " "
-        if ($portOutput -and $portOutput -notmatch ":$Port(\s|$)") {
-            Write-Host "Container '$Container' has ports '$portOutput', but requested $Port. Recreating..." -ForegroundColor Yellow
-            docker rm -f $Container | Out-Null
-            $containerId = $null
+    # Ожидание готовности
+    Write-Host "Waiting for '$Name' to be ready..." -ForegroundColor Gray
+    for ($i = 1; $i -le 30; $i++) {
+        $ok = & $HealthCheck
+        if ($ok) {
+            Write-Host $SuccessMessage -ForegroundColor Green
+            return
         }
+        Start-Sleep -Milliseconds 500
     }
+    throw "Container '$Name' failed to become ready in time."
+}
 
-    if (-not $containerId) {
-        Write-Host "Creating local Postgres container '$Container' on port $Port..." -ForegroundColor Yellow
-        docker run --name $Container `
-            -e "POSTGRES_USER=$User" `
-            -e "POSTGRES_PASSWORD=$Password" `
-            -e "POSTGRES_DB=$Database" `
-            -p "${Port}:5432" `
+# --- 1. Проверка наличия Docker ---
+if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+    throw "Docker не найден в PATH. Убедитесь, что Docker Desktop запущен."
+}
+
+Write-Host "=== Подготовка локальных баз данных ===" -ForegroundColor Cyan
+
+# --- 2. Запуск PostgreSQL ---
+Ensure-Container -Name $pgContainer `
+    -RunCommand {
+        docker run --name $pgContainer `
+            -e "POSTGRES_USER=$pgUser" `
+            -e "POSTGRES_PASSWORD=$pgPass" `
+            -e "POSTGRES_DB=$pgDb" `
+            -p "${pgPort}:5432" `
             -d postgres:16-alpine | Out-Null
+    } `
+    -HealthCheck {
+        $null = docker exec $pgContainer pg_isready -U $pgUser -d $pgDb 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } `
+    -SuccessMessage "Postgres готов: 127.0.0.1:$pgPort"
 
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to create local postgres container. Port $Port may be in use"
-        }
-    } else {
-        $isRunning = docker inspect -f "{{.State.Running}}" $Container 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to inspect docker container '$Container'"
-        }
+# --- 3. Запуск MongoDB ---
+Ensure-Container -Name $mongoContainer `
+    -RunCommand {
+        docker run --name $mongoContainer `
+            -p "${mongoPort}:27017" `
+            -d mongo:7 | Out-Null
+    } `
+    -HealthCheck {
+        $null = docker exec $mongoContainer mongosh --eval "db.adminCommand('ping')" --quiet 2>$null
+        return ($LASTEXITCODE -eq 0)
+    } `
+    -SuccessMessage "MongoDB готова: 127.0.0.1:$mongoPort"
 
-        if ($isRunning -ne "true") {
-            Write-Host "Starting local Postgres container '$Container'..." -ForegroundColor Yellow
-            docker start $Container | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "Failed to start existing container '$Container'. Recreating..." -ForegroundColor Yellow
-                docker rm -f $Container | Out-Null
-                docker run --name $Container `
-                    -e "POSTGRES_USER=$User" `
-                    -e "POSTGRES_PASSWORD=$Password" `
-                    -e "POSTGRES_DB=$Database" `
-                    -p "${Port}:5432" `
-                    -d postgres:16-alpine | Out-Null
-            }
-        }
-    }
+# --- 4. Очистка старых зависших процессов app.exe ---
+Get-Process app -ErrorAction SilentlyContinue | 
+    Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | 
+    Stop-Process -Force -ErrorAction SilentlyContinue
 
-    for ($attempt = 1; $attempt -le 30; $attempt++) {
-        docker exec $Container pg_isready -U $User -d $Database | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Local Postgres is ready on 127.0.0.1:$Port" -ForegroundColor Green
-            return
-        }
-        Start-Sleep -Milliseconds 500
-    }
+# --- 5. Запуск микросервисов через Air ---
+Write-Host "`n=== Запуск микросервисов (Air) ===" -ForegroundColor Cyan
 
-    throw "local postgres container '$Container' did not become ready in time"
-}
-
-function Ensure-LocalMongo {
-    param(
-        [string]$Container,
-        [int]$Port
-    )
-
-    if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
-        throw "docker is not available in PATH"
-    }
-
-    $containerId = docker ps -aq --filter "name=^/$Container$"
-    if ($LASTEXITCODE -ne 0) {
-        throw "failed to query docker containers"
-    }
-
-    if (-not $containerId) {
-        Write-Host "Creating local Mongo container '$Container' on port $Port..." -ForegroundColor Yellow
-        docker run --name $Container -p "${Port}:27017" -d mongo:7 | Out-Null
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to create local mongo container. Port $Port may be in use"
-        }
-    } else {
-        $isRunning = docker inspect -f "{{.State.Running}}" $Container 2>$null
-        if ($LASTEXITCODE -ne 0) {
-            throw "failed to inspect docker container '$Container'"
-        }
-        if ($isRunning -ne "true") {
-            Write-Host "Starting local Mongo container '$Container'..." -ForegroundColor Yellow
-            docker start $Container | Out-Null
-            if ($LASTEXITCODE -ne 0) {
-                throw "failed to start local mongo container '$Container'"
-            }
-        }
-    }
-    
-    # Simple wait
-    for ($attempt = 1; $attempt -le 20; $attempt++) {
-        docker exec $Container mongosh --eval "db.adminCommand('ping')" --quiet | Out-Null
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "Local Mongo is ready on 127.0.0.1:$Port" -ForegroundColor Green
-            return
-        }
-        Start-Sleep -Milliseconds 500
-    }
-    throw "local mongo container '$Container' did not become ready in time"
-}
-
-Write-Host "Preparing local database..." -ForegroundColor Green
-Ensure-LocalPostgres -Container $localDbContainer -Port $localDbPort -Database $localDbName -User $localDbUser -Password $localDbPassword
-Ensure-LocalMongo -Container $localMongoContainer -Port $localMongoPort
-
-Write-Host "Starting all services on local DB..." -ForegroundColor Green
-Write-Host "DATABASE_URL=$localDbURL" -ForegroundColor DarkGray
-Write-Host "MONGO_URL=$localMongoURL" -ForegroundColor DarkGray
-
-# Ensure no stale app.exe processes from previous runs are holding ports
-Get-Process app -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-
-$backendDir = Join-Path $PSScriptRoot "backend"
-$emailDir = Join-Path $PSScriptRoot "notifiers\email"
+$backendDir        = Join-Path $PSScriptRoot "backend"
+$emailDir          = Join-Path $PSScriptRoot "notifiers\email"
 $activityLoggerDir = Join-Path $PSScriptRoot "activity-logger"
 
-$backendCommand = @"
-`$env:DATABASE_URL = '$localDbURL'
-`$env:CONFIG_PATH = '.\config\local.yaml'
+$backendCmd = @"
+`$env:DATABASE_URL = '$dbUrl'
+`$env:CONFIG_PATH   = '.\config\local.yaml'
 Set-Location '$backendDir'
 air -c .air.toml
 "@
 
-$emailCommand = @"
-`$env:DATABASE_URL = '$localDbURL'
-`$env:EMAIL_CONFIG_PATH = '.\config\local.yaml'
+$emailCmd = @"
+`$env:DATABASE_URL        = '$dbUrl'
+`$env:EMAIL_CONFIG_PATH   = '.\config\local.yaml'
 Set-Location '$emailDir'
 air -c .air.toml
 "@
 
-$activityLoggerCommand = @"
-`$env:MONGO_URL = '$localMongoURL'
+$activityCmd = @"
+`$env:MONGO_URL = '$mongoUrl'
 Set-Location '$activityLoggerDir'
 air -c .air.toml
 "@
 
-$backend = Start-Process powershell `
-    -ArgumentList "-NoExit", "-Command", $backendCommand `
-    -PassThru
+$backendProc  = Start-Process powershell -ArgumentList "-NoExit", "-Command", $backendCmd -PassThru
+$emailProc    = Start-Process powershell -ArgumentList "-NoExit", "-Command", $emailCmd -PassThru
+$activityProc = Start-Process powershell -ArgumentList "-NoExit", "-Command", $activityCmd -PassThru
 
-$email = Start-Process powershell `
-    -ArgumentList "-NoExit", "-Command", $emailCommand `
-    -PassThru
+Write-Host "Backend PID:         $($backendProc.Id)" -ForegroundColor Cyan
+Write-Host "Email notifier PID:  $($emailProc.Id)" -ForegroundColor Cyan
+Write-Host "Activity Logger PID: $($activityProc.Id)" -ForegroundColor Cyan
+Write-Host "`nНажмите Ctrl+C в этом окне для остановки всех сервисов..." -ForegroundColor Yellow
 
-$activityLogger = Start-Process powershell `
-    -ArgumentList "-NoExit", "-Command", $activityLoggerCommand `
-    -PassThru
-
-Write-Host "Backend PID:         $($backend.Id)" -ForegroundColor Cyan
-Write-Host "Email notifier PID:  $($email.Id)" -ForegroundColor Cyan
-Write-Host "Activity Logger PID: $($activityLogger.Id)" -ForegroundColor Cyan
-Write-Host "Press Ctrl+C to stop all services" -ForegroundColor Yellow
-
+# --- 6. Ожидание и Graceful остановка дочерних окон ---
 try {
-    Wait-Process -Id $backend.Id
+    Wait-Process -Id $backendProc.Id
 } finally {
-    Stop-Process -Id $backend.Id -Force -ErrorAction SilentlyContinue
-    Stop-Process -Id $email.Id   -Force -ErrorAction SilentlyContinue
-    Stop-Process -Id $activityLogger.Id   -Force -ErrorAction SilentlyContinue
-    Get-Process app -ErrorAction SilentlyContinue | Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | Stop-Process -Force -ErrorAction SilentlyContinue
-    Write-Host "All services stopped" -ForegroundColor Red
+    Stop-Process -Id $backendProc.Id, $emailProc.Id, $activityProc.Id -Force -ErrorAction SilentlyContinue
+    Get-Process app -ErrorAction SilentlyContinue | 
+        Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | 
+        Stop-Process -Force -ErrorAction SilentlyContinue
+    Write-Host "Все сервисы остановлены." -ForegroundColor Red
 }

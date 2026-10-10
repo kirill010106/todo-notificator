@@ -17,6 +17,9 @@ yookassa:
   shop_id: ""
   secret_key: ""
 
+metrics_server:
+  address: "0.0.0.0:9091"
+
 
 cors:
   allowed_origins:
