@@ -16,4 +16,6 @@ access_token_ttl: 15m
 refresh_token_ttl: 168h
 yookassa:
   shop_id: ""
-  secret_key: ""
+  secret_key: ""
+metrics_server:
+  address: "0.0.0.0:9091"

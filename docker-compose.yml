@@ -88,6 +88,22 @@ services:
       - "traefik.http.routers.todofrontend.tls.certResolver=default"
       - "traefik.http.services.todofrontend.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik"
+  prometheus:
+    image: prom/prometheus
+    volumes:
+      - ./prometheus.yml:/etc/prometheus/prometheus.yml
+      - prometheus_data:/prometheus
+    ports:
+      - "9090:9090"
+
+  grafana:
+    image: grafana/grafana
+    ports:
+    - "3001:3000"
+    volumes:
+    - grafana_data:/var/lib/grafana
+    - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
+
 
 # Регистрируем внешнюю сеть Traefik
 networks:
@@ -96,3 +112,5 @@ networks:
     name: traefik
 volumes:
   mongo_data:
+  prometheus_data:
+  grafana_data:

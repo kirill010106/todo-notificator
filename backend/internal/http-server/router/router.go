@@ -49,6 +49,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	customlogger "github.com/kirill010106/todo-notificator/internal/http-server/middleware/logger"
+	metricsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/metrics"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 )
 
@@ -75,6 +76,7 @@ func New(cfg Config) *chi.Mux {
 	}))
 	r.Use(middleware.RequestID)
 	r.Use(customlogger.New(cfg.Log))
+	r.Use(metricsMiddleware.New())
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.URLFormat)
 	r.Use(middleware.RedirectSlashes)
