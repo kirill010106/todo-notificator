@@ -22,10 +22,15 @@ func TestStartPomodoroSession_Success(t *testing.T) {
 	userID := int64(42)
 	taskID := int64(10)
 
-	// 1. Check for absence of active session
+	expectUserTransaction(mock, userID)
+	mock.ExpectQuery("SELECT id, status, reward_claimed FROM tasks").WithArgs(userID, taskID).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "reward_claimed"}).AddRow(taskID, "pending", false))
+		// 1. Check for absence of active session
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2`)).
 		WithArgs(userID, domain.PomodoroStatusActive).
 		WillReturnError(sql.ErrNoRows) // Simulate that session is not found
+
+	mock.ExpectExec("INSERT INTO focus_states").WithArgs(userID).WillReturnResult(sqlmock.NewResult(0, 1))
 
 	// 2. Creation
 	now := time.Now()
@@ -40,6 +45,7 @@ func TestStartPomodoroSession_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "task_id", "status", "started_at", "duration_minutes", "breaks_used", "created_at"}).
 			AddRow(1, userID, taskID, domain.PomodoroStatusActive, now, 25, 0, now))
 
+	mock.ExpectCommit()
 	session, err := s.StartPomodoroSession(context.Background(), userID, &taskID)
 
 	require.NoError(t, err)
@@ -60,10 +66,12 @@ func TestStartPomodoroSession_AlreadyActive(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(42)
 
+	expectUserTransaction(mock, userID)
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2`)).
 		WithArgs(userID, domain.PomodoroStatusActive).
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(99)) // Active session found
 
+	mock.ExpectRollback()
 	session, err := s.StartPomodoroSession(context.Background(), userID, nil)
 
 	require.ErrorIs(t, err, storage.ErrSessionActive)
@@ -84,7 +92,7 @@ func TestAddPomodoroBreak_Success(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
-        SET breaks_used = 1 
+        SET breaks_used = 1, break_started_at=CURRENT_TIMESTAMP, break_ends_at=CURRENT_TIMESTAMP+INTERVAL '5 minutes'
         WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 
@@ -110,7 +118,7 @@ func TestAddPomodoroBreak_Exhausted(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
-        SET breaks_used = 1 
+        SET breaks_used = 1, break_started_at=CURRENT_TIMESTAMP, break_ends_at=CURRENT_TIMESTAMP+INTERVAL '5 minutes'
         WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 
@@ -273,7 +281,7 @@ func TestAddPomodoroBreak_Error(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
         UPDATE pomodoro_sessions 
-        SET breaks_used = 1 
+        SET breaks_used = 1, break_started_at=CURRENT_TIMESTAMP, break_ends_at=CURRENT_TIMESTAMP+INTERVAL '5 minutes'
         WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `)
 

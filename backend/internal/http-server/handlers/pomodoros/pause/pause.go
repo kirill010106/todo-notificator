@@ -70,7 +70,7 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		log.Info("pomodoro break added successfully")
 
 		if eventLogger != nil {
-			eventLogger.LogEvent(userID, "POMODORO_PAUSED", sessionID, nil)
+			domain.AfterCommit(r.Context(), func() { eventLogger.LogEvent(userID, "POMODORO_PAUSED", sessionID, nil) })
 		}
 
 		render.Status(r, http.StatusOK)

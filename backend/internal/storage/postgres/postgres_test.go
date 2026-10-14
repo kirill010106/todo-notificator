@@ -692,7 +692,7 @@ func TestSaveTask_CategoryNotFound(t *testing.T) {
 }
 
 // Tests for UpdateTask
-func TestUpdateTask_Success(t *testing.T) {
+func TestUpdateTaskSQL_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -712,7 +712,7 @@ func TestUpdateTask_Success(t *testing.T) {
 		WithArgs(newTitle, status, userID, taskID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	err = s.UpdateTask(context.Background(), userID, taskID, domain.TaskUpdate{
+	err = updateTaskSQL(context.Background(), s.DB, userID, taskID, domain.TaskUpdate{
 		Title:  &newTitle,
 		Status: &status,
 	})
@@ -720,7 +720,7 @@ func TestUpdateTask_Success(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUpdateTask_NotFound(t *testing.T) {
+func TestUpdateTaskSQL_NotFound(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -739,7 +739,7 @@ func TestUpdateTask_NotFound(t *testing.T) {
 		WithArgs(newTitle, userID, taskID).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
-	err = s.UpdateTask(context.Background(), userID, taskID, domain.TaskUpdate{
+	err = updateTaskSQL(context.Background(), s.DB, userID, taskID, domain.TaskUpdate{
 		Title: &newTitle,
 	})
 	require.Error(t, err)
@@ -747,7 +747,7 @@ func TestUpdateTask_NotFound(t *testing.T) {
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
-func TestUpdateTask_ReminderAtResetsNotificationFlag(t *testing.T) {
+func TestUpdateTaskSQL_ReminderAtResetsNotificationFlag(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
@@ -766,7 +766,7 @@ func TestUpdateTask_ReminderAtResetsNotificationFlag(t *testing.T) {
 		WithArgs(reminderAt, userID, taskID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
-	err = s.UpdateTask(context.Background(), userID, taskID, domain.TaskUpdate{
+	err = updateTaskSQL(context.Background(), s.DB, userID, taskID, domain.TaskUpdate{
 		ReminderAt: &reminderAt,
 	})
 	require.NoError(t, err)
@@ -830,7 +830,7 @@ func TestSaveRefreshToken_Success(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(42)
 	token := "refresh_token_value"
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
 		INSERT INTO refresh_tokens (user_id, token, expires_at)
@@ -853,12 +853,12 @@ func TestGetRefreshToken_Success(t *testing.T) {
 	s := &Storage{DB: db}
 	token := "refresh_token_value"
 	userID := int64(42)
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
 	SELECT id, user_id, token, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > NOW()
+	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `)
 	mock.ExpectQuery(query).
 		WithArgs(token).
@@ -884,7 +884,7 @@ func TestGetRefreshToken_Invalid(t *testing.T) {
 	query := regexp.QuoteMeta(`
 	SELECT id, user_id, token, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > NOW()
+	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `)
 	mock.ExpectQuery(query).
 		WithArgs(token).
@@ -949,14 +949,14 @@ func TestRotateRefreshToken_Success(t *testing.T) {
 
 	oldToken := "old_refresh_token"
 	newToken := "new_refresh_token"
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 	passHash := []byte("hashed_password")
 
 	query := regexp.QuoteMeta(`
 		WITH rotated AS (
 			UPDATE refresh_tokens
 			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > NOW()
+			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 			RETURNING user_id
 		)
 		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
@@ -989,13 +989,13 @@ func TestRotateRefreshToken_Invalid(t *testing.T) {
 
 	oldToken := "old_refresh_token"
 	newToken := "new_refresh_token"
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
 		WITH rotated AS (
 			UPDATE refresh_tokens
 			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > NOW()
+			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 			RETURNING user_id
 		)
 		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
@@ -1023,13 +1023,13 @@ func TestRotateRefreshToken_DBError(t *testing.T) {
 
 	oldToken := "old_refresh_token"
 	newToken := "new_refresh_token"
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
 		WITH rotated AS (
 			UPDATE refresh_tokens
 			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > NOW()
+			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 			RETURNING user_id
 		)
 		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
@@ -1057,7 +1057,7 @@ func TestSaveEmailVerificationToken_Success(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(42)
 	token := "verification_token"
-	expiresAt := time.Now().Add(24 * time.Hour)
+	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
 		INSERT INTO email_verification_tokens (user_id, token, expires_at)
@@ -1308,10 +1308,11 @@ func TestBulkCompleteTasks(t *testing.T) {
 	require.Equal(t, int64(0), completed)
 
 	taskIDs := []int64{10, 20}
-	query := regexp.QuoteMeta(`UPDATE tasks SET status = $1, reminder_at = NULL WHERE user_id = $2 AND id IN ($3, $4) AND status != $1`)
-	mock.ExpectExec(query).
-		WithArgs(domain.TaskStatusDone, userID, int64(10), int64(20)).
-		WillReturnResult(sqlmock.NewResult(0, 2))
+	expectUserTransaction(mock, userID)
+	mock.ExpectQuery("WITH candidates AS").WithArgs(userID, int64(10), int64(20)).
+		WillReturnRows(sqlmock.NewRows([]string{"affected", "rewarded"}).AddRow(2, 0))
+	expectNoNewAchievements(mock, userID)
+	mock.ExpectCommit()
 
 	completed, err = s.BulkCompleteTasks(context.Background(), userID, taskIDs)
 	require.NoError(t, err)
@@ -1327,6 +1328,7 @@ func TestUnlockAchievement(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(1)
 
+	expectUserTransaction(mock, userID)
 	// Case 1: First time unlocked with points award
 	insertQuery := regexp.QuoteMeta(`INSERT INTO achievements (user_id, code) VALUES ($1, $2) ON CONFLICT (user_id, code) DO NOTHING RETURNING id`)
 	mock.ExpectQuery(insertQuery).
@@ -1348,15 +1350,18 @@ func TestUnlockAchievement(t *testing.T) {
 		WithArgs(1, userID).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
+	mock.ExpectCommit()
 	unlocked, err := s.UnlockAchievement(context.Background(), userID, "first_step")
 	require.NoError(t, err)
 	require.True(t, unlocked)
 
+	expectUserTransaction(mock, userID)
 	// Case 2: Already unlocked (ON CONFLICT DO NOTHING returns no rows)
 	mock.ExpectQuery(insertQuery).
 		WithArgs(userID, "first_step").
 		WillReturnError(sql.ErrNoRows)
 
+	mock.ExpectCommit()
 	unlocked, err = s.UnlockAchievement(context.Background(), userID, "first_step")
 	require.NoError(t, err)
 	require.False(t, unlocked)
@@ -1372,15 +1377,18 @@ func TestGetDailyQuests(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(1)
 
-	q1 := regexp.QuoteMeta(`SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND created_at >= CURRENT_DATE`)
-	mock.ExpectQuery(q1).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
+	mock.ExpectQuery("SELECT timezone").WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"timezone"}).AddRow("UTC"))
+	mock.ExpectQuery("SELECT CURRENT_TIMESTAMP").WillReturnRows(sqlmock.NewRows([]string{"now"}).AddRow(time.Now()))
+	q1 := regexp.QuoteMeta(`SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'created' AND recorded_at >= $2`)
+	mock.ExpectQuery(q1).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
 
-	q2 := regexp.QuoteMeta(`SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND completed_at >= CURRENT_DATE`)
-	mock.ExpectQuery(q2).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
+	q2 := regexp.QuoteMeta(`SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND status = 'completed' AND completed_at >= $2 AND completed_at - started_at >= INTERVAL '24 minutes'`)
+	mock.ExpectQuery(q2).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
 
-	q3 := regexp.QuoteMeta(`SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done' AND updated_at >= CURRENT_DATE`)
-	mock.ExpectQuery(q3).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
+	q3 := regexp.QuoteMeta(`SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'completed' AND recorded_at >= $2`)
+	mock.ExpectQuery(q3).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
 
+	mock.ExpectQuery("SELECT code FROM daily_reward_claims").WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"code"}))
 	quests, err := s.GetDailyQuests(context.Background(), userID)
 	require.NoError(t, err)
 	require.Len(t, quests, 3)
@@ -1389,6 +1397,3 @@ func TestGetDailyQuests(t *testing.T) {
 	require.True(t, quests[2].Completed) // 3 >= 3
 	require.NoError(t, mock.ExpectationsWereMet())
 }
-
-
-

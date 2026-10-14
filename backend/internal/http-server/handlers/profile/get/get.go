@@ -27,6 +27,7 @@ type ProfileData struct {
 	ActiveRemindersCount int    `json:"active_reminders_count"`
 	CategoriesLimit      int    `json:"categories_limit"`
 	RemindersLimit       int    `json:"reminders_limit"`
+	Timezone             string `json:"timezone"`
 }
 
 type Response struct {
@@ -53,6 +54,18 @@ func New(log *slog.Logger, provider ProfileProvider) http.HandlerFunc {
 
 		catCount, _ := provider.CountCategories(r.Context(), userID)
 		remCount, _ := provider.CountActiveReminders(r.Context(), userID)
+		zone := "UTC"
+		if extended, ok := provider.(interface {
+			GetTimezone(context.Context, int64) (string, error)
+		}); ok {
+			var err error
+			zone, err = extended.GetTimezone(r.Context(), userID)
+			if err != nil {
+				render.Status(r, 500)
+				render.JSON(w, r, resp.Error("cannot load timezone"))
+				return
+			}
+		}
 
 		catLimit := 3
 		remLimit := 3
@@ -65,6 +78,7 @@ func New(log *slog.Logger, provider ProfileProvider) http.HandlerFunc {
 		render.JSON(w, r, Response{
 			Response: resp.OK(),
 			Profile: ProfileData{
+				Timezone:             zone,
 				ID:                   user.ID,
 				Email:                user.Email,
 				IsVerified:           user.IsVerified,

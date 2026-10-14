@@ -50,7 +50,7 @@ func (s *Storage) SaveTask(ctx context.Context, task domain.Task) (int64, error)
 	var categoryArg any = nil
 	if task.CategoryID != nil && *task.CategoryID > 0 {
 		var exists bool
-		err := s.DB.QueryRowContext(
+		err := s.executor(ctx).QueryRowContext(
 			ctx,
 			`SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1 AND user_id = $2)`,
 			task.CategoryID, task.UserID,
@@ -70,7 +70,7 @@ VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 RETURNING id`
 	var id int64
 
-	err := s.DB.QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified, categoryArg).Scan(&id)
+	err := s.executor(ctx).QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified, categoryArg).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -82,6 +82,9 @@ RETURNING id`
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
 
+	if outcome := actionOutcome(ctx); outcome != nil {
+		outcome.Result.ChangedTaskIDs = append(outcome.Result.ChangedTaskIDs, id)
+	}
 	return id, nil
 }
 
@@ -94,7 +97,7 @@ func (s *Storage) GetTask(ctx context.Context, userID int64, taskID int64) (doma
 		WHERE user_id = $1 AND id = $2
 	`
 	var t domain.Task
-	err := s.DB.QueryRowContext(ctx, query, userID, taskID).Scan(
+	err := s.executor(ctx).QueryRowContext(ctx, query, userID, taskID).Scan(
 		&t.ID,
 		&t.UserID,
 		&t.Title,
@@ -145,12 +148,30 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int,
 	}
 
 	whereClause := strings.Join(conditions, " AND ")
+	if filter.DeadlineFrom != nil {
+		conditions = append(conditions, fmt.Sprintf("deadline >= $%d", argID))
+		args = append(args, *filter.DeadlineFrom)
+		argID++
+	}
+	if filter.DeadlineBefore != nil {
+		conditions = append(conditions, fmt.Sprintf("deadline < $%d", argID))
+		args = append(args, *filter.DeadlineBefore)
+		argID++
+	}
+	if filter.HasDeadline != nil {
+		if *filter.HasDeadline {
+			conditions = append(conditions, "deadline IS NOT NULL")
+		} else {
+			conditions = append(conditions, "deadline IS NULL")
+		}
+	}
+	whereClause = strings.Join(conditions, " AND ")
 
 	// Count query
 	countQuery := fmt.Sprintf(`SELECT COUNT(*) FROM tasks WHERE %s`, whereClause) //nolint:gosec
 
 	var total int
-	if err := s.DB.QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
+	if err := s.executor(ctx).QueryRowContext(ctx, countQuery, args...).Scan(&total); err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
 
@@ -184,7 +205,7 @@ FROM tasks
 	WHERE %s ORDER BY %s
 LIMIT $%d OFFSET $%d`, whereClause, orderBy, argID, argID+1) //nolint:gosec
 
-	rows, err := s.DB.QueryContext(ctx, dataQuery, dataArgs...)
+	rows, err := s.executor(ctx).QueryContext(ctx, dataQuery, dataArgs...)
 	if err != nil {
 		return nil, 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -236,31 +257,7 @@ func (s *Storage) BulkDeleteTasks(ctx context.Context, userID int64, taskIDs []i
 }
 
 func (s *Storage) BulkCompleteTasks(ctx context.Context, userID int64, taskIDs []int64) (int64, error) {
-	const op = "storage.postgres.BulkCompleteTasks"
-	if len(taskIDs) == 0 {
-		return 0, nil
-	}
-
-	placeholders := make([]string, len(taskIDs))
-	args := make([]any, 0, len(taskIDs)+2)
-	args = append(args, domain.TaskStatusDone, userID)
-	for i, id := range taskIDs {
-		placeholders[i] = fmt.Sprintf("$%d", i+3)
-		args = append(args, id)
-	}
-
-	query := fmt.Sprintf(`UPDATE tasks SET status = $1, reminder_at = NULL WHERE user_id = $2 AND id IN (%s) AND status != $1`, strings.Join(placeholders, ", "))
-	res, err := s.DB.ExecContext(ctx, query, args...)
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	rowsAffected, err := res.RowsAffected()
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
-	}
-
-	return rowsAffected, nil
+	return s.bulkCompleteWithRewards(ctx, userID, taskIDs)
 }
 
 func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) error {
@@ -284,6 +281,10 @@ func (s *Storage) DeleteTask(ctx context.Context, userID int64, taskID int64) er
 }
 
 func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t domain.TaskUpdate) error {
+	return s.updateTaskWithRewards(ctx, userID, taskID, t)
+}
+
+func updateTaskSQL(ctx context.Context, db sqlExecutor, userID int64, taskID int64, t domain.TaskUpdate) error {
 	const op = "storage.postgres.UpdateTask"
 
 	setValues := make([]string, 0)
@@ -313,6 +314,15 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 		args = append(args, *t.Deadline)
 		argID++
 	}
+	if t.ClearDeadline {
+		setValues = append(setValues, "deadline = NULL")
+	}
+	if t.ClearReminderAt {
+		setValues = append(setValues, "reminder_at = NULL", "is_notified = false")
+	}
+	if t.ClearCategoryID {
+		setValues = append(setValues, "category_id = NULL")
+	}
 
 	if t.ReminderAt != nil {
 		setValues = append(setValues, fmt.Sprintf("reminder_at = $%d", argID))
@@ -324,7 +334,7 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 
 	if t.CategoryID != nil {
 		var exists bool
-		err := s.DB.QueryRowContext(
+		err := db.QueryRowContext(
 			ctx,
 			`SELECT EXISTS(SELECT 1 FROM categories WHERE id = $1 AND user_id = $2)`,
 			*t.CategoryID, userID,
@@ -362,7 +372,7 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 
 	args = append(args, userID, taskID)
 
-	res, err := s.DB.ExecContext(ctx, query, args...)
+	res, err := db.ExecContext(ctx, query, args...)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -417,7 +427,9 @@ func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token stri
 		VALUES ($1, $2, $3)
 	`
 
-	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt)
+	// refresh_tokens.expires_at is a legacy timestamp without time zone.
+	// Persist UTC wall time and compare it with an explicitly UTC database clock.
+	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt.UTC())
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -431,7 +443,7 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	query := `
 	SELECT id, user_id, token, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > NOW()
+	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `
 	var rt domain.RefreshToken
 	err := s.DB.QueryRowContext(ctx, query, token).Scan(
@@ -483,7 +495,7 @@ func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newTo
 		WITH rotated AS (
 			UPDATE refresh_tokens
 			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > NOW()
+			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 			RETURNING user_id
 		)
 		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
@@ -492,7 +504,7 @@ func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newTo
 	`
 
 	var user domain.User
-	err := s.DB.QueryRowContext(ctx, query, oldToken, newToken, expiresAt).Scan(
+	err := s.DB.QueryRowContext(ctx, query, oldToken, newToken, expiresAt.UTC()).Scan(
 		&user.ID,
 		&user.Email,
 		&user.PassHash,
@@ -525,7 +537,7 @@ func (s *Storage) DeleteUserRefreshTokens(ctx context.Context, userID int64) err
 func (s *Storage) DeleteExpiredRefreshTokens(ctx context.Context) error {
 	const op = "storage.postgres.DeleteExpiredRefreshTokens"
 
-	query := `DELETE FROM refresh_tokens WHERE expires_at < NOW()`
+	query := `DELETE FROM refresh_tokens WHERE expires_at < (NOW() AT TIME ZONE 'UTC')`
 
 	_, err := s.DB.ExecContext(ctx, query)
 	if err != nil {
@@ -734,11 +746,11 @@ func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserSt
 
 	var uS domain.UserStats
 
-	err := s.DB.QueryRowContext(ctx, query, userID).
+	err := s.executor(ctx).QueryRowContext(ctx, query, userID).
 		Scan(&uS.ID, &uS.UserID, &uS.Points, &uS.Level, &uS.TotalPomodoros, &uS.TotalBurntTasks, &uS.CurrentStreak, &uS.BestStreak, &uS.UpdatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			_, errInsert := s.DB.ExecContext(ctx, `INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, userID)
+			_, errInsert := s.executor(ctx).ExecContext(ctx, `INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, userID)
 			if errInsert != nil {
 				return domain.UserStats{}, fmt.Errorf("%s (init): %w", op, errInsert)
 			}
@@ -875,61 +887,17 @@ func (s *Storage) UpdateUserScore(ctx context.Context, userID int64, pointsDelta
 }
 
 func (s *Storage) ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error {
-	const op = "storage.postgres.ApplyStatsDelta"
-
-	// Ensure user_stats row exists
-	_, _ = s.DB.ExecContext(ctx, `INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`, userID)
-
-	query := `
-		UPDATE user_stats
-		SET
-			points = GREATEST(0, points + $1),
-			total_pomodoros = total_pomodoros + $2,
-			total_burnt_tasks = total_burnt_tasks + $3,
-			current_streak = CASE
-				WHEN $4 = TRUE THEN 0
-				WHEN ($1 > 0 OR $2 > 0 OR $5 = TRUE) AND (last_activity_date IS NULL OR last_activity_date < CURRENT_DATE - INTERVAL '1 day') THEN 1
-				WHEN ($1 > 0 OR $2 > 0 OR $5 = TRUE) AND (last_activity_date = CURRENT_DATE - INTERVAL '1 day') THEN current_streak + 1
-				ELSE current_streak
-			END,
-			best_streak = GREATEST(best_streak, CASE
-				WHEN $4 = TRUE THEN 0
-				WHEN ($1 > 0 OR $2 > 0 OR $5 = TRUE) AND (last_activity_date IS NULL OR last_activity_date < CURRENT_DATE - INTERVAL '1 day') THEN 1
-				WHEN ($1 > 0 OR $2 > 0 OR $5 = TRUE) AND (last_activity_date = CURRENT_DATE - INTERVAL '1 day') THEN current_streak + 1
-				ELSE current_streak
-			END),
-			last_activity_date = CASE
-				WHEN ($1 > 0 OR $2 > 0 OR $5 = TRUE) THEN CURRENT_DATE
-				ELSE last_activity_date
-			END,
-			updated_at = NOW()
-		WHERE user_id = $6
-		RETURNING points
-	`
-
-	var newPoints int64
-	err := s.DB.QueryRowContext(ctx, query,
-		delta.PointsDelta,
-		delta.PomodorosDelta,
-		delta.BurntTasksDelta,
-		delta.ResetStreak,
-		delta.IncrementStreak,
-		userID,
-	).Scan(&newPoints)
-	if err != nil {
-		return fmt.Errorf("%s: %w", op, err)
-	}
-
-	newLevel, _, _, _, _, _ := domain.CalculateLevel(newPoints)
-	_, _ = s.DB.ExecContext(ctx, `UPDATE user_stats SET level = $1 WHERE user_id = $2`, newLevel, userID)
-
-	return nil
+	return s.withUserTx(ctx, userID, func(tx *sql.Tx) error {
+		return applyStatsDeltaTx(ctx, tx, userID, delta)
+	})
 }
 
 func (s *Storage) GetAchievements(ctx context.Context, userID int64) ([]domain.Achievement, error) {
 	const op = "storage.postgres.GetAchievements"
 
-	_, _ = s.CheckAndUnlockAchievements(ctx, userID)
+	if _, err := s.CheckAndUnlockAchievements(ctx, userID); err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
 
 	query := `SELECT code, unlocked_at FROM achievements WHERE user_id = $1`
 	rows, err := s.DB.QueryContext(ctx, query, userID)
@@ -964,105 +932,63 @@ func (s *Storage) GetAchievements(ctx context.Context, userID int64) ([]domain.A
 }
 
 func (s *Storage) UnlockAchievement(ctx context.Context, userID int64, code string) (bool, error) {
-	const op = "storage.postgres.UnlockAchievement"
-
-	var id int64
-	query := `INSERT INTO achievements (user_id, code) VALUES ($1, $2) ON CONFLICT (user_id, code) DO NOTHING RETURNING id`
-	err := s.DB.QueryRowContext(ctx, query, userID, code).Scan(&id)
+	var unlocked bool
+	err := s.withUserTx(ctx, userID, func(tx *sql.Tx) error {
+		var err error
+		unlocked, err = unlockAchievementTx(ctx, tx, userID, code)
+		return err
+	})
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return false, nil
-		}
-		return false, fmt.Errorf("%s: %w", op, err)
+		return false, err
 	}
-
-	for _, a := range domain.AvailableAchievements {
-		if a.Code == code && a.Points > 0 {
-			_ = s.ApplyStatsDelta(ctx, userID, domain.StatsDelta{PointsDelta: a.Points})
-			break
-		}
-	}
-
-	return true, nil
+	return unlocked, nil
 }
 
 func (s *Storage) CheckAndUnlockAchievements(ctx context.Context, userID int64) ([]domain.Achievement, error) {
-	stats, err := s.GetUserStats(ctx, userID)
+	var unlocked []domain.Achievement
+	err := s.withUserTx(ctx, userID, func(tx *sql.Tx) error {
+		var err error
+		unlocked, err = checkAndUnlockAchievementsTx(ctx, tx, userID)
+		return err
+	})
+	if err != nil {
+		return nil, err
+	}
+	return unlocked, nil
+}
+
+func (s *Storage) GetDailyQuests(ctx context.Context, userID int64) ([]domain.DailyQuest, error) {
+	zone, err := s.GetTimezone(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	location, err := time.LoadLocation(zone)
+	if err != nil {
+		return nil, err
+	}
+	var now time.Time
+	if err := s.executor(ctx).QueryRowContext(ctx, `SELECT CURRENT_TIMESTAMP`).Scan(&now); err != nil {
+		return nil, err
+	}
+	local := now.In(location)
+	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, location)
+	var createdToday int
+	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'created' AND recorded_at >= $2`, userID, start).Scan(&createdToday)
 	if err != nil {
 		return nil, err
 	}
 
-	var doneTasksCount int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done'`, userID).Scan(&doneTasksCount)
-
-	var isPremium bool
-	_ = s.DB.QueryRowContext(ctx, `SELECT COALESCE(is_premium, false) FROM users WHERE id = $1`, userID).Scan(&isPremium)
-
-	var nightOwlCount int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done' AND EXTRACT(HOUR FROM updated_at) >= 0 AND EXTRACT(HOUR FROM updated_at) < 5`, userID).Scan(&nightOwlCount)
-
-	var earlyBirdCount int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done' AND EXTRACT(HOUR FROM updated_at) >= 5 AND EXTRACT(HOUR FROM updated_at) < 8`, userID).Scan(&earlyBirdCount)
-
-	currentStreak := int64(0)
-	if stats.CurrentStreak != nil {
-		currentStreak = *stats.CurrentStreak
-	}
-	bestStreak := int64(0)
-	if stats.BestStreak != nil {
-		bestStreak = *stats.BestStreak
-	}
-	totalPomodoros := int64(0)
-	if stats.TotalPomodoros != nil {
-		totalPomodoros = *stats.TotalPomodoros
-	}
-	totalBurnt := int64(0)
-	if stats.TotalBurntTasks != nil {
-		totalBurnt = *stats.TotalBurntTasks
-	}
-
-	var newlyUnlocked []domain.Achievement
-
-	check := func(code string, condition bool) {
-		if !condition {
-			return
-		}
-		unlocked, err := s.UnlockAchievement(ctx, userID, code)
-		if err == nil && unlocked {
-			for _, a := range domain.AvailableAchievements {
-				if a.Code == code {
-					newlyUnlocked = append(newlyUnlocked, a)
-					break
-				}
-			}
-		}
-	}
-
-	check("first_step", doneTasksCount >= 1)
-	check("task_spree", doneTasksCount >= 10)
-	check("task_centurion", doneTasksCount >= 50)
-	check("pomodoro_rookie", totalPomodoros >= 1)
-	check("pomodoro_guru", totalPomodoros >= 20)
-	check("streak_three", currentStreak >= 3 || bestStreak >= 3)
-	check("streak_week", currentStreak >= 7 || bestStreak >= 7)
-	check("streak_month", currentStreak >= 30 || bestStreak >= 30)
-	check("phoenix", totalBurnt >= 1 && doneTasksCount >= 1)
-	check("night_owl", nightOwlCount >= 1)
-	check("early_bird", earlyBirdCount >= 1)
-	check("pro_club", isPremium)
-
-	return newlyUnlocked, nil
-}
-
-func (s *Storage) GetDailyQuests(ctx context.Context, userID int64) ([]domain.DailyQuest, error) {
-	var createdToday int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND created_at >= CURRENT_DATE`, userID).Scan(&createdToday)
-
 	var pomodoroToday int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND completed_at >= CURRENT_DATE`, userID).Scan(&pomodoroToday)
+	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND status = 'completed' AND completed_at >= $2 AND completed_at - started_at >= INTERVAL '24 minutes'`, userID, start).Scan(&pomodoroToday)
+	if err != nil {
+		return nil, err
+	}
 
 	var doneToday int
-	_ = s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND status = 'done' AND updated_at >= CURRENT_DATE`, userID).Scan(&doneToday)
+	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'completed' AND recorded_at >= $2`, userID, start).Scan(&doneToday)
+	if err != nil {
+		return nil, err
+	}
 
 	quests := []domain.DailyQuest{
 		{
@@ -1094,6 +1020,13 @@ func (s *Storage) GetDailyQuests(ctx context.Context, userID int64) ([]domain.Da
 		},
 	}
 
+	claims, err := s.dailyClaims(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	for i := range quests {
+		quests[i].Claimed = claims[quests[i].Code]
+	}
 	return quests, nil
 }
 
@@ -1121,7 +1054,14 @@ func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (dom
 	level, currentXP, nextXP, percent, rankTitle, rankIcon := domain.CalculateLevel(points)
 	multiplier := domain.GetStreakMultiplier(streak)
 
-	quests, _ := s.GetDailyQuests(ctx, userID)
+	quests, err := s.GetDailyQuests(ctx, userID)
+	if err != nil {
+		return domain.GamificationProfile{}, err
+	}
+	claims, err := s.dailyClaims(ctx, userID)
+	if err != nil {
+		return domain.GamificationProfile{}, err
+	}
 
 	unlockedCount := 0
 	for _, a := range achievements {
@@ -1144,5 +1084,6 @@ func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (dom
 		DailyQuests:       quests,
 		UnlockedCount:     unlockedCount,
 		TotalAchievements: len(domain.AvailableAchievements),
+		DailyChestClaimed: claims["daily_chest"],
 	}, nil
 }

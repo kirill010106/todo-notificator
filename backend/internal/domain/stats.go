@@ -55,6 +55,7 @@ type DailyQuest struct {
 	Current   int    `json:"current"`
 	Completed bool   `json:"completed"`
 	RewardXP  int    `json:"reward_xp"`
+	Claimed   bool   `json:"claimed"`
 }
 
 type GamificationProfile struct {
@@ -71,6 +72,7 @@ type GamificationProfile struct {
 	DailyQuests       []DailyQuest `json:"daily_quests"`
 	UnlockedCount     int          `json:"unlocked_count"`
 	TotalAchievements int          `json:"total_achievements"`
+	DailyChestClaimed bool         `json:"daily_chest_claimed"`
 }
 
 var AvailableAchievements = []Achievement{

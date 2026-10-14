@@ -165,15 +165,17 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			ID:       id,
 		})
 
-		 if eventLogger != nil {
-            eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
-                "title":       req.Title,
-                "category_id": req.CategoryID,
-            })
-        }
+		if eventLogger != nil {
+			domain.AfterCommit(r.Context(), func() {
+				eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
+					"title":       req.Title,
+					"category_id": req.CategoryID,
+				})
+			})
+		}
 
 		if webhookURL != "" {
-			go notifyScheduler(l, webhookURL, webhookSecret, "task_created")
+			domain.AfterCommit(r.Context(), func() { go notifyScheduler(l, webhookURL, webhookSecret, "task_created") })
 		}
 	}
 }

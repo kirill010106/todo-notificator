@@ -32,6 +32,7 @@ type UserInfo struct {
 	ActiveRemindersCount int    `json:"active_reminders_count"`
 	CategoriesLimit      int    `json:"categories_limit"`
 	RemindersLimit       int    `json:"reminders_limit"`
+	Timezone             string `json:"timezone"`
 }
 
 type Pagination struct {
@@ -49,6 +50,7 @@ type Response struct {
 	Stats          *domain.UserStats           `json:"stats,omitempty"`
 	Gamification   *domain.GamificationProfile `json:"gamification,omitempty"`
 	ActivePomodoro *domain.PomodoroSession     `json:"active_pomodoro,omitempty"`
+	Focus          *domain.FocusState          `json:"focus,omitempty"`
 }
 
 func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
@@ -97,6 +99,26 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 		}
 
 		activePomodoro, _ := provider.GetActivePomodoroSession(ctx, userID)
+		var focus *domain.FocusState
+		zone := "UTC"
+		if extended, ok := provider.(interface {
+			GetFocusState(context.Context, int64) (domain.FocusState, error)
+			GetTimezone(context.Context, int64) (string, error)
+		}); ok {
+			value, err := extended.GetFocusState(ctx, userID)
+			if err != nil {
+				render.Status(r, 500)
+				render.JSON(w, r, resp.Error("failed to load focus state"))
+				return
+			}
+			focus = &value
+			zone, err = extended.GetTimezone(ctx, userID)
+			if err != nil {
+				render.Status(r, 500)
+				render.JSON(w, r, resp.Error("failed to load timezone"))
+				return
+			}
+		}
 
 		catCount, _ := provider.CountCategories(ctx, userID)
 		remCount, _ := provider.CountActiveReminders(ctx, userID)
@@ -120,6 +142,7 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 				ActiveRemindersCount: remCount,
 				CategoriesLimit:      catLimit,
 				RemindersLimit:       remLimit,
+				Timezone:             zone,
 			},
 			Categories: categories,
 			Tasks:      tasks,
@@ -131,6 +154,7 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 			Stats:          statsPtr,
 			Gamification:   gamificationPtr,
 			ActivePomodoro: activePomodoro,
+			Focus:          focus,
 		})
 	}
 }

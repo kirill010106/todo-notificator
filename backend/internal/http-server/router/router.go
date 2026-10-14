@@ -25,6 +25,7 @@ import (
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
 	categoriesgetone "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/getone"
 	categoriesupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/update"
+	contractHandlers "github.com/kirill010106/todo-notificator/internal/http-server/handlers/contracts"
 	devpremium "github.com/kirill010106/todo-notificator/internal/http-server/handlers/dev/premium"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/health"
 	logsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/logs/get"
@@ -40,7 +41,6 @@ import (
 	profileget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/profile/get"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/profile/quests"
 	statsget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/get"
-	statsupdate "github.com/kirill010106/todo-notificator/internal/http-server/handlers/stats/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/bulk"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/delete"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/get"
@@ -48,6 +48,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	contractsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/contracts"
 	customlogger "github.com/kirill010106/todo-notificator/internal/http-server/middleware/logger"
 	metricsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/metrics"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
@@ -66,15 +67,24 @@ type Config struct {
 func New(cfg Config) *chi.Mux {
 	r := chi.NewRouter()
 
+	// Preserve a truly nil interface when the optional activity logger failed
+	// to initialize; converting a nil *Client directly would produce a non-nil
+	// interface value.
+	var logsGetter logsget.LogsGetter
+	if cfg.LoggerClient != nil {
+		logsGetter = cfg.LoggerClient
+	}
+
 	// Global Middlewares
 	r.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{"*"},
 		AllowedMethods:   []string{"GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "Idempotency-Key"},
 		AllowCredentials: false,
 		MaxAge:           300,
 	}))
 	r.Use(middleware.RequestID)
+	r.Use(contractsMiddleware.Errors)
 	r.Use(customlogger.New(cfg.Log))
 	r.Use(metricsMiddleware.New())
 	r.Use(middleware.Recoverer)
@@ -124,7 +134,15 @@ func New(cfg Config) *chi.Mux {
 
 		// Protected endpoints
 		r.Group(func(r chi.Router) {
-			r.Use(auth.New(cfg.AppConfig.AppSecret))
+			r.Use(auth.New(cfg.AppConfig.AppSecret, cfg.Storage))
+			extended := contractHandlers.Handler{Store: cfg.Storage}
+			r.Get("/me/focus", extended.Focus)
+			r.Post("/me/focus/resume", contractsMiddleware.Operation(cfg.Storage, extended.Resume))
+			r.Post("/me/focus/rest/finish", contractsMiddleware.Operation(cfg.Storage, extended.FinishRest))
+			r.Get("/me/today", extended.Today)
+			r.Patch("/me/profile", extended.Settings)
+			r.Post("/me/quests/{code}/claim", contractsMiddleware.Operation(cfg.Storage, extended.Claim))
+			r.Post("/me/rewards/daily-chest/claim", contractsMiddleware.Operation(cfg.Storage, extended.Claim))
 
 			r.Post("/logout", logout.New(cfg.Log, cfg.Storage))
 
@@ -133,16 +151,15 @@ func New(cfg Config) *chi.Mux {
 			r.Get("/me/profile", profileget.New(cfg.Log, cfg.Storage))
 			r.Get("/me/achievements", achievements.New(cfg.Log, cfg.Storage))
 			r.Get("/me/quests", quests.New(cfg.Log, cfg.Storage))
-			r.Get("/me/logs", logsget.New(cfg.Log, cfg.LoggerClient))
+			r.Get("/me/logs", logsget.New(cfg.Log, logsGetter))
 			r.Get("/me/stats", statsget.New(cfg.Log, cfg.Storage))
-			r.Patch("/me/stats", statsupdate.New(cfg.Log, cfg.Storage))
 
 			// Tasks
 			r.Get("/tasks", get.New(cfg.Log, cfg.Storage))
-			r.Post("/tasks", save.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient))
+			r.Post("/tasks", contractsMiddleware.Operation(cfg.Storage, save.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient)))
 			r.Delete("/tasks/{task_id}", delete.New(cfg.Log, cfg.Storage, cfg.LoggerClient))
-			r.Patch("/tasks/{task_id}", update.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient))
-			r.Post("/tasks/bulk-complete", bulk.NewComplete(cfg.Log, cfg.Storage))
+			r.Patch("/tasks/{task_id}", contractsMiddleware.Operation(cfg.Storage, update.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient)))
+			r.Post("/tasks/bulk-complete", contractsMiddleware.Operation(cfg.Storage, bulk.NewComplete(cfg.Log, cfg.Storage)))
 			r.Post("/tasks/bulk-delete", bulk.NewDelete(cfg.Log, cfg.Storage))
 
 			// Categories
@@ -153,10 +170,10 @@ func New(cfg Config) *chi.Mux {
 			r.Delete("/categories/{category_id}", categoriesdelete.New(cfg.Log, cfg.Storage, cfg.LoggerClient))
 
 			// Pomodoros
-			r.Post("/pomodoros/start", pomodorostart.New(cfg.Log, cfg.Storage, cfg.LoggerClient))
+			r.Post("/pomodoros/start", contractsMiddleware.Operation(cfg.Storage, pomodorostart.New(cfg.Log, cfg.Storage, cfg.LoggerClient)))
 			r.Get("/pomodoros/active", pomodoroactive.New(cfg.Log, cfg.Storage))
-			r.Post("/pomodoros/{id}/pause", pomodoropause.New(cfg.Log, cfg.Storage, cfg.LoggerClient))
-			r.Post("/pomodoros/{id}/stop", pomodorostop.New(cfg.Log, cfg.Storage, cfg.LoggerClient))
+			r.Post("/pomodoros/{id}/pause", contractsMiddleware.Operation(cfg.Storage, pomodoropause.New(cfg.Log, cfg.Storage, cfg.LoggerClient)))
+			r.Post("/pomodoros/{id}/stop", contractsMiddleware.Operation(cfg.Storage, pomodorostop.New(cfg.Log, cfg.Storage, cfg.LoggerClient)))
 
 			// Verification & Payments
 			r.Post("/verify/resend", resend.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret))

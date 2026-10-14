@@ -24,12 +24,30 @@ import (
 )
 
 type Request struct {
-	Title       *string    `json:"title" validate:"omitempty,max=255"`
-	Description *string    `json:"description" validate:"omitempty,max=2000"`
-	Deadline    *time.Time `json:"deadline,omitzero"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
-	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	Title           *string    `json:"title" validate:"omitempty,max=255"`
+	Description     *string    `json:"description" validate:"omitempty,max=2000"`
+	Deadline        *time.Time `json:"deadline,omitzero"`
+	ReminderAt      *time.Time `json:"reminder_at,omitzero"`
+	Status          *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
+	CategoryID      *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	ClearDeadline   bool       `json:"-"`
+	ClearReminderAt bool       `json:"-"`
+	ClearCategoryID bool       `json:"-"`
+}
+
+func (r *Request) UnmarshalJSON(data []byte) error {
+	type plain Request
+	if err := json.Unmarshal(data, (*plain)(r)); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	r.ClearDeadline = string(bytes.TrimSpace(fields["deadline"])) == "null"
+	r.ClearReminderAt = string(bytes.TrimSpace(fields["reminder_at"])) == "null"
+	r.ClearCategoryID = string(bytes.TrimSpace(fields["category_id"])) == "null"
+	return nil
 }
 
 type Response struct {
@@ -40,7 +58,6 @@ type Response struct {
 type TaskUpdater interface {
 	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error
-	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
 	CountActiveReminders(ctx context.Context, userID int64) (int, error)
 }
 
@@ -52,17 +69,18 @@ type schedulerWebhookPayload struct {
 
 func (r Request) ToDomain() domain.TaskUpdate {
 	return domain.TaskUpdate{
-		Title:       r.Title,
-		Description: r.Description,
-		Deadline:    r.Deadline,
-		ReminderAt:  r.ReminderAt,
-		Status:      r.Status,
-		CategoryID:  r.CategoryID,
+		Title:         r.Title,
+		Description:   r.Description,
+		Deadline:      r.Deadline,
+		ReminderAt:    r.ReminderAt,
+		Status:        r.Status,
+		CategoryID:    r.CategoryID,
+		ClearDeadline: r.ClearDeadline, ClearReminderAt: r.ClearReminderAt, ClearCategoryID: r.ClearCategoryID,
 	}
 }
 
 func (r Request) IsEmpty() bool {
-	return r.Title == nil &&
+	return !r.ClearDeadline && !r.ClearReminderAt && !r.ClearCategoryID && r.Title == nil &&
 		r.Description == nil &&
 		r.Deadline == nil &&
 		r.Status == nil &&
@@ -185,22 +203,6 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			}
 		}
 
-		if req.Status != nil && *req.Status == domain.TaskStatusDone && existingTask.Status != domain.TaskStatusDone {
-			if !existingTask.RewardClaimed {
-				statsDelta := domain.StatsDelta{
-					PointsDelta: domain.TaskCompleteReward,
-				}
-
-				err := taskUpdater.ApplyStatsDelta(r.Context(), userID, statsDelta)
-				if err != nil {
-					log.Error("failed to apply return reward", sl.Err(err))
-				} else {
-					log.Info("reward granted for task completion", slog.Int("points", domain.TaskCompleteReward))
-				}
-
-				taskUpdate.RewardClaimed = true
-			}
-		}
 		err = taskUpdater.UpdateTask(r.Context(), userID, taskID, taskUpdate)
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskNotFound) {
@@ -230,7 +232,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			if req.Status != nil {
 				details["status"] = *req.Status
 			}
-			eventLogger.LogEvent(userID, "TASK_UPDATED", taskID, details)
+			domain.AfterCommit(r.Context(), func() { eventLogger.LogEvent(userID, "TASK_UPDATED", taskID, details) })
 		}
 
 		render.Status(r, http.StatusOK)
@@ -240,7 +242,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 		})
 
 		if webhookURL != "" {
-			go notifyScheduler(log, webhookURL, webhookSecret, "task_updated")
+			domain.AfterCommit(r.Context(), func() { go notifyScheduler(log, webhookURL, webhookSecret, "task_updated") })
 		}
 	}
 }
