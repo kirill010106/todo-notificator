@@ -87,8 +87,8 @@ func (s *Scheduler) pollAndComputeNextDelay(ctx context.Context) time.Duration {
 	}
 
 	delay := time.Until(*nextReminderAt)
-	if delay < 0 {
-		return 0
+	if delay <= 0 {
+		return 5 * time.Second
 	}
 
 	return delay
@@ -125,4 +125,3 @@ func (s *Scheduler) poll(ctx context.Context) {
 
 	}
 }
-

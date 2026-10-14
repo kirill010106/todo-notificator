@@ -9,7 +9,7 @@ const (
 )
 
 type Payment struct {
-	D                 int64     `json:"id"`
+	ID                int64     `json:"id"`
 	YooKassaPaymentID string    `json:"yookassa_payment_id"`
 	UserID            int64     `json:"user_id"`
 	Amount            string    `json:"amount"`

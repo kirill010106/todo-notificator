@@ -15,8 +15,8 @@ import (
 
 type PaymentStatusChecker interface {
 	GetLatestPendingPayment(ctx context.Context, userID int64) (string, error)
+	CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error)
 	UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error)
-	GrantPremium(ctx context.Context, userID int64) error
 	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
 }
 
@@ -97,19 +97,14 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 
 		switch payment.Status {
 		case yoopayment.Succeeded:
-			_, err = checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusSucceeded)
+			userID, err := checker.CompletePaymentAndGrantPremium(r.Context(), paymentID)
 			if err != nil {
-				log.Error("failed to update payment status to succeeded", sl.Err(err))
-			}
-			err = checker.GrantPremium(r.Context(), userID)
-			if err != nil {
-				log.Error("failed to grant premium", sl.Err(err))
+				log.Error("failed to complete payment and grant premium via sync", sl.Err(err))
 				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("failed to grant premium"))
+				render.JSON(w, r, resp.Error("failed to complete payment"))
 				return
 			}
 			log.Info("payment succeeded via sync and premium granted", slog.String("payment_id", paymentID), slog.Int64("user_id", userID))
-
 			render.JSON(w, r, Response{
 				Response:      resp.OK(),
 				IsPremium:     true,

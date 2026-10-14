@@ -32,6 +32,11 @@ func (m *mockPaymentUpdater) GrantPremium(ctx context.Context, userID int64) err
 	return args.Error(0)
 }
 
+func (m *mockPaymentUpdater) CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error) {
+	args := m.Called(ctx, yookassaID)
+	return args.Get(0).(int64), args.Error(1)
+}
+
 type mockPaymentFinder struct {
 	mock.Mock
 }
@@ -60,6 +65,7 @@ func TestWebhook_RejectsUntrustedIP(t *testing.T) {
 	h.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusForbidden, w.Code)
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "UpdatePaymentStatus")
 	updater.AssertNotCalled(t, "GrantPremium")
 }
@@ -84,8 +90,7 @@ func TestWebhook_AllowsValidIP_And_VerifiesPayment(t *testing.T) {
 		Status: yoopayment.Succeeded,
 	}, nil)
 
-	updater.On("UpdatePaymentStatus", mock.Anything, "pay-123", "succeeded").Return(int64(42), nil)
-	updater.On("GrantPremium", mock.Anything, int64(42)).Return(nil)
+	updater.On("CompletePaymentAndGrantPremium", mock.Anything, "pay-123").Return(int64(42), nil)
 
 	h := New(log, updater, finder)
 
@@ -131,6 +136,7 @@ func TestWebhook_RejectsWhenAPIReportsNotSucceeded(t *testing.T) {
 	h.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadRequest, w.Code)
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "UpdatePaymentStatus")
 	updater.AssertNotCalled(t, "GrantPremium")
 }
@@ -161,6 +167,7 @@ func TestWebhook_HandlesAPIFailureGracefully(t *testing.T) {
 	h.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusBadGateway, w.Code)
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "UpdatePaymentStatus")
 	updater.AssertNotCalled(t, "GrantPremium")
 }
@@ -196,6 +203,7 @@ func TestWebhook_CanceledUpdateFails_Returns500(t *testing.T) {
 	require.Equal(t, http.StatusInternalServerError, w.Code)
 	updater.AssertExpectations(t)
 	// Отмена не должна ничего начислять.
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "GrantPremium")
 	// Для canceled мы не ходим в API YooKassa — платёж не мог быть успешным.
 	finder.AssertNotCalled(t, "FindPayment")
@@ -229,6 +237,7 @@ func TestWebhook_CanceledUpdateSucceeds_Returns200(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	updater.AssertExpectations(t)
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "GrantPremium")
 }
 
@@ -267,6 +276,7 @@ func TestWebhook_UnknownEvent_Returns200WithoutChanges(t *testing.T) {
 	h.ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusOK, w.Code)
+	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "UpdatePaymentStatus")
 	updater.AssertNotCalled(t, "GrantPremium")
 	finder.AssertNotCalled(t, "FindPayment")

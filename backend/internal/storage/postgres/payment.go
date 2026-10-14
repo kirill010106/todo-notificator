@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 func (s *Storage) CreatePayment(ctx context.Context, yookassaID string, userID int64, amount string, currency string, status string, description string) (int64, error) {
@@ -83,3 +84,42 @@ func (s *Storage) GetLatestPendingPayment(ctx context.Context, userID int64) (st
 	return paymentID, nil
 }
 
+func (s *Storage) CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error) {
+	const op = "storage.postgres.CompletePaymentAndGrantPremium"
+
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("%s: begin tx: %w", op, err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+
+	// 1. Обновляем статус платежа и получаем user_id
+	queryPayment := `
+		UPDATE payments
+		SET status = $1, updated_at = CURRENT_TIMESTAMP
+		WHERE yookassa_payment_id = $2
+		RETURNING user_id
+	`
+	var userID int64
+	err = tx.QueryRowContext(ctx, queryPayment, domain.PaymentStatusSucceeded, yookassaID).Scan(&userID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, fmt.Errorf("%s: payment not found: %w", op, storage.ErrPaymentNotFound)
+		}
+		return 0, fmt.Errorf("%s: update payment status: %w", op, err)
+	}
+
+	// 2. Выдаем премиум пользователю
+	stmtUser := `UPDATE users SET is_premium = true WHERE id = $1`
+	_, err = tx.ExecContext(ctx, stmtUser, userID)
+	if err != nil {
+		return 0, fmt.Errorf("%s: grant premium to user %d: %w", op, userID, err)
+	}
+
+	// 3. Фиксируем транзакцию
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("%s: commit tx: %w", op, err)
+	}
+
+	return userID, nil
+}

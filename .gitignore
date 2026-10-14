@@ -8,3 +8,6 @@ CODE_REVIEW.md
 # Артефакты покрытия тестами
 coverage.out
 coverage.html
+
+audit_bundle.txt
+/.idea/

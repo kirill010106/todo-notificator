@@ -121,8 +121,9 @@ func main() {
 	metricsMux.Handle("/metrics", promhttp.Handler())
 
 	metricsSrv := &http.Server{
-		Addr:    cfg.MetricsServer.Address,
-		Handler: metricsMux,
+		Addr:              cfg.MetricsServer.Address,
+		Handler:           metricsMux,
+		ReadHeaderTimeout: 3 * time.Second,
 	}
 
 	go func() {
@@ -145,10 +146,11 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:        cfg.Address,
-		Handler:     appRouter,
-		ReadTimeout: cfg.Timeout,
-		IdleTimeout: cfg.IdleTimeout,
+		Addr:              cfg.Address,
+		Handler:           appRouter,
+		ReadTimeout:       cfg.Timeout,
+		ReadHeaderTimeout: 3 * time.Second,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	go func() {

@@ -705,7 +705,7 @@ func TestUpdateTask_Success(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 			UPDATE tasks
-			SET title = $1, status = $2
+			SET title = $1, status = $2, updated_at = CURRENT_TIMESTAMP
 			WHERE user_id = $3 AND id = $4
 `)
 	mock.ExpectExec(query).
@@ -732,7 +732,7 @@ func TestUpdateTask_NotFound(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 			UPDATE tasks
-			SET title = $1
+			SET title = $1, updated_at = CURRENT_TIMESTAMP
 			WHERE user_id = $2 AND id = $3
 `)
 	mock.ExpectExec(query).
@@ -759,7 +759,7 @@ func TestUpdateTask_ReminderAtResetsNotificationFlag(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 			UPDATE tasks
-			SET reminder_at = $1, is_notified = false
+			SET reminder_at = $1, is_notified = false, updated_at = CURRENT_TIMESTAMP
 			WHERE user_id = $2 AND id = $3
 `)
 	mock.ExpectExec(query).

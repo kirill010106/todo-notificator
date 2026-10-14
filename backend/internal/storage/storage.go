@@ -21,6 +21,7 @@ var (
 	ErrTokenNotFound       = errors.New("verification token not found")
 	ErrTokenExpired        = errors.New("verification token expired")
 	ErrTokenExists         = errors.New("verification token already exists")
+	ErrPaymentNotFound     = errors.New("payment not found")
 )
 
 type Provider interface {

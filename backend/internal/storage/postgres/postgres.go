@@ -348,6 +348,11 @@ func (s *Storage) UpdateTask(ctx context.Context, userID int64, taskID int64, t 
 	if t.RewardClaimed {
 		setValues = append(setValues, "reward_claimed = true")
 	}
+	if len(setValues) > 0 {
+		setValues = append(setValues, "updated_at = CURRENT_TIMESTAMP")
+	} else {
+		return nil
+	}
 
 	if len(setValues) == 0 {
 		return nil

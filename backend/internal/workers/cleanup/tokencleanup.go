@@ -24,14 +24,15 @@ func StartTokenCleanup(ctx context.Context, log *slog.Logger, st *postgres.Stora
 			case <-ticker.C:
 				log.Debug("running expired tokens cleanup")
 
-				if err := st.DeleteExpiredRefreshTokens(ctx); err != nil {
+				opCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
+				if err := st.DeleteExpiredRefreshTokens(opCtx); err != nil {
 					log.Error("failed to delete expired tokens", slog.String("error", err.Error()))
 				}
 
-				if err := st.DeleteExpiredEmailVerificationTokens(ctx); err != nil {
+				if err := st.DeleteExpiredEmailVerificationTokens(opCtx); err != nil {
 					log.Error("failed to delete expired verification tokens", slog.String("error", err.Error()))
 				}
-
+				cancel()
 			}
 		}
 	}()

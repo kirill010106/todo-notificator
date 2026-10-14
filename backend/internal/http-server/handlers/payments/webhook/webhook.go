@@ -74,8 +74,8 @@ func isAllowedIP(ipStr string) bool {
 }
 
 type PaymentUpdater interface {
+	CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error)
 	UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error)
-	GrantPremium(ctx context.Context, userID int64) error
 }
 
 type PaymentFinder interface {
@@ -114,7 +114,13 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 					http.Error(w, "payment verification failed", http.StatusBadGateway)
 					return
 				}
-				if verifiedPayment == nil || verifiedPayment.Status != yoopayment.Succeeded {
+				if verifiedPayment == nil {
+					log.Warn("payment verification failed: payment not found in yookassa",
+						slog.String("payment_id", event.Object.ID))
+					http.Error(w, "payment not found", http.StatusBadRequest)
+					return
+				}
+				if verifiedPayment.Status != yoopayment.Succeeded {
 					log.Warn("payment verification mismatch: status is not succeeded in yookassa",
 						slog.String("payment_id", event.Object.ID),
 						slog.Any("actual_status", verifiedPayment.Status))
@@ -123,22 +129,13 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 				}
 			}
 
-			userID, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusSucceeded)
+			userID, err := updater.CompletePaymentAndGrantPremium(r.Context(), event.Object.ID)
 			if err != nil {
-				log.Error("failed to update payment status", sl.Err(err))
+				log.Error("failed to complete payment and grant premium", sl.Err(err), slog.String("payment_id", event.Object.ID))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-
-			// Grant premium
-			err = updater.GrantPremium(r.Context(), userID)
-			if err != nil {
-				log.Error("failed to grant premium", sl.Err(err))
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-
-			log.Info("payment succeeded and premium granted", slog.Int64("user_id", userID))
+			log.Info("payment succeeded and premium granted", slog.Int64("user_id", userID), slog.String("payment_id", event.Object.ID))
 		case webhook.EventPaymentCanceled:
 			if _, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusCanceled); err != nil {
 				log.Error("failed to update payment status to canceled",
