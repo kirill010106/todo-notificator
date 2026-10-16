@@ -15,7 +15,7 @@ func (s *Storage) GetTimezone(ctx context.Context, userID int64) (string, error)
 	return zone, err
 }
 func (s *Storage) SetTimezone(ctx context.Context, userID int64, zone string) error {
-	if zone == "" {
+	if zone == "" || zone == "Local" {
 		return &domain.ContractError{Code: "INVALID_TIMEZONE", Message: "Укажи часовой пояс IANA", Status: 400}
 	}
 	if _, err := time.LoadLocation(zone); err != nil {

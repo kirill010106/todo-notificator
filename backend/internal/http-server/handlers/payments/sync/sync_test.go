@@ -26,6 +26,11 @@ func (m *mockPaymentStatusChecker) GetLatestPendingPayment(ctx context.Context, 
 	return args.String(0), args.Error(1)
 }
 
+func (m *mockPaymentStatusChecker) GetPendingPayments(ctx context.Context, userID int64) ([]string, error) {
+	args := m.Called(ctx, userID)
+	return args.Get(0).([]string), args.Error(1)
+}
+
 func (m *mockPaymentStatusChecker) UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error) {
 	args := m.Called(ctx, yookassaID, status)
 	return args.Get(0).(int64), args.Error(1)
@@ -98,7 +103,7 @@ func TestSyncPayment_SucceededInGateway(t *testing.T) {
 		ID:        42,
 		IsPremium: false,
 	}, nil)
-	checker.On("GetLatestPendingPayment", mock.Anything, int64(42)).Return("yoo-pay-1", nil)
+	checker.On("GetPendingPayments", mock.Anything, int64(42)).Return([]string{"yoo-pay-1"}, nil)
 	finder.On("FindPayment", mock.Anything, "yoo-pay-1").Return(&yoopayment.Payment{
 		ID:     "yoo-pay-1",
 		Status: yoopayment.Succeeded,
@@ -122,4 +127,24 @@ func TestSyncPayment_SucceededInGateway(t *testing.T) {
 	require.Contains(t, w.Body.String(), `"payment_status":"succeeded"`)
 
 	checker.AssertCalled(t, "CompletePaymentAndGrantPremium", mock.Anything, "yoo-pay-1")
+}
+
+func TestSyncFindsEarlierSucceededPaymentWhenLatestIsPending(t *testing.T) {
+	secret := "test-secret-key-32-chars-minimum!!"
+	checker := new(mockPaymentStatusChecker)
+	finder := new(mockPaymentFinder)
+	checker.On("GetUserByID", mock.Anything, int64(42)).Return(&domain.User{ID: 42}, nil)
+	checker.On("GetPendingPayments", mock.Anything, int64(42)).Return([]string{"latest", "earlier"}, nil)
+	finder.On("FindPayment", mock.Anything, "latest").Return(&yoopayment.Payment{ID: "latest", Status: yoopayment.Pending}, nil)
+	finder.On("FindPayment", mock.Anything, "earlier").Return(&yoopayment.Payment{ID: "earlier", Status: yoopayment.Succeeded}, nil)
+	checker.On("CompletePaymentAndGrantPremium", mock.Anything, "earlier").Return(int64(42), nil)
+	token, err := jwt.NewAccessToken(domain.User{ID: 42}, secret, time.Hour)
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodPost, "/payments/sync", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	auth.New(secret)(New(slog.New(slog.DiscardHandler), checker, finder)).ServeHTTP(w, req)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Contains(t, w.Body.String(), `"is_premium":true`)
+	checker.AssertCalled(t, "CompletePaymentAndGrantPremium", mock.Anything, "earlier")
 }

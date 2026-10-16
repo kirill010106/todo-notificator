@@ -3,7 +3,6 @@ package resend
 import (
 	"context"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -48,23 +47,17 @@ func TestResendVerification(t *testing.T) {
 		lookupErr, saveErr                error
 		webhookStatus, want, saves, calls int
 	}{
-		{name: "delivered", webhookStatus: 204, want: 200, saves: 1, calls: 1},
+		{name: "queued", webhookStatus: 204, want: 200, saves: 1},
 		{name: "already verified", verified: true, want: 400},
 		{name: "user lookup failed", lookupErr: errors.New("database unavailable"), want: 500},
 		{name: "token not saved", saveErr: errors.New("write failed"), want: 500, saves: 1},
-		{name: "delivery failed", webhookStatus: 503, want: 502, saves: 1, calls: 1},
+		{name: "email service is temporarily down", webhookStatus: 503, want: 200, saves: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			stub := &resenderStub{user: domain.User{ID: 42, Email: "test@example.com", IsVerified: tc.verified}, lookupErr: tc.lookupErr, saveErr: tc.saveErr}
 			var calls atomic.Int64
-			delivered := make(chan map[string]string, 1)
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				calls.Add(1)
-				require.Equal(t, "POST", r.Method)
-				require.Equal(t, "secret", r.Header.Get("X-Webhook-Secret"))
-				var body map[string]string
-				require.NoError(t, json.NewDecoder(r.Body).Decode(&body))
-				delivered <- body
 				w.WriteHeader(tc.webhookStatus)
 			}))
 			defer server.Close()
@@ -77,9 +70,6 @@ func TestResendVerification(t *testing.T) {
 			require.Equal(t, tc.want, response.Code, response.Body.String())
 			require.Equal(t, tc.saves, stub.saves)
 			require.Equal(t, tc.calls, int(calls.Load()))
-			if tc.calls > 0 {
-				require.Equal(t, map[string]string{"type": "verification", "email": stub.user.Email, "token": stub.token}, <-delivered)
-			}
 			if stub.saves > 0 {
 				decoded, err := hex.DecodeString(stub.token)
 				require.NoError(t, err)

@@ -143,7 +143,7 @@ func TestSave_CategoryLimitReached_FreeUser(t *testing.T) {
 	tok, err := jwt.NewAccessToken(domain.User{ID: 5, Email: "u@test.com", IsPremium: false}, secret, time.Hour)
 	require.NoError(t, err)
 
-	saver := &mockCategoryCreator{count: 3}
+	saver := &mockCategoryCreator{err: storage.ErrCategoryLimitReached, count: 3}
 	h := New(slog.New(slog.DiscardHandler), saver, nil)
 
 	router := chi.NewRouter()
@@ -180,4 +180,3 @@ func TestSave_CategoryLimitReached_PremiumUser(t *testing.T) {
 
 	require.Equal(t, http.StatusCreated, w.Code)
 }
-

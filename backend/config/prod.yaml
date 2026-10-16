@@ -1,3 +1,4 @@
+auto_migrate: false
 env: "prod"
 client_url: "https://todo.chkpnk.ru"
 webhook:

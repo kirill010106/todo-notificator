@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { useSearchParams } from "react-router-dom";
+import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   Plus,
   Search,
@@ -11,10 +11,12 @@ import {
   SlidersHorizontal,
   Circle,
   Bell,
+  Play,
 } from "lucide-react";
 import { api, errorText, json } from "../../lib/api";
 import { command, rewardLabel } from "../../lib/commands";
-import { dateLabel, localInput } from "../../lib/tasks";
+import { safeTimeZone } from "../../lib/timezone";
+import { dateLabel } from "../../lib/tasks";
 import type {
   Task,
   TaskPage,
@@ -26,155 +28,19 @@ import { useFocus, FocusPanel } from "../focus/Focus";
 import { Button, Sheet, Heading, State } from "../../components/ui";
 import s from "../../styles/App.module.css";
 
-export function TaskEditor({
-  task,
-  open,
-  close,
-}: {
-  task: Task | null;
-  open: boolean;
-  close: () => void;
-}) {
-  const { data, notify, refresh } = useApp();
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState("");
-  const [title, setTitle] = useState("");
-  const [description, setDescription] = useState("");
-  const [deadline, setDeadline] = useState("");
-  const [reminder, setReminder] = useState("");
-  const [category, setCategory] = useState("");
-  useEffect(() => {
-    if (open) {
-      setTitle(task?.title || "");
-      setDescription(task?.description || "");
-      setDeadline(localInput(task?.deadline));
-      setReminder(localInput(task?.reminder_at));
-      setCategory(String(task?.category_id || ""));
-      setError("");
-    }
-  }, [task, open]);
-  const save = async (event: React.FormEvent) => {
-    event.preventDefault();
-    if (!title.trim()) return;
-    setBusy(true);
-    setError("");
-    try {
-      await command(
-        data.user.id,
-        task ? `/tasks/${task.id}` : "/tasks",
-        {
-          title: title.trim(),
-          description,
-          deadline: deadline ? new Date(deadline).toISOString() : null,
-          reminder_at: reminder ? new Date(reminder).toISOString() : null,
-          category_id: category ? Number(category) : null,
-        },
-        task ? "PATCH" : "POST",
-      );
-      notify(
-        task ? "Изменения сохранены." : "Задача добавлена. Первый шаг сделан.",
-      );
-      close();
-      await refresh();
-    } catch (e) {
-      setError(errorText(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Sheet
-      open={open}
-      onClose={() => {
-        if (!busy) close();
-      }}
-      title={task ? "Детали задачи" : "Новая задача"}
-      description="Освободи голову — запиши то, что нужно сделать."
-    >
-      <form className={s.editor} onSubmit={save}>
-        <label className={s.field}>
-          Название
-          <input
-            autoFocus
-            required
-            maxLength={255}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            placeholder="Что хочется сделать?"
-          />
-        </label>
-        <label className={s.field}>
-          Описание <span className={s.muted}>необязательно</span>
-          <textarea
-            rows={5}
-            maxLength={2000}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder="Детали, мысли, первый шаг…"
-          />
-        </label>
-        <label className={s.field}>
-          Категория
-          <select
-            value={category}
-            onChange={(e) => setCategory(e.target.value)}
-          >
-            <option value="">Без категории</option>
-            {data.categories.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.name}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className={s.field}>
-          Срок
-          <input
-            type="datetime-local"
-            value={deadline}
-            onChange={(e) => setDeadline(e.target.value)}
-          />
-        </label>
-        <label className={s.field}>
-          Напоминание по email
-          <input
-            type="datetime-local"
-            value={reminder}
-            onChange={(e) => setReminder(e.target.value)}
-          />
-        </label>
-        {!data.user.is_verified && reminder && (
-          <p className={s.notice}>
-            Для писем подтверди свой email в разделе аккаунта.
-          </p>
-        )}
-        <p className={s.muted}>
-          Напоминания: {data.user.active_reminders_count} /{" "}
-          {data.user.reminders_limit === -1 ? "∞" : data.user.reminders_limit}.
-          Время указано в часовом поясе устройства.
-        </p>
-        {error && (
-          <p className={s.error} role="alert">
-            {error}
-          </p>
-        )}
-        <Button type="submit" disabled={busy || !title.trim()}>
-          {busy
-            ? "Сохраняем…"
-            : task
-              ? "Сохранить изменения"
-              : "Создать задачу"}
-          <ArrowUpRight size={17} />
-        </Button>
-      </form>
-    </Sheet>
-  );
-}
+export { TaskEditor } from "./TaskEditor";
+import { TaskEditor } from "./TaskEditor";
 
 export function TasksPage({ today = false }: { today?: boolean }) {
   const { data, notify, refresh, award } = useApp();
   const focus = useFocus();
   const [params, setParams] = useSearchParams();
+  const navigate = useNavigate();
+  const picking = params.get("pick") === "focus";
+  const pick = (task: Task) => {
+    focus.chooseTask(task);
+    navigate("/app/focus");
+  };
   const [editor, setEditor] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
@@ -202,7 +68,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
   useEffect(() => {
     setSearch(params.get("search") || "");
   }, [params]);
-  const status = params.get("status") || "pending";
+  const status = picking ? "pending" : params.get("status") || "pending";
   const category = params.get("category") || "";
   const sort = params.get("sort") || "created_at";
   const offset = Math.max(0, Number(params.get("offset")) || 0);
@@ -331,7 +197,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           className={`${s.taskRow} ${task.status === "done" ? s.taskDone : ""}`}
           key={task.id}
         >
-          {!today && (
+          {!today && !picking && (
             <input
               type="checkbox"
               className={s.selectCheck}
@@ -349,7 +215,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           <button
             className={s.complete}
             disabled={busy}
-            onClick={() => toggle(task)}
+            onClick={() => (picking ? pick(task) : toggle(task))}
             aria-label={`${task.status === "done" ? "Открыть" : "Завершить"}: ${task.title}`}
           >
             {task.status === "done" ? (
@@ -361,6 +227,10 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           <button
             className={s.taskBody}
             onClick={() => {
+              if (picking) {
+                pick(task);
+                return;
+              }
               setEditing(task);
               setEditor(true);
             }}
@@ -380,7 +250,9 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                 <span>
                   <Clock3 size={12} /> {dateLabel(task.deadline)}
                 </span>
-                {task.reminder_at && <Bell size={12} />}
+                {task.reminders?.some((r) => r.status === "scheduled") && (
+                  <Bell size={12} />
+                )}
                 {task.status === "burnt" && (
                   <span className={s.danger}>Сожжена</span>
                 )}
@@ -392,20 +264,25 @@ export function TasksPage({ today = false }: { today?: boolean }) {
             disabled={
               focus.busy || !!focus.session || task.status !== "pending"
             }
-            onClick={() => void focus.start(task.id)}
-            aria-label={`Начать фокус: ${task.title}`}
+            onClick={() => (picking ? pick(task) : focus.requestStart(task))}
+            aria-label={`${picking ? "Выбрать для фокуса" : "Начать фокус"}: ${task.title}`}
             title="Начать фокус"
           >
-            <ArrowUpRight size={19} />
+            <Play size={18} />
+            <span className={s.focusActionLabel}>
+              {picking ? "Выбрать" : "Фокус"}
+            </span>
           </button>
-          <button
-            className={s.iconButton}
-            disabled={busy}
-            onClick={() => setDeleteIds([task.id])}
-            aria-label={`Удалить: ${task.title}`}
-          >
-            <Trash2 size={16} />
-          </button>
+          {!picking && (
+            <button
+              className={s.iconButton}
+              disabled={busy}
+              onClick={() => setDeleteIds([task.id])}
+              aria-label={`Удалить: ${task.title}`}
+            >
+              <Trash2 size={16} />
+            </button>
+          )}
         </article>
       ))}
     </div>
@@ -416,14 +293,20 @@ export function TasksPage({ today = false }: { today?: boolean }) {
         eyebrow={
           today
             ? clock.toLocaleDateString("ru-RU", {
-                timeZone: data.user.timezone || "UTC",
+                timeZone: safeTimeZone(data.user.timezone),
                 weekday: "long",
                 day: "numeric",
                 month: "long",
               })
             : "ВСЁ ПОД КОНТРОЛЕМ"
         }
-        title={today ? "Хороший день, чтобы начать." : "Мои задачи"}
+        title={
+          picking
+            ? "Выбери задачу для фокуса"
+            : today
+              ? "Хороший день, чтобы начать."
+              : "Мои задачи"
+        }
         action={
           <Button onClick={create}>
             <Plus size={18} /> Новая задача
@@ -434,6 +317,12 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           ? "Не нужно успеть всё. Начни с того, что важно сегодня."
           : "Большие планы складываются из маленьких шагов."}
       </Heading>
+      {picking && (
+        <p className={s.notice}>
+          Выбор задачи ещё не запускает таймер.{" "}
+          <Link to="/app/focus">Вернуться к фокусу</Link>
+        </p>
+      )}
       <div className={s.workspace}>
         <div className={s.mainColumn}>
           {today && (
@@ -503,7 +392,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               </select>
             </div>
           )}
-          {!today && (
+          {!today && !picking && (
             <div className={s.tabs}>
               {[
                 ["pending", "В работе"],

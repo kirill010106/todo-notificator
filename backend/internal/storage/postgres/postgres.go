@@ -44,7 +44,7 @@ func (s *Storage) Close() error {
 	return nil
 }
 
-func (s *Storage) SaveTask(ctx context.Context, task domain.Task) (int64, error) {
+func (s *Storage) saveTaskRow(ctx context.Context, task domain.Task) (int64, error) {
 	const op = "storage.postgres.saveTask"
 
 	var categoryArg any = nil
@@ -65,12 +65,12 @@ func (s *Storage) SaveTask(ctx context.Context, task domain.Task) (int64, error)
 	}
 
 	query := `
-INSERT INTO tasks (user_id, title, description, deadline, reminder_at, status, is_notified, category_id)
-VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+INSERT INTO tasks (user_id, title, description, deadline, status, category_id)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id`
 	var id int64
 
-	err := s.executor(ctx).QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.ReminderAt, task.Status, task.IsNotified, categoryArg).Scan(&id)
+	err := s.executor(ctx).QueryRowContext(ctx, query, task.UserID, task.Title, task.Description, task.Deadline, task.Status, categoryArg).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -92,20 +92,20 @@ func (s *Storage) GetTask(ctx context.Context, userID int64, taskID int64) (doma
 	const op = "storage.postgres.GetTask"
 
 	query := `
-		SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
+		SELECT id, user_id, title, description, deadline, ` + reminderJSON + `, status, category_id, pomodoro_taken, reward_claimed
 		FROM tasks
 		WHERE user_id = $1 AND id = $2
 	`
 	var t domain.Task
+	var reminders []byte
 	err := s.executor(ctx).QueryRowContext(ctx, query, userID, taskID).Scan(
 		&t.ID,
 		&t.UserID,
 		&t.Title,
 		&t.Description,
 		&t.Deadline,
-		&t.ReminderAt,
+		&reminders,
 		&t.Status,
-		&t.IsNotified,
 		&t.CategoryID,
 		&t.PomodorosTaken,
 		&t.RewardClaimed)
@@ -114,6 +114,9 @@ func (s *Storage) GetTask(ctx context.Context, userID int64, taskID int64) (doma
 			return domain.Task{}, fmt.Errorf("%s: %w", op, storage.ErrTaskNotFound)
 		}
 		return domain.Task{}, fmt.Errorf("%s: %w", op, err)
+	}
+	if err := decodeReminders(reminders, &t); err != nil {
+		return domain.Task{}, err
 	}
 	return t, nil
 }
@@ -200,7 +203,7 @@ func (s *Storage) GetTasks(ctx context.Context, userID int64, limit, offset int,
 	dataArgs = append(dataArgs, limit, offset)
 
 	dataQuery := fmt.Sprintf(`
-SELECT id, user_id, title, description, deadline, reminder_at, status, is_notified, category_id, pomodoro_taken, reward_claimed
+SELECT id, user_id, title, description, deadline, `+reminderJSON+`, status, category_id, pomodoro_taken, reward_claimed
 FROM tasks
 	WHERE %s ORDER BY %s
 LIMIT $%d OFFSET $%d`, whereClause, orderBy, argID, argID+1) //nolint:gosec
@@ -215,9 +218,13 @@ LIMIT $%d OFFSET $%d`, whereClause, orderBy, argID, argID+1) //nolint:gosec
 
 	for rows.Next() {
 		var t domain.Task
-		err = rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &t.ReminderAt, &t.Status, &t.IsNotified, &t.CategoryID, &t.PomodorosTaken, &t.RewardClaimed)
+		var reminders []byte
+		err = rows.Scan(&t.ID, &t.UserID, &t.Title, &t.Description, &t.Deadline, &reminders, &t.Status, &t.CategoryID, &t.PomodorosTaken, &t.RewardClaimed)
 		if err != nil {
 			return nil, 0, fmt.Errorf("%s: %w", op, err)
+		}
+		if err := decodeReminders(reminders, &t); err != nil {
+			return nil, 0, err
 		}
 		tasks = append(tasks, t)
 	}
@@ -317,19 +324,8 @@ func updateTaskSQL(ctx context.Context, db sqlExecutor, userID int64, taskID int
 	if t.ClearDeadline {
 		setValues = append(setValues, "deadline = NULL")
 	}
-	if t.ClearReminderAt {
-		setValues = append(setValues, "reminder_at = NULL", "is_notified = false")
-	}
 	if t.ClearCategoryID {
 		setValues = append(setValues, "category_id = NULL")
-	}
-
-	if t.ReminderAt != nil {
-		setValues = append(setValues, fmt.Sprintf("reminder_at = $%d", argID))
-		args = append(args, *t.ReminderAt)
-		argID++
-
-		setValues = append(setValues, "is_notified = false")
 	}
 
 	if t.CategoryID != nil {
@@ -602,7 +598,7 @@ func (s *Storage) CountCategories(ctx context.Context, userID int64) (int, error
 func (s *Storage) CountActiveReminders(ctx context.Context, userID int64) (int, error) {
 	const op = "storage.postgres.CountActiveReminders"
 
-	query := `SELECT COUNT(*) FROM tasks WHERE user_id = $1 AND reminder_at IS NOT NULL AND status != 'done'`
+	query := `SELECT COUNT(*) FROM task_reminders r JOIN tasks t ON t.id=r.task_id WHERE t.user_id=$1 AND r.status='scheduled' AND t.status='pending'`
 	var count int
 	err := s.DB.QueryRowContext(ctx, query, userID).Scan(&count)
 	if err != nil {
@@ -613,15 +609,27 @@ func (s *Storage) CountActiveReminders(ctx context.Context, userID int64) (int, 
 
 func (s *Storage) CreateCategory(ctx context.Context, category domain.Category) (int64, error) {
 	const op = "storage.postgres.CreateCategory"
+	tx, err := s.DB.BeginTx(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("%s: begin transaction: %w", op, err)
+	}
+	defer tx.Rollback() //nolint:errcheck
 
-	query := `
-		INSERT INTO categories (user_id, name)
-		VALUES ($1, $2)
-		RETURNING id
-	`
+	var premium bool
+	if err := tx.QueryRowContext(ctx, `SELECT is_premium FROM users WHERE id=$1 FOR UPDATE`, category.UserID).Scan(&premium); err != nil {
+		return 0, fmt.Errorf("%s: lock user: %w", op, err)
+	}
+	if !premium {
+		var count int
+		if err := tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM categories WHERE user_id=$1`, category.UserID).Scan(&count); err != nil {
+			return 0, fmt.Errorf("%s: count categories: %w", op, err)
+		}
+		if count >= 3 {
+			return 0, fmt.Errorf("%s: %w", op, storage.ErrCategoryLimitReached)
+		}
+	}
 	var id int64
-
-	err := s.DB.QueryRowContext(ctx, query, category.UserID, category.Name).Scan(&id)
+	err = tx.QueryRowContext(ctx, `INSERT INTO categories (user_id,name) VALUES ($1,$2) RETURNING id`, category.UserID, category.Name).Scan(&id)
 
 	if err != nil {
 		var pgErr *pgconn.PgError
@@ -632,7 +640,9 @@ func (s *Storage) CreateCategory(ctx context.Context, category domain.Category) 
 		}
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
-
+	if err := tx.Commit(); err != nil {
+		return 0, fmt.Errorf("%s: commit: %w", op, err)
+	}
 	return id, nil
 }
 
@@ -741,7 +751,10 @@ func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserSt
 
 	query :=
 		`
-	SELECT id, user_id, points, level, total_pomodoros, total_burnt_tasks, current_streak, best_streak, updated_at FROM user_stats WHERE user_id = $1
+	SELECT id, user_id, points, level, total_pomodoros, total_burnt_tasks,
+		CASE WHEN last_activity_date >= (CURRENT_TIMESTAMP AT TIME ZONE (SELECT timezone FROM users WHERE id=$1))::date - 1
+			THEN COALESCE(current_streak,0) ELSE 0 END,
+		best_streak, updated_at FROM user_stats WHERE user_id = $1
 	`
 
 	var uS domain.UserStats
@@ -807,18 +820,30 @@ ON CONFLICT (user_id) DO UPDATE SET
 
 func (s *Storage) SaveEmailVerificationToken(ctx context.Context, userID int64, token string, expiresAt time.Time) error {
 	const op = "storage.postgres.SaveEmailVerificationToken"
-
-	query := `
-		INSERT INTO email_verification_tokens (user_id, token, expires_at)
-		VALUES ($1, $2, $3)
-	`
-
-	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt)
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		if pgErr, ok := err.(*pgconn.PgError); ok && pgErr.Code == pgerrcode.UniqueViolation {
-			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists) // Or distinct error "token already exists"
+		return fmt.Errorf("%s: begin transaction: %w", op, err)
+	}
+	defer tx.Rollback() //nolint:errcheck
+	if _, err := tx.ExecContext(ctx, `UPDATE verification_email_outbox SET status='failed',last_error='Replaced by a newer verification link',lease_token=NULL,lease_until=NULL WHERE user_id=$1 AND status='scheduled'`, userID); err != nil {
+		return fmt.Errorf("%s: retire old delivery: %w", op, err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1,$2,$3)`, userID, token, expiresAt); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
+			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists)
 		}
-		return fmt.Errorf("%s: %w", op, err)
+		return fmt.Errorf("%s: save token: %w", op, err)
+	}
+	var email string
+	if err := tx.QueryRowContext(ctx, `SELECT email FROM users WHERE id=$1`, userID).Scan(&email); err != nil {
+		return fmt.Errorf("%s: load address: %w", op, err)
+	}
+	if _, err := tx.ExecContext(ctx, `INSERT INTO verification_email_outbox(user_id,email,token,expires_at) VALUES($1,$2,$3,$4)`, userID, email, token, expiresAt); err != nil {
+		return fmt.Errorf("%s: enqueue email: %w", op, err)
+	}
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("%s: commit: %w", op, err)
 	}
 	return nil
 }
@@ -994,7 +1019,7 @@ func (s *Storage) GetDailyQuests(ctx context.Context, userID int64) ([]domain.Da
 		{
 			Code:      "create_task",
 			Title:     "Планировщик",
-			Icon:      "📝",
+			Icon:      "📋",
 			Target:    1,
 			Current:   createdToday,
 			Completed: createdToday >= 1,

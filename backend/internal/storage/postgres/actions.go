@@ -69,8 +69,16 @@ func (s *Storage) updateTaskWithRewards(ctx context.Context, userID, taskID int6
 			delta.PointsDelta = domain.TaskCompleteReward
 			delta.IncrementStreak = true
 		}
+		if err := s.replaceTaskReminders(ctx, tx, userID, taskID, update); err != nil {
+			return err
+		}
 		if err := updateTaskSQL(ctx, tx, userID, taskID, update); err != nil {
 			return err
+		}
+		if update.RewardClaimed {
+			if err := awardCoinsTx(ctx, tx, userID, taskCoinEvent(taskID), 5); err != nil {
+				return err
+			}
 		}
 		if delta.PointsDelta != 0 {
 			if err := applyStatsDeltaTx(ctx, tx, userID, delta); err != nil {
@@ -105,17 +113,18 @@ func (s *Storage) bulkCompleteWithRewards(ctx context.Context, userID int64, tas
 			WHERE user_id = $1 AND id IN (%s) AND status <> 'done'
 			ORDER BY id FOR UPDATE
 		), updated AS (
-			UPDATE tasks t SET status = 'done', reminder_at = NULL,
+			UPDATE tasks t SET status = 'done',
 				reward_claimed = true, updated_at = CURRENT_TIMESTAMP
 			FROM candidates c WHERE t.id = c.id
 			RETURNING t.id, NOT c.reward_claimed AS rewarded
 		)
-		SELECT COUNT(*), COUNT(*) FILTER (WHERE rewarded) FROM updated`, strings.Join(placeholders, ", "))
+		SELECT COUNT(*), COUNT(*) FILTER (WHERE rewarded), COALESCE(json_agg(id) FILTER(WHERE rewarded),'[]') FROM updated`, strings.Join(placeholders, ", "))
 		var rewarded int
+		var rewardJSON []byte
 		if outcome := actionOutcome(ctx); outcome != nil {
-			query = strings.Replace(query, "COUNT(*) FILTER (WHERE rewarded) FROM updated", "COUNT(*) FILTER (WHERE rewarded), COALESCE(json_agg(id),'[]') FROM updated", 1)
+			query = strings.Replace(query, " FROM updated", ", COALESCE(json_agg(id),'[]') FROM updated", 1)
 			var ids []byte
-			if err := tx.QueryRowContext(ctx, query, args...).Scan(&affected, &rewarded, &ids); err != nil {
+			if err := tx.QueryRowContext(ctx, query, args...).Scan(&affected, &rewarded, &rewardJSON, &ids); err != nil {
 				return err
 			}
 			if err := json.Unmarshal(ids, &outcome.Result.ChangedTaskIDs); err != nil {
@@ -134,8 +143,17 @@ func (s *Storage) bulkCompleteWithRewards(ctx context.Context, userID int64, tas
 			}
 			outcome.Rewards.TaskXP = rewarded * domain.TaskCompleteReward
 			outcome.Result.TaskCompleted = affected > 0
-		} else if err := tx.QueryRowContext(ctx, query, args...).Scan(&affected, &rewarded); err != nil {
+		} else if err := tx.QueryRowContext(ctx, query, args...).Scan(&affected, &rewarded, &rewardJSON); err != nil {
 			return err
+		}
+		var rewardIDs []int64
+		if err := json.Unmarshal(rewardJSON, &rewardIDs); err != nil {
+			return err
+		}
+		for _, id := range rewardIDs {
+			if err := awardCoinsTx(ctx, tx, userID, taskCoinEvent(id), 5); err != nil {
+				return err
+			}
 		}
 		if rewarded > 0 {
 			if err := applyStatsDeltaTx(ctx, tx, userID, domain.StatsDelta{PointsDelta: rewarded * domain.TaskCompleteReward, IncrementStreak: true}); err != nil {
@@ -193,8 +211,17 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 			return err
 		}
 		delta := domain.StatsDelta{}
+		focusXP := 0
 		if action == domain.PomodoroStatusCompleted && eligible {
-			delta.PointsDelta = domain.PomodoroRewardPoints
+			bonus, err := consumeFocusBoosterTx(ctx, tx, userID)
+			if err != nil {
+				return err
+			}
+			focusXP = domain.PomodoroRewardPoints + bonus
+			delta.PointsDelta = focusXP
+			if err := awardCoinsTx(ctx, tx, userID, fmt.Sprintf("focus:%d", sessionID), 10); err != nil {
+				return err
+			}
 			delta.PomodorosDelta = 1
 			delta.IncrementStreak = true
 		} else if action == domain.PomodoroStatusAbandoned && taskID != nil {
@@ -212,6 +239,9 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 					}
 				} else if task.Status != domain.TaskStatusDone && !task.RewardClaimed {
 					update.RewardClaimed = true
+					if err := awardCoinsTx(ctx, tx, userID, taskCoinEvent(*taskID), 5); err != nil {
+						return err
+					}
 					delta.PointsDelta += domain.TaskCompleteReward
 					delta.IncrementStreak = true
 				}
@@ -237,7 +267,7 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 			}
 			if action == domain.PomodoroStatusCompleted {
 				if eligible {
-					outcome.Rewards.PomodoroXP = domain.PomodoroRewardPoints
+					outcome.Rewards.PomodoroXP = focusXP
 				}
 				outcome.Rewards.TaskXP = delta.PointsDelta - outcome.Rewards.PomodoroXP
 			} else {

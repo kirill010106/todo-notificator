@@ -8,11 +8,9 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, hasSession } from "../lib/api";
 import type { Bootstrap } from "../lib/types";
-import { LocalRewardsRepository } from "../lib/rewards";
 import { chime } from "../lib/sound";
 import s from "../styles/App.module.css";
 
-export const rewards = new LocalRewardsRepository();
 const Context = createContext<{
   data: Bootstrap;
   notify: (message: string) => void;
@@ -60,26 +58,11 @@ export function AppProvider({
       client.invalidateQueries({ queryKey: ["logs"] }),
       client.invalidateQueries({ queryKey: ["session"] }),
       client.invalidateQueries({ queryKey: ["focus"] }),
+      client.invalidateQueries({ queryKey: ["shop"] }),
     ]);
   }, [client]);
-  const award = (event: string, coins: number) => {
-    try {
-      rewards.update(data.user.id, (wallet) =>
-        wallet.claimed.includes(event)
-          ? wallet
-          : {
-              ...wallet,
-              coins: wallet.coins + coins,
-              claimed: [...wallet.claimed, event],
-            },
-      );
-      window.dispatchEvent(new Event("rewards-changed"));
-      chime();
-    } catch {
-      notify(
-        "Действие выполнено, но браузер не смог сохранить локальную награду.",
-      );
-    }
+  const award = (_event: string, _coins: number) => {
+    chime();
   };
   return (
     <Context.Provider value={{ data, notify, refresh, award }}>

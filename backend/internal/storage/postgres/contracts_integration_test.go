@@ -5,10 +5,12 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	todonotificator "github.com/kirill010106/todo-notificator"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/storage"
+	queue "github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
 	"github.com/pressly/goose/v3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -50,6 +52,88 @@ func TestFrontendContracts(t *testing.T) {
 		require.NoError(t, err)
 		return id
 	}
+	t.Run("verification leases respect retry budget and reject stale acknowledgements", func(t *testing.T) {
+		user := newUser()
+		require.NoError(t, s.SaveEmailVerificationToken(ctx, user, "lease-budget", time.Now().Add(time.Hour)))
+		q, err := queue.New(dsn)
+		require.NoError(t, err)
+		defer q.Close()
+		first, err := q.ClaimVerificationDelivery(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, first)
+		_, err = s.DB.ExecContext(ctx, `UPDATE verification_email_outbox SET lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1`, first.ID)
+		require.NoError(t, err)
+		next, err := q.ClaimVerificationDelivery(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, next)
+		require.Equal(t, 2, next.Attempt)
+		require.NoError(t, q.FinishVerificationDelivery(ctx, *first, nil))
+		var status string
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT status FROM verification_email_outbox WHERE id=$1`, first.ID).Scan(&status))
+		require.Equal(t, "scheduled", status)
+		_, err = s.DB.ExecContext(ctx, `UPDATE verification_email_outbox SET attempts=4,lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1`, first.ID)
+		require.NoError(t, err)
+		last, err := q.ClaimVerificationDelivery(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, last)
+		require.Equal(t, 5, last.Attempt)
+		active, err := q.ClaimVerificationDelivery(ctx)
+		require.NoError(t, err)
+		require.Nil(t, active)
+		_, err = s.DB.ExecContext(ctx, `UPDATE verification_email_outbox SET lease_until=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE id=$1`, last.ID)
+		require.NoError(t, err)
+		exhausted, err := q.ClaimVerificationDelivery(ctx)
+		require.NoError(t, err)
+		require.Nil(t, exhausted)
+		require.NoError(t, q.FinishVerificationDelivery(ctx, *last, nil))
+		var attempts int
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT status,attempts FROM verification_email_outbox WHERE id=$1`, last.ID).Scan(&status, &attempts))
+		require.Equal(t, "failed", status)
+		require.Equal(t, 5, attempts)
+	})
+	t.Run("verification token and email delivery enter the outbox together", func(t *testing.T) {
+		user := newUser()
+		expires := time.Now().Add(24 * time.Hour)
+		require.NoError(t, s.SaveEmailVerificationToken(ctx, user, "outbox-token", expires))
+		var email, queuedToken, status string
+		var queuedExpiry time.Time
+		err := s.DB.QueryRowContext(ctx, `SELECT email,token,status,expires_at FROM verification_email_outbox WHERE user_id=$1`, user).Scan(&email, &queuedToken, &status, &queuedExpiry)
+		require.NoError(t, err)
+		require.Equal(t, fmt.Sprintf("contract%d@test.local", number), email)
+		require.Equal(t, "outbox-token", queuedToken)
+		require.Equal(t, "scheduled", status)
+		require.WithinDuration(t, expires, queuedExpiry, time.Second)
+	})
+	t.Run("parallel category creation cannot exceed the Free limit", func(t *testing.T) {
+		user := newUser()
+		var wg sync.WaitGroup
+		results := make(chan error, 8)
+		for i := 0; i < cap(results); i++ {
+			wg.Add(1)
+			go func(i int) {
+				defer wg.Done()
+				_, err := s.CreateCategory(ctx, domain.Category{UserID: user, Name: fmt.Sprintf("Category %d", i)})
+				results <- err
+			}(i)
+		}
+		wg.Wait()
+		close(results)
+		success, limited := 0, 0
+		for err := range results {
+			if err == nil {
+				success++
+			} else if errors.Is(err, storage.ErrCategoryLimitReached) {
+				limited++
+			} else {
+				require.NoError(t, err)
+			}
+		}
+		count, err := s.CountCategories(ctx, user)
+		require.NoError(t, err)
+		require.Equal(t, 3, count)
+		require.Equal(t, 3, success)
+		require.Equal(t, 5, limited)
+	})
 	execute := func(userID int64, key, route, body string, action func(context.Context) error) (domain.OperationResponse, error) {
 		return s.ExecuteOperation(ctx, userID, key, route, []byte(body), func(txctx context.Context) domain.OperationResponse {
 			if err := action(txctx); err != nil {
@@ -124,16 +208,18 @@ func TestFrontendContracts(t *testing.T) {
 	t.Run("nullable fields are actually cleared", func(t *testing.T) {
 		user := newUser()
 		deadline := time.Now().Add(time.Hour)
-		task, err := s.SaveTask(ctx, domain.Task{UserID: user, Title: "Nullable", Status: "pending", Deadline: &deadline, ReminderAt: &deadline})
+		task, err := s.SaveTask(ctx, domain.Task{UserID: user, Title: "Nullable", Status: "pending", Deadline: &deadline, ReminderInputs: []domain.ReminderInput{{OffsetMinutes: new(int64)}}})
 		require.NoError(t, err)
-		require.NoError(t, s.UpdateTask(ctx, user, task, domain.TaskUpdate{ClearDeadline: true, ClearReminderAt: true, ClearCategoryID: true}))
+		require.NoError(t, s.UpdateTask(ctx, user, task, domain.TaskUpdate{ClearDeadline: true, Reminders: &[]domain.ReminderInput{}, ClearCategoryID: true}))
 		saved, err := s.GetTask(ctx, user, task)
 		require.NoError(t, err)
 		require.Nil(t, saved.Deadline)
-		require.Nil(t, saved.ReminderAt)
+		require.Empty(t, saved.Reminders)
 	})
 	t.Run("today counts all matches but pages the lists", func(t *testing.T) {
 		user := newUser()
+		err := s.SetTimezone(ctx, user, "Local")
+		require.Error(t, err, "Go's Local location is not an IANA zone supported by PostgreSQL and browsers")
 		require.NoError(t, s.SetTimezone(ctx, user, "Europe/Moscow"))
 		var now time.Time
 		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT CURRENT_TIMESTAMP`).Scan(&now))
@@ -165,6 +251,17 @@ func TestFrontendContracts(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, 1, total)
 		require.Len(t, undated, 1)
+	})
+	t.Run("stale current streak expires on read while best streak remains", func(t *testing.T) {
+		user := newUser()
+		_, err := s.GetUserStats(ctx, user)
+		require.NoError(t, err)
+		_, err = s.DB.ExecContext(ctx, `UPDATE user_stats SET current_streak=7,best_streak=12,last_activity_date=(CURRENT_TIMESTAMP AT TIME ZONE 'UTC')::date-10 WHERE user_id=$1`, user)
+		require.NoError(t, err)
+		stats, err := s.GetUserStats(ctx, user)
+		require.NoError(t, err)
+		require.Equal(t, int64(0), *stats.CurrentStreak)
+		require.Equal(t, int64(12), *stats.BestStreak)
 	})
 	t.Run("daily claim is server verified and cannot be claimed twice", func(t *testing.T) {
 		user := newUser()
@@ -235,11 +332,26 @@ func TestFrontendContracts(t *testing.T) {
 		account, err := s.GetUserByID(ctx, user)
 		require.NoError(t, err)
 		require.False(t, account.IsPremium)
-		_, err = s.CreatePayment(ctx, "paid-payment", user, "49.00", "RUB", "pending", "Premium")
+		paymentRow, err := s.CreatePayment(ctx, "paid-payment", user, "49.00", "RUB", "pending", "Premium")
 		require.NoError(t, err)
+		retriedRow, err := s.CreatePayment(ctx, "paid-payment", user, "49.00", "RUB", "pending", "Premium")
+		require.NoError(t, err)
+		require.Equal(t, paymentRow, retriedRow)
+		_, err = s.CreatePayment(ctx, "paid-payment", newUser(), "49.00", "RUB", "pending", "Premium")
+		require.Error(t, err, "a provider operation must never be attached to another account")
+		_, err = s.CreatePayment(ctx, "latest-pending", user, "49.00", "RUB", "pending", "Premium")
+		require.NoError(t, err)
+		pendingIDs, err := s.GetPendingPayments(ctx, user)
+		require.NoError(t, err)
+		require.Equal(t, []string{"latest-pending", "paid-payment"}, pendingIDs)
 		owner, err = s.CompletePaymentAndGrantPremium(ctx, "paid-payment")
 		require.NoError(t, err)
 		require.Equal(t, user, owner)
+		_, err = s.CreatePayment(ctx, "paid-payment", user, "49.00", "RUB", "pending", "Premium")
+		require.NoError(t, err)
+		var paymentStatus string
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT status FROM payments WHERE yookassa_payment_id='paid-payment'`).Scan(&paymentStatus))
+		require.Equal(t, "succeeded", paymentStatus)
 		account, err = s.GetUserByID(ctx, user)
 		require.NoError(t, err)
 		require.True(t, account.IsPremium)

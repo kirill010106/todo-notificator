@@ -14,13 +14,16 @@ func (s *Storage) CreatePayment(ctx context.Context, yookassaID string, userID i
 	const op = "storage.postgres.CreatePayment"
 
 	query := `
-        INSERT INTO payments (yookassa_payment_id, user_id, amount, currency, status, description)
-        VALUES ($1, $2, $3, $4, $5, $6)
-        RETURNING id
-    `
+		INSERT INTO payments (yookassa_payment_id, user_id, amount, currency, status, description)
+		VALUES ($1, $2, $3, $4, $5, $6)
+		ON CONFLICT (yookassa_payment_id) DO UPDATE SET status=CASE
+			WHEN payments.status IN ('succeeded','canceled') THEN payments.status ELSE EXCLUDED.status END
+		WHERE payments.user_id=EXCLUDED.user_id AND payments.amount=EXCLUDED.amount AND payments.currency=EXCLUDED.currency
+		RETURNING id
+	`
 
 	var id int64
-	err := s.DB.QueryRowContext(ctx, query, yookassaID, userID, amount, currency, status, description).Scan(&id)
+	err := s.executor(ctx).QueryRowContext(ctx, query, yookassaID, userID, amount, currency, status, description).Scan(&id)
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", op, err)
 	}
@@ -82,6 +85,27 @@ func (s *Storage) GetLatestPendingPayment(ctx context.Context, userID int64) (st
 	}
 
 	return paymentID, nil
+}
+
+func (s *Storage) GetPendingPayments(ctx context.Context, userID int64) ([]string, error) {
+	const op = "storage.postgres.GetPendingPayments"
+	rows, err := s.DB.QueryContext(ctx, `SELECT yookassa_payment_id FROM payments WHERE user_id=$1 AND status=$2 ORDER BY created_at DESC,id DESC`, userID, domain.PaymentStatusPending)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	defer rows.Close()
+	ids := make([]string, 0)
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("%s: scan: %w", op, err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: rows: %w", op, err)
+	}
+	return ids, nil
 }
 
 func (s *Storage) CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error) {

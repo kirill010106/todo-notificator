@@ -9,7 +9,8 @@ import {
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorText } from "../../lib/api";
 import { command, rewardLabel } from "../../lib/commands";
-import type { Session, FocusSnapshot, ActionResponse } from "../../lib/types";
+import type { Session, FocusSnapshot, Task } from "../../lib/types";
+import { Button, Sheet } from "../../components/ui";
 import { useApp } from "../../app/context";
 
 export function secondsLeft(session: Session | null, now: number) {
@@ -43,6 +44,11 @@ export async function loadActiveSession(signal?: AbortSignal) {
 }
 type Phase = "idle" | "focus" | "extra-break" | "rest";
 interface FocusValue {
+  selectedTask: Task | null;
+  chooseTask: (task: Task | null) => void;
+  requestStart: (task?: Task | null) => void;
+  canCancel: boolean;
+  cancel: () => Promise<void>;
   session: Session | null;
   seconds: number;
   phase: Phase;
@@ -76,6 +82,10 @@ export function FocusProvider({ children }: { children: ReactNode }) {
     staleTime: 5000,
     refetchInterval: 15000,
   });
+  const [selectedTask, chooseTask] = useState<Task | null>(null);
+  const [confirmation, setConfirmation] = useState<{
+    task: Task | null;
+  } | null>(null);
   const [now, setNow] = useState(Date.now());
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -188,6 +198,17 @@ export function FocusProvider({ children }: { children: ReactNode }) {
   return (
     <Context.Provider
       value={{
+        selectedTask,
+        chooseTask,
+        requestStart: (task = selectedTask) => setConfirmation({ task }),
+        canCancel:
+          !!session &&
+          !!state?.cancel_until &&
+          serverNow < Date.parse(state.cancel_until),
+        cancel: async () => {
+          if (session && (await perform(`/pomodoros/${session.id}/cancel`)))
+            notify("Сессия отменена. Задача, XP и бустер сохранены.");
+        },
         session,
         seconds,
         phase,
@@ -209,6 +230,35 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       }}
     >
       {children}
+      <Sheet
+        open={!!confirmation}
+        onClose={() => {
+          if (!busy) setConfirmation(null);
+        }}
+        title="Начать 25 минут фокуса?"
+        description={
+          confirmation?.task?.title || "Свободная сессия без привязки к задаче."
+        }
+        wide
+      >
+        <p>
+          В первые 30 секунд можно отменить случайный старт без потери XP и
+          изменения задачи.
+        </p>
+        {error && <p role="alert">{error}</p>}
+        <Button
+          disabled={busy}
+          onClick={async () => {
+            await start(confirmation?.task?.id);
+            setConfirmation(null);
+          }}
+        >
+          Начать сессию
+        </Button>
+        <Button quiet disabled={busy} onClick={() => setConfirmation(null)}>
+          Пока не начинать
+        </Button>
+      </Sheet>
     </Context.Provider>
   );
 }

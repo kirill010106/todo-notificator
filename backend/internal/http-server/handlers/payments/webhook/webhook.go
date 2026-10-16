@@ -9,6 +9,7 @@ import (
 	"strings"
 
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/clientip"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	yoopayment "github.com/rvinnie/yookassa-sdk-go/yookassa/payment"
 	webhook "github.com/rvinnie/yookassa-sdk-go/yookassa/webhook"
@@ -35,29 +36,8 @@ func init() {
 	}
 }
 
-func isPrivateOrLoopbackIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate()
-}
-
 func getClientIP(r *http.Request) string {
-	remoteHost, _, err := net.SplitHostPort(r.RemoteAddr)
-	if err != nil {
-		remoteHost = r.RemoteAddr
-	}
-	remoteIP := net.ParseIP(strings.TrimSpace(remoteHost))
-
-	// Only trust forwarded headers if the connection comes from a loopback or private proxy
-	if remoteIP != nil && isPrivateOrLoopbackIP(remoteIP) {
-		if ip := r.Header.Get("X-Real-IP"); ip != "" {
-			return strings.TrimSpace(ip)
-		}
-		if ips := r.Header.Get("X-Forwarded-For"); ips != "" {
-			parts := strings.Split(ips, ",")
-			return strings.TrimSpace(parts[0])
-		}
-	}
-
-	return remoteHost
+	return clientip.Address(r)
 }
 
 func isAllowedIP(ipStr string) bool {
@@ -94,6 +74,10 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 			return
 		}
 
+		if finder == nil {
+			http.Error(w, "payment verification is temporarily unavailable", http.StatusServiceUnavailable)
+			return
+		}
 		var event webhook.WebhookEvent[yoopayment.Payment]
 		err := json.NewDecoder(r.Body).Decode(&event)
 		if err != nil {

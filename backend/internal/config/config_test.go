@@ -28,3 +28,23 @@ func TestConfigFileDefaultsAndEnvironmentOverrides(t *testing.T) {
 	require.Equal(t, "127.0.0.1:9099", cfg.MetricsServer.Address)
 	require.Equal(t, "delivery-secret", cfg.Webhook.Secret)
 }
+
+func TestProxyConfiguration(t *testing.T) {
+	for _, raw := range []string{"garbage", "0.0.0.0/0", "::/0", ""} {
+		_, err := (&Config{HTTPServer: HTTPServer{TrustedProxies: []string{raw}}}).ProxyPrefixes()
+		require.Error(t, err)
+	}
+	c := &Config{HTTPServer: HTTPServer{TrustedProxies: []string{" 172.20.0.2/32 ", "2001:db8::2"}}}
+	p, err := c.ProxyPrefixes()
+	require.NoError(t, err)
+	require.Len(t, p, 2)
+	t.Setenv("TRUSTED_PROXIES", "172.20.0.2/32,10.1.0.0/24")
+	t.Setenv("AUTO_MIGRATE", "false")
+	file := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(file, []byte("app_secret: test\n"), 0600))
+	t.Setenv("CONFIG_PATH", file)
+	t.Setenv("APP_SECRET", "test")
+	cfg := MustLoad()
+	require.Len(t, cfg.TrustedProxies, 2)
+	require.False(t, cfg.AutoMigrate)
+}

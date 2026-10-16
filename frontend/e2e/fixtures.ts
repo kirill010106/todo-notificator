@@ -33,7 +33,7 @@ const user = {
   is_verified: true,
   is_premium: false,
   categories_limit: 3,
-  reminders_limit: 3,
+  reminders_per_task_limit: 2,
   active_reminders_count: 0,
   categories_count: 2,
 };
@@ -95,12 +95,42 @@ export async function fixture(
     })),
     daily_chest_claimed: false,
   };
+  const wallet = {
+    version: 2,
+    coins: 50,
+    customRewards: [] as { id: string; title: string; price: number }[],
+    boosters: {} as Record<string, number>,
+    ownedItems: ["default"],
+    activeTheme: "default",
+    activeSound: "default",
+    activeBooster: false,
+    imported: true,
+  };
+  const catalog = [
+    {
+      id: "ocean",
+      title: "Океан",
+      kind: "theme",
+      price: 40,
+      description: "Спокойная синяя палитра",
+    },
+    {
+      id: "xp_boost",
+      title: "Двойной фокус",
+      kind: "booster",
+      price: 100,
+      description: "40 XP за следующую засчитанную сессию",
+    },
+  ];
   const currentTasks = tasks.map((task) => ({ ...task }));
   const categories = [
     { id: 1, name: "Работа" },
     { id: 2, name: "Личное" },
   ];
   const focus = () => ({
+    cancel_until: active
+      ? new Date(Date.parse(active.started_at) + 30000).toISOString()
+      : null,
     server_now: new Date().toISOString(),
     phase,
     session: active,
@@ -150,6 +180,10 @@ export async function fixture(
     if (path === "/me/rewards/daily-chest/claim") {
       profile.daily_chest_claimed = true;
       rewards.quest_xp = 50;
+    }
+    if (path.endsWith("/cancel")) {
+      active = null;
+      phase = "idle";
     }
     if (path === "/pomodoros/9/stop") {
       const request = route.request().postDataJSON();
@@ -217,7 +251,32 @@ export async function fixture(
       stats: { points: 350 },
       unlocked_achievements: [],
     };
-    if (path === "/me/bootstrap")
+    if (path === "/me/shop") body = { wallet, catalog, ledger: [] };
+    else if (path === "/me/shop/actions") {
+      const req = route.request().postDataJSON();
+      if (req.action === "create_personal")
+        wallet.customRewards.push({
+          id: "reward-1",
+          title: req.title,
+          price: req.price,
+        });
+      if (req.action === "buy") {
+        const item = catalog.find((i) => i.id === req.item_id)!;
+        if (wallet.coins < item.price) {
+          await route.fulfill({
+            status: 409,
+            json: { code: "INSUFFICIENT_COINS", message: "Not enough coins" },
+          });
+          return;
+        }
+        wallet.coins -= item.price;
+        if (item.kind === "booster")
+          wallet.boosters[item.id] = (wallet.boosters[item.id] || 0) + 1;
+        else wallet.ownedItems.push(item.id);
+      }
+      if (req.action === "equip") wallet.activeTheme = req.item_id;
+      body = { wallet };
+    } else if (path === "/me/bootstrap")
       body = {
         user: { ...user, timezone: "Europe/Moscow" },
         categories,

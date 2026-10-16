@@ -1,3 +1,11 @@
+export interface TaskReminder {
+  id: number;
+  offset_minutes: number | null;
+  scheduled_at: string;
+  status: "scheduled" | "sent" | "failed";
+  sent_at: string | null;
+  legacy_absolute: boolean;
+}
 export interface Task {
   id: number;
   title: string;
@@ -5,7 +13,7 @@ export interface Task {
   status: "pending" | "done" | "burnt";
   category_id?: number | null;
   deadline?: string | null;
-  reminder_at?: string | null;
+  reminders?: TaskReminder[];
   pomodoros_taken?: number;
   reward_claimed?: boolean;
 }
@@ -53,7 +61,7 @@ export interface User {
   categories_count: number;
   active_reminders_count: number;
   categories_limit: number;
-  reminders_limit: number;
+  reminders_per_task_limit: number | null;
 }
 export interface TaskPage {
   tasks?: Task[];
@@ -72,6 +80,7 @@ export interface Bootstrap extends TaskPage {
   active_pomodoro?: Session | null;
 }
 export interface FocusSnapshot {
+  cancel_until?: string | null;
   server_now: string;
   phase: "idle" | "focus" | "extra_break" | "recovery_break";
   session: Session | null;

@@ -1,0 +1,22 @@
+# Local state and credentials must not enter the shared Go build context.
+.git
+.idea
+.codex
+.agents
+.aws
+.workbench
+.local-backups
+**/.env
+**/.env.*
+**/node_modules
+**/dist
+**/tmp
+**/__pycache__
+**/test-results
+**/playwright-report
+**/*.exe
+**/*.log
+**/coverage.out
+**/coverage-*.out
+**/coverage.html
+/scripts/

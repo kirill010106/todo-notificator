@@ -152,6 +152,9 @@ describe("server Pomodoro flow", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Начать фокус" }));
     });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Начать сессию" }));
+    });
     expect(screen.getByTestId("clock")).toHaveTextContent("focus:1500");
   });
   it("resumes the same session from a server-stored extra break", async () => {
@@ -212,7 +215,7 @@ describe("server Pomodoro flow", () => {
       await vi.advanceTimersByTimeAsync(5000);
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
-      "Не удалось завершить сессию",
+      "Сервер временно не смог выполнить действие",
     );
     expect(
       vi.mocked(api).mock.calls.filter(([path]) => path.endsWith("/stop")),

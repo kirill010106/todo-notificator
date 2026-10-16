@@ -50,7 +50,12 @@ func (s *Storage) getFocusState(ctx context.Context, userID int64) (domain.Focus
 	end := session.StartedAt.Add(time.Duration(session.DurationMinutes) * time.Minute)
 	state.PhaseEndsAt = &end
 	state.RemainingWorkSeconds = int(math.Max(0, math.Min(float64(session.DurationMinutes*60), math.Ceil(end.Sub(state.ServerNow).Seconds()))))
+	cancelUntil := session.StartedAt.Add(30 * time.Second)
+	state.CancelUntil = &cancelUntil
 	state.AvailableActions = []string{"complete_session", "abandon"}
+	if state.ServerNow.Before(cancelUntil) {
+		state.AvailableActions = append(state.AvailableActions, "cancel")
+	}
 	if session.TaskID != nil {
 		state.AvailableActions = append(state.AvailableActions, "complete_task")
 	}
@@ -65,6 +70,9 @@ func (s *Storage) getFocusState(ctx context.Context, userID int64) (domain.Focus
 		state.Phase = "extra_break"
 		state.PhaseEndsAt = breakEnd
 		state.AvailableActions = []string{"resume"}
+		if state.ServerNow.Before(cancelUntil) {
+			state.AvailableActions = append(state.AvailableActions, "cancel")
+		}
 	}
 	return state, nil
 }
@@ -119,4 +127,24 @@ func (s *Storage) updateFocusAfterFinish(ctx context.Context, tx *sql.Tx, userID
         recovery_ends_at=CURRENT_TIMESTAMP+CASE WHEN focus_states.completed_in_cycle=3 THEN INTERVAL '15 minutes' ELSE INTERVAL '5 minutes' END,
         recovery_task_id=$2`, userID, taskID)
 	return err
+}
+
+// A mistaken start can be cancelled for 30 seconds, using database time.
+func (s *Storage) CancelPomodoroSession(ctx context.Context, user, id int64) error {
+	return s.withUserTx(ctx, user, func(tx *sql.Tx) error {
+		var status string
+		var allowed bool
+		err := tx.QueryRowContext(ctx, `SELECT status,clock_timestamp()<started_at+INTERVAL '30 seconds' FROM pomodoro_sessions WHERE id=$1 AND user_id=$2 FOR UPDATE`, id, user).Scan(&status, &allowed)
+		if errors.Is(err, sql.ErrNoRows) {
+			return &domain.ContractError{Code: "SESSION_NOT_FOUND", Message: "Сессия уже закончена или не найдена", Status: 404}
+		}
+		if err != nil {
+			return err
+		}
+		if status != "active" || !allowed {
+			return &domain.ContractError{Code: "CANCEL_WINDOW_EXPIRED", Message: "Отменить без последствий можно только в первые 30 секунд. Используй завершение сессии", Status: 409}
+		}
+		_, err = tx.ExecContext(ctx, `UPDATE pomodoro_sessions SET status='cancelled',completed_at=clock_timestamp() WHERE id=$1 AND user_id=$2`, id, user)
+		return err
+	})
 }

@@ -2,6 +2,8 @@ package create
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"github.com/kirill010106/todo-notificator/internal/domain"
@@ -57,7 +59,8 @@ func TestPaymentGatewayContract(t *testing.T) {
 			transport := paymentTransport(func(r *http.Request) (*http.Response, error) {
 				require.Equal(t, "POST", r.Method)
 				require.Equal(t, "api.yookassa.ru", r.URL.Host)
-				require.Equal(t, "client-operation", r.Header.Get("Idempotence-Key"))
+				providerKey := sha256.Sum256([]byte("42:client-operation"))
+				require.Equal(t, hex.EncodeToString(providerKey[:]), r.Header.Get("Idempotence-Key"))
 				account, secret, ok := r.BasicAuth()
 				require.True(t, ok)
 				require.Equal(t, "shop", account)

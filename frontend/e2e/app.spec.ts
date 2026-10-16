@@ -63,7 +63,7 @@ test("failed finish preserves the active session", async ({ page }) => {
   await page.getByRole("button", { name: "Закончить", exact: true }).click();
   await page.getByRole("button", { name: "Да, задача выполнена" }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
-    "Сервер временно недоступен",
+    "Сервер временно не смог выполнить действие",
   );
   await page.keyboard.press("Escape");
   await page.reload();
@@ -98,7 +98,7 @@ test("creation sends an idempotency key and nullable task fields", async ({
   expect(request.postDataJSON()).toMatchObject({
     title: "Новая задача",
     deadline: null,
-    reminder_at: null,
+    reminders: [],
     category_id: null,
   });
   expect(request.headers()["idempotency-key"]).toBeTruthy();
@@ -108,7 +108,7 @@ test("editing clears an existing deadline with null", async ({ page }) => {
   await fixture(page);
   await page.goto("/app/tasks");
   await page.getByText(tasks[0].title, { exact: true }).click();
-  await page.getByLabel("Срок").fill("");
+  await page.getByRole("button", { name: "Убрать срок", exact: true }).click();
   const sent = page.waitForRequest(
     (request) =>
       request.url().endsWith("/tasks/1") && request.method() === "PATCH",
@@ -146,7 +146,7 @@ test("category creation uses the existing contract", async ({ page }) => {
   await page.getByRole("button", { name: "Сохранить", exact: true }).click();
   expect((await sent).postDataJSON()).toEqual({ name: "Учёба" });
 });
-test("progress and local personal rewards remain available", async ({
+test("progress and server personal rewards remain available", async ({
   page,
 }) => {
   await fixture(page);
@@ -170,8 +170,8 @@ test("golden chest is disabled and never patches statistics", async ({
   });
   await page.goto("/app/rewards");
   await expect(
-    page.getByRole("button", { name: "Пока недоступно" }),
-  ).toBeDisabled();
+    page.getByText("Случайные сундуки пока недоступны.", { exact: false }),
+  ).toBeVisible();
   expect(writes).toBe(0);
 });
 test("daily chest uses the server claim endpoint", async ({ page }) => {
@@ -356,3 +356,111 @@ test("mobile landing has no horizontal overflow", async ({ page }) => {
   ).toBeVisible();
   await expect(page.locator("html")).toHaveJSProperty("scrollWidth", 360);
 });
+
+test("focus picker uses task filters and asks before starting", async ({
+  page,
+}) => {
+  await fixture(page);
+  let starts = 0;
+  page.on("request", (r) => {
+    if (r.url().endsWith("/pomodoros/start")) starts++;
+  });
+  await page.goto("/app/focus");
+  await page.getByRole("link", { name: "Выбрать задачу из списка" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Выбери задачу для фокуса" }),
+  ).toBeVisible();
+  await page.getByLabel("Поиск задач").fill("идею");
+  await page.getByRole("button", { name: "Искать", exact: true }).click();
+  await expect(page).toHaveURL(/pick=focus/);
+  await page
+    .getByRole("button", { name: `Выбрать для фокуса: ${tasks[0].title}` })
+    .click();
+  await expect(page).toHaveURL(/app\/focus/);
+  expect(starts).toBe(0);
+  await page.getByRole("button", { name: "Начать фокус", exact: true }).click();
+  await expect(page.getByRole("dialog")).toBeVisible();
+  expect(starts).toBe(0);
+  await page.getByRole("button", { name: "Пока не начинать" }).click();
+  expect(starts).toBe(0);
+  await page.getByRole("button", { name: "Начать фокус", exact: true }).click();
+  await page
+    .getByRole("button", { name: "Начать сессию", exact: true })
+    .click();
+  await expect(
+    page.getByRole("button", { name: /Отменить случайный старт/ }),
+  ).toBeVisible();
+  expect(starts).toBe(1);
+  await page.getByRole("button", { name: /Отменить случайный старт/ }).click();
+  await expect(
+    page.getByRole("button", { name: "Начать фокус", exact: true }),
+  ).toBeVisible();
+});
+test("shop purchase requires confirmation and is restored from server", async ({
+  page,
+}) => {
+  await fixture(page);
+  await page.goto("/app/rewards");
+  await page.getByRole("button", { name: "Купить · 40 монет" }).click();
+  await expect(page.getByRole("dialog")).toContainText("Стоимость: 40 монет");
+  await page.getByRole("button", { name: "Отмена", exact: true }).click();
+  await expect(
+    page.getByRole("button", { name: "Купить · 40 монет" }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Купить · 40 монет" }).click();
+  await page.getByRole("button", { name: "Подтвердить · 40 монет" }).click();
+  await page.reload();
+  await expect(
+    page.getByRole("button", { name: "Применить", exact: true }),
+  ).toBeVisible();
+  await page.getByRole("button", { name: "Применить", exact: true }).click();
+  await expect(page.locator("html")).toHaveAttribute("data-accent", "ocean");
+  await page.getByRole("button", { name: "Купить · 100 монет" }).click();
+  await page.getByRole("button", { name: "Подтвердить · 100 монет" }).click();
+  await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
+    "Не хватает монет",
+  );
+});
+test("free plan and logout are reachable on mobile", async ({ page }) => {
+  await page.setViewportSize({ width: 360, height: 800 });
+  await fixture(page);
+  await page.goto("/app/today");
+  await expect(
+    page.getByRole("link", { name: "Бесплатный · Попробовать Premium" }),
+  ).toBeVisible();
+  const chipBox = await page
+    .getByRole("link", { name: "Бесплатный · Попробовать Premium" })
+    .boundingBox();
+  expect(chipBox?.y).toBeGreaterThanOrEqual(0);
+  expect((chipBox?.y || 0) + (chipBox?.height || 0)).toBeLessThanOrEqual(120);
+  await page.getByRole("button", { name: "Меню аккаунта" }).click();
+  await page.getByRole("menuitem", { name: "Выйти из аккаунта" }).click();
+  await page.getByRole("button", { name: "Выйти", exact: true }).click();
+  await expect(page).toHaveURL(/login/);
+});
+
+for (const width of [360, 768, 1440])
+  test(`shop layout in both themes at ${width}px`, async ({ page }) => {
+    await fixture(page);
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto("/app/rewards");
+    await expect(
+      page.getByRole("heading", { name: "Магазин и награды" }),
+    ).toBeVisible();
+    await expect(page.locator("html")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: `test-results/shop-${width}.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+    await page.goto("/app/account");
+    await page.getByRole("button", { name: "Тёмная", exact: true }).click();
+    await page.goto("/app/rewards");
+    await expect(page.locator("html")).toHaveAttribute("data-theme", "dark");
+    await expect(page.locator("html")).toHaveJSProperty("scrollWidth", width);
+    await page.screenshot({
+      path: `test-results/shop-dark-${width}.png`,
+      fullPage: true,
+      animations: "disabled",
+    });
+  });

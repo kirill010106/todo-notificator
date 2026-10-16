@@ -2,6 +2,7 @@
 .env
 node_modules/
 tmp/
+.local-backups/
 CODE_REVIEW.md
 *.exe
 
@@ -13,3 +14,12 @@ coverage-test.log
 
 audit_bundle.txt
 /.idea/
+
+backend/coverage-run.log
+
+# Python release tooling
+__pycache__/
+*.pyc
+
+# Локальные журналы аудита и временные артефакты Codex
+/.workbench/

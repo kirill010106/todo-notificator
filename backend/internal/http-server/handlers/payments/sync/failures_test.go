@@ -17,6 +17,7 @@ import (
 
 type statusStub struct {
 	pending             string
+	pendingIDs          []string
 	lookupErr, writeErr error
 	grants, updates     int
 }
@@ -24,8 +25,17 @@ type statusStub struct {
 func (s *statusStub) GetUserByID(context.Context, int64) (*domain.User, error) {
 	return &domain.User{ID: 42}, nil
 }
-func (s *statusStub) GetLatestPendingPayment(context.Context, int64) (string, error) {
-	return s.pending, s.lookupErr
+func (s *statusStub) GetPendingPayments(context.Context, int64) ([]string, error) {
+	if s.lookupErr != nil {
+		return nil, s.lookupErr
+	}
+	if s.pendingIDs != nil {
+		return s.pendingIDs, nil
+	}
+	if s.pending == "" {
+		return []string{}, nil
+	}
+	return []string{s.pending}, nil
 }
 func (s *statusStub) CompletePaymentAndGrantPremium(context.Context, string) (int64, error) {
 	s.grants++

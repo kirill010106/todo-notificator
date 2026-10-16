@@ -3,12 +3,10 @@ package router
 import (
 	"log/slog"
 	"net/http"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/go-chi/httprate"
 	"github.com/go-chi/render"
 	"github.com/rvinnie/yookassa-sdk-go/yookassa"
 
@@ -48,9 +46,11 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/tasks/update"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/clientip"
 	contractsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/contracts"
 	customlogger "github.com/kirill010106/todo-notificator/internal/http-server/middleware/logger"
 	metricsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/metrics"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/ratelimit"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 )
 
@@ -65,7 +65,20 @@ type Config struct {
 
 // New builds and configures the complete application Chi router.
 func New(cfg Config) *chi.Mux {
+	// Keep optional interfaces genuinely nil when payments are disabled.
+	var paymentFinder syncpayment.PaymentFinder
+	if cfg.PaymentHandler != nil {
+		paymentFinder = cfg.PaymentHandler
+	}
 	r := chi.NewRouter()
+	proxies, err := cfg.AppConfig.ProxyPrefixes()
+	if err != nil {
+		panic(err)
+	} // invalid configuration must fail before serving
+	r.Use(clientip.New(proxies))
+	publicLimit := ratelimit.IP(100)
+	loginLimit := ratelimit.IP(20)
+	callbackLimit := ratelimit.IP(300)
 
 	// Preserve a truly nil interface when the optional activity logger failed
 	// to initialize; converting a nil *Client directly would produce a non-nil
@@ -90,7 +103,6 @@ func New(cfg Config) *chi.Mux {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.URLFormat)
 	r.Use(middleware.RedirectSlashes)
-	r.Use(httprate.LimitByIP(100, 1*time.Minute))
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
 		helpers.SendError(w, http.StatusNotFound, "endpoint does not exist", "NOT_FOUND")
@@ -100,7 +112,7 @@ func New(cfg Config) *chi.Mux {
 		helpers.SendError(w, http.StatusMethodNotAllowed, "method not allowed", "METHOD_NOT_ALLOWED")
 	})
 
-	r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+	r.With(publicLimit).Get("/", func(w http.ResponseWriter, r *http.Request) {
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, map[string]string{
 			"status":  "active",
@@ -109,13 +121,13 @@ func New(cfg Config) *chi.Mux {
 		})
 	})
 
-	r.Get("/ping", func(w http.ResponseWriter, r *http.Request) {
+	r.With(publicLimit).Get("/ping", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("pong"))
 	})
 
 	// API V1
 	r.Route("/api/v1", func(r chi.Router) {
-		r.Get("/", func(w http.ResponseWriter, r *http.Request) {
+		r.With(publicLimit).Get("/", func(w http.ResponseWriter, r *http.Request) {
 			render.Status(r, http.StatusOK)
 			render.JSON(w, r, map[string]string{
 				"status":  "active",
@@ -125,18 +137,23 @@ func New(cfg Config) *chi.Mux {
 		})
 
 		// Public endpoints
-		r.Post("/register", register.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient))
-		r.Post("/login", login.New(cfg.Log, cfg.Storage, cfg.AppConfig, cfg.LoggerClient))
+		r.With(loginLimit).Post("/register", register.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient))
+		r.With(loginLimit).Post("/login", login.New(cfg.Log, cfg.Storage, cfg.AppConfig, cfg.LoggerClient))
 		r.Get("/health", health.New(cfg.Log, cfg.Storage.DB))
-		r.Post("/refresh", refresh.New(cfg.Log, cfg.Storage, cfg.AppConfig))
-		r.Get("/verify", verify.New(cfg.Log, cfg.Storage))
-		r.Post("/webhooks/yookassa", webhook.New(cfg.Log, cfg.Storage, cfg.PaymentHandler))
+		r.With(publicLimit).Post("/refresh", refresh.New(cfg.Log, cfg.Storage, cfg.AppConfig))
+		r.With(publicLimit).Get("/verify", verify.New(cfg.Log, cfg.Storage))
+		r.With(callbackLimit).Post("/webhooks/yookassa", webhook.New(cfg.Log, cfg.Storage, paymentFinder))
 
 		// Protected endpoints
 		r.Group(func(r chi.Router) {
+			r.Use(ratelimit.InvalidAuth(cfg.AppConfig.AppSecret))
 			r.Use(auth.New(cfg.AppConfig.AppSecret, cfg.Storage))
+			r.Use(ratelimit.User(100))
 			extended := contractHandlers.Handler{Store: cfg.Storage}
 			r.Get("/me/focus", extended.Focus)
+			r.Get("/me/shop", extended.Shop)
+			r.Post("/me/shop/actions", contractsMiddleware.Operation(cfg.Storage, extended.ShopAction))
+			r.Post("/pomodoros/{id}/cancel", contractsMiddleware.Operation(cfg.Storage, extended.Cancel))
 			r.Post("/me/focus/resume", contractsMiddleware.Operation(cfg.Storage, extended.Resume))
 			r.Post("/me/focus/rest/finish", contractsMiddleware.Operation(cfg.Storage, extended.FinishRest))
 			r.Get("/me/today", extended.Today)
@@ -177,8 +194,10 @@ func New(cfg Config) *chi.Mux {
 
 			// Verification & Payments
 			r.Post("/verify/resend", resend.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret))
+			// Provider idempotency and the payment UPSERT handle retries without holding
+			// the user's game-action transaction across a network call.
 			r.Post("/payments/create", createpayment.New(cfg.Log, cfg.Storage, cfg.YooClient, cfg.AppConfig.ClientURL))
-			r.Post("/payments/sync", syncpayment.New(cfg.Log, cfg.Storage, cfg.PaymentHandler))
+			r.Post("/payments/sync", syncpayment.New(cfg.Log, cfg.Storage, paymentFinder))
 
 			// Dev endpoints (local env only)
 			if cfg.AppConfig.Env == "local" {

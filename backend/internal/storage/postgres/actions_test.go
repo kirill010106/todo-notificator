@@ -35,6 +35,7 @@ func TestUpdateTaskRewardFailureRollsBack(t *testing.T) {
 	mock.ExpectQuery("SELECT id, status, reward_claimed FROM tasks").WithArgs(int64(1), int64(10)).
 		WillReturnRows(sqlmock.NewRows([]string{"id", "status", "claimed"}).AddRow(10, "pending", false))
 	mock.ExpectExec("UPDATE tasks").WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("INSERT INTO reward_ledger").WillReturnResult(sqlmock.NewResult(0, 0))
 	dbFailure := errors.New("stats write failed")
 	mock.ExpectExec("INSERT INTO user_stats").WillReturnError(dbFailure)
 	mock.ExpectRollback()

@@ -1,8 +1,6 @@
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
 import { Play, Square, Coffee, Check, ArrowUpRight } from "lucide-react";
 import { Link } from "react-router-dom";
-import { allPending } from "../../lib/tasks";
 import { useApp } from "../../app/context";
 import { Button, Heading, Sheet, State } from "../../components/ui";
 import { useFocus } from "./FocusProvider";
@@ -16,19 +14,14 @@ import s from "../../styles/App.module.css";
 export function FocusPanel({ full = false }: { full?: boolean }) {
   const focus = useFocus();
   const { data } = useApp();
-  const [taskId, setTaskId] = useState("");
   const [dialog, setDialog] = useState<"result" | "interrupt" | null>(null);
-  const tasks = useQuery({
-    queryKey: ["pending"],
-    queryFn: ({ signal }) => allPending(signal),
-    enabled: full,
-  });
   const onBreak = focus.phase === "extra-break" || focus.phase === "rest";
   const minutes = String(Math.floor(focus.seconds / 60)).padStart(2, "0");
   const remainder = String(focus.seconds % 60).padStart(2, "0");
-  const title = [...(tasks.data || []), ...(data.tasks || [])].find(
-    (task) => task.id === focus.session?.task_id,
-  )?.title;
+  const title = [
+    ...(focus.selectedTask ? [focus.selectedTask] : []),
+    ...(data.tasks || []),
+  ].find((task) => task.id === focus.session?.task_id)?.title;
   const finish = async (done: boolean) => {
     if (await focus.stop(done ? "completed" : "abandoned", true))
       setDialog(null);
@@ -92,26 +85,23 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
             : "Выдели 25 минут для того, что действительно важно."}
       </p>
       {full && focus.phase === "idle" && (
-        <label className={s.field}>
-          Над чем поработаем?
-          <select
-            value={taskId}
-            onChange={(event) => setTaskId(event.target.value)}
-          >
-            <option value="">Свободная сессия</option>
-            {tasks.data?.map((task) => (
-              <option key={task.id} value={task.id}>
-                {task.title}
-              </option>
-            ))}
-          </select>
-          {tasks.isError && (
-            <span className={s.error}>
-              Не удалось загрузить задачи.{" "}
-              <button onClick={() => void tasks.refetch()}>Повторить</button>
-            </span>
+        <div className={s.stack}>
+          <span>Над чем поработаем?</span>
+          <strong>{focus.selectedTask?.title || "Свободная сессия"}</strong>
+          <Link className={s.secondary} to="/app/tasks?pick=focus">
+            Выбрать задачу из списка
+          </Link>
+          {focus.selectedTask && (
+            <Button quiet onClick={() => focus.chooseTask(null)}>
+              Без задачи
+            </Button>
           )}
-        </label>
+        </div>
+      )}
+      {focus.canCancel && (
+        <Button quiet disabled={focus.busy} onClick={() => void focus.cancel()}>
+          Отменить случайный старт · без штрафа
+        </Button>
       )}
       {focus.error && (
         <p className={s.error} role="alert">
@@ -131,10 +121,7 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
           )}
         </div>
       ) : !focus.session ? (
-        <Button
-          disabled={focus.busy}
-          onClick={() => void focus.start(taskId ? Number(taskId) : undefined)}
-        >
+        <Button disabled={focus.busy} onClick={() => focus.requestStart()}>
           <Play size={16} />
           Начать фокус
         </Button>
@@ -144,7 +131,15 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
             disabled={focus.busy || focus.seconds === 0}
             onClick={() => {
               if (focus.session?.task_id) setDialog("result");
-              else void focus.stop("abandoned", false);
+              else {
+                const eligibleMinutes = (focus.session?.duration_minutes || 25) - 24;
+                void focus.stop(
+                  focus.seconds <= Math.max(0, eligibleMinutes * 60)
+                    ? "completed"
+                    : "abandoned",
+                  false,
+                );
+              }
             }}
           >
             <Square size={16} />
@@ -202,6 +197,15 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
               <Button
                 quiet
                 disabled={focus.busy}
+                onClick={async () => {
+                  if (await focus.stop("completed", false)) setDialog(null);
+                }}
+              >
+                Завершить фокус, оставить задачу в работе
+              </Button>
+              <Button
+                quiet
+                disabled={focus.busy}
                 onClick={() => setDialog("interrupt")}
               >
                 Нет, хочу прерваться
@@ -255,7 +259,7 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
 }
 export function FocusPage() {
   return (
-    <>
+    <div className={s.focusPage}>
       <Heading eyebrow="ОДНО ДЕЛО В ОДИН МОМЕНТ" title="Время для фокуса">
         Освободи внимание для самого важного.
       </Heading>
@@ -265,6 +269,6 @@ export function FocusPage() {
         Во время дополнительного перерыва серверное время сессии продолжает
         идти.
       </State>
-    </>
+    </div>
   );
 }

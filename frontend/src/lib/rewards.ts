@@ -34,6 +34,27 @@ const parse = (value: string | null): Record<string, unknown> => {
     return {};
   }
 };
+export function readLegacyRewards(userId: number, storage: Storage = localStorage) {
+  const inventory = parse(storage.getItem("user_inventory"));
+  const perUser = parse(storage.getItem(`todo:rewards:v1:${userId}`));
+  const source = { ...perUser, ...inventory };
+  const customRewards = Array.isArray(source.customRewards)
+    ? source.customRewards.filter(
+        (r): r is Reward =>
+          !!r && typeof r.title === "string" && typeof r.id === "string" &&
+          Number.isFinite(r.price) && r.price > 0,
+      )
+    : [];
+  const legacy = {
+    customRewards,
+    activeTheme: typeof source.activeTheme === "string" ? source.activeTheme : "default",
+    activeSound: typeof source.activeSound === "string" ? source.activeSound : "default",
+  };
+  return {
+    legacy,
+    available: customRewards.length > 0 || legacy.activeTheme !== "default" || legacy.activeSound !== "default",
+  };
+}
 export class LocalRewardsRepository implements RewardsRepository {
   constructor(private storage: Storage = localStorage) {}
   load(userId: number): Wallet {

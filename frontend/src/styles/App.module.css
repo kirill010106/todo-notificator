@@ -1821,3 +1821,111 @@
     font-size: 52px;
   }
 }
+
+.planChip {
+  display: inline-flex;
+  align-items: center;
+  padding: 7px 12px;
+  border: 1px solid var(--line);
+  border-radius: 30px;
+  font-size: 12px;
+  color: var(--accent);
+  text-decoration: none;
+  white-space: nowrap;
+}
+.menuSeparator {
+  height: 1px;
+  background: var(--line);
+  margin: 6px 0;
+}
+.focusActionLabel {
+  font-size: 11px;
+  margin-left: 4px;
+}
+.focusCard {
+  animation: focusEnter 280ms ease-out both;
+}
+.timerRing {
+  transition:
+    box-shadow 240ms ease,
+    background-color 240ms ease;
+}
+.focusCard h3,
+.focusCard > p,
+.focusCard > .stack {
+  animation: focusEnter 340ms ease-out both;
+}
+@keyframes focusEnter {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@media (max-width: 480px) {
+  .planChip {
+    font-size: 10px;
+    padding: 6px 8px;
+    max-width: 180px;
+    white-space: normal;
+  }
+  .focusActionLabel {
+    display: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .focusCard,
+  .focusCard h3,
+  .focusCard > p,
+  .focusCard > .stack {
+    animation: none;
+  }
+  .timerRing {
+    transition: none;
+  }
+}
+
+.focusPage > :first-child {
+  animation: focusEnter 240ms ease-out both;
+}
+.focusPage > :last-child {
+  animation: focusEnter 400ms ease-out both;
+}
+@media (prefers-reduced-motion: reduce) {
+  .focusPage > :first-child,
+  .focusPage > :last-child {
+    animation: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .topbar {
+    height: auto;
+    min-height: 100px;
+    padding-block: 12px;
+    display: grid;
+    grid-template-columns: 1fr auto;
+    gap: 8px;
+  }
+  .topbar > .row {
+    display: contents;
+  }
+  .topbar .mobileBrand {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .topbar .accountButton {
+    grid-column: 2;
+    grid-row: 1;
+  }
+  .topbar .planChip {
+    grid-column: 1/-1;
+    grid-row: 2;
+    justify-self: start;
+    max-width: none;
+    white-space: nowrap;
+  }
+}

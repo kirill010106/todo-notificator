@@ -11,7 +11,6 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -28,7 +27,6 @@ type Response struct {
 
 type CategoryCreator interface {
 	CreateCategory(ctx context.Context, category domain.Category) (int64, error)
-	CountCategories(ctx context.Context, userID int64) (int, error)
 }
 
 func (r Request) ToDomain(userID int64) domain.Category {
@@ -86,27 +84,15 @@ func New(log *slog.Logger, categoryCreator CategoryCreator, eventLogger EventLog
 			return
 		}
 
-		isPremium, _ := auth.GetPremiumStatus(r.Context())
-		if !isPremium {
-			count, err := categoryCreator.CountCategories(r.Context(), userID)
-			if err != nil {
-				l.Error("failed to count categories", sl.Err(err))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("internal server error"))
-				return
-			}
-			if count >= 3 {
-				l.Warn("category limit reached for free user", slog.Int("count", count))
-				render.Status(r, http.StatusForbidden)
-				render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий"))
-				return
-			}
-		}
-
 		l.Debug("request body decoded", slog.Any("request", req))
 		category := req.ToDomain(userID)
 		id, err := categoryCreator.CreateCategory(r.Context(), category)
 		if err != nil {
+			if errors.Is(err, storage.ErrCategoryLimitReached) {
+				render.Status(r, http.StatusForbidden)
+				render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий"))
+				return
+			}
 			if errors.Is(err, storage.ErrCategoryExists) {
 				l.Warn("category already exists", sl.Err(err))
 

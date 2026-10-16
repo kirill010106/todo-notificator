@@ -19,6 +19,7 @@ func AfterCommit(ctx context.Context, callback func()) {
 }
 
 type FocusState struct {
+	CancelUntil          *time.Time       `json:"cancel_until"`
 	ServerNow            time.Time        `json:"server_now"`
 	Phase                string           `json:"phase"`
 	Session              *PomodoroSession `json:"session"`
@@ -54,6 +55,7 @@ type OperationResponse struct {
 }
 
 type ContractError struct {
+	Fields  map[string]string
 	Code    string
 	Message string
 	Status  int

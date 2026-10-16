@@ -13,7 +13,7 @@ services:
     #  - "27017:27017" # disable external access to prod mongo for safety
 
   activity-logger:
-    image: ${IMAGE_BASE}-activity-logger:latest
+    image: ${IMAGE_BASE}-activity-logger:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
       mongo:
@@ -24,13 +24,21 @@ services:
       - default
 
   backend:
-    image: ${IMAGE_BASE}-backend:latest
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8082/api/v1/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    image: ${IMAGE_BASE}-backend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
       - activity-logger
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - CONFIG_PATH=/app/config/prod.yaml
+      - AUTO_MIGRATE=false
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:?set trusted Traefik IPs or CIDRs}
     env_file:
       - .env
     volumes:
@@ -60,10 +68,16 @@ services:
       - "traefik.docker.network=traefik"
 
   email-notifier:
-    image: ${IMAGE_BASE}-email:latest
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    image: ${IMAGE_BASE}-email:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
     environment:
       - DATABASE_URL=${DATABASE_URL}
       # ВАЖНО: Указываем путь к конфигу email
@@ -75,7 +89,12 @@ services:
       - ./notifiers/email/config:/app/config:ro
 
   frontend:
-    image: ${IMAGE_BASE}-frontend:latest
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+    image: ${IMAGE_BASE}-frontend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     networks:
       - default
@@ -88,6 +107,12 @@ services:
       - "traefik.http.routers.todofrontend.tls.certResolver=default"
       - "traefik.http.services.todofrontend.loadbalancer.server.port=80"
       - "traefik.docker.network=traefik"
+  db-tools:
+    image: ${POSTGRES_TOOLS_IMAGE:-postgres:16-alpine}
+    profiles: ["tools"]
+    environment:
+      - DATABASE_URL=${DATABASE_URL}
+
   prometheus:
     image: prom/prometheus
     volumes:

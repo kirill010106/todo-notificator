@@ -35,6 +35,21 @@ func Operation(store Executor, handler http.HandlerFunc) http.HandlerFunc {
 			writeError(w, 413, "BODY_TOO_LARGE", "Слишком большой запрос")
 			return
 		}
+		// Validate the current task wire shape before replaying an old operation.
+		// Cached pre-migration responses must not revive removed write fields.
+		if strings.HasPrefix(r.URL.Path, "/api/v1/tasks") && (r.Method == "POST" || r.Method == "PATCH") {
+			if err := domain.ValidateReminderFields(body); err != nil {
+				var problem *domain.ContractError
+				if errors.As(err, &problem) {
+					w.Header().Set("Content-Type", "application/json")
+					w.WriteHeader(problem.Status)
+					_ = json.NewEncoder(w).Encode(map[string]any{"status": "Error", "code": problem.Code, "message": problem.Message, "error": problem.Message, "field_errors": problem.Fields})
+				} else {
+					writeError(w, 400, "INVALID_TASK_REQUEST", err.Error())
+				}
+				return
+			}
+		}
 		result, err := store.ExecuteOperation(r.Context(), userID, key, r.Method+" "+r.URL.RequestURI(), body, func(ctx context.Context) domain.OperationResponse {
 			recorder := httptest.NewRecorder()
 			request := r.WithContext(ctx)
@@ -45,7 +60,9 @@ func Operation(store Executor, handler http.HandlerFunc) http.HandlerFunc {
 		if err != nil {
 			var problem *domain.ContractError
 			if errors.As(err, &problem) {
-				writeError(w, problem.Status, problem.Code, problem.Message)
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(problem.Status)
+				_ = json.NewEncoder(w).Encode(map[string]any{"status": "Error", "code": problem.Code, "message": problem.Message, "error": problem.Message, "field_errors": problem.Fields})
 			} else {
 				writeError(w, 500, "INTERNAL_ERROR", "Не удалось сохранить действие")
 			}
@@ -95,7 +112,7 @@ func Errors(next http.Handler) http.Handler {
 			payload["request_id"] = middleware.GetReqID(r.Context())
 			if fields, ok := payload["validation_errors"]; ok {
 				payload["field_errors"] = fields
-			} else {
+			} else if _, exists := payload["field_errors"]; !exists {
 				payload["field_errors"] = map[string]string{}
 			}
 			body, _ = json.Marshal(payload)

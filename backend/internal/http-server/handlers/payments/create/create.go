@@ -2,6 +2,8 @@ package create
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -51,6 +53,9 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 		if idempotencyKey == "" {
 			idempotencyKey = uuid.New().String()
 		}
+		// Provider keys share one shop-wide namespace, so isolate operations by user.
+		providerKey := sha256.Sum256([]byte(strconv.FormatInt(userID, 10) + ":" + idempotencyKey))
+		idempotencyKey = hex.EncodeToString(providerKey[:])
 
 		paymentHandler := yookassa.NewPaymentHandler(yooClient).WithIdempotencyKey(idempotencyKey)
 		redirectURL := returnURL

@@ -57,7 +57,9 @@ func TestDeletionRelationships(t *testing.T) {
 	}
 	newTask := func(t *testing.T, userID int64, categoryID *int64) int64 {
 		t.Helper()
-		id, err := s.SaveTask(ctx, domain.Task{UserID: userID, Title: t.Name(), Status: domain.TaskStatusPending, CategoryID: categoryID})
+		// Seed rows directly: the first invocation intentionally precedes newer migrations.
+		var id int64
+		err := s.DB.QueryRowContext(ctx, `INSERT INTO tasks(user_id,title,description,status,category_id) VALUES($1,$2,'','pending',$3) RETURNING id`, userID, t.Name(), categoryID).Scan(&id)
 		require.NoError(t, err)
 		return id
 	}

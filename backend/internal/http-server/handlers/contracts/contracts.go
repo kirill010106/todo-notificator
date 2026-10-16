@@ -101,3 +101,42 @@ func (h Handler) Today(w http.ResponseWriter, r *http.Request) {
 	}
 	reply(w, 200, result)
 }
+
+func (h Handler) Shop(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.GetUserID(r.Context())
+	wallet, ledger, err := h.Store.GetShop(r.Context(), user)
+	if err != nil {
+		problem(w, err)
+		return
+	}
+	reply(w, 200, map[string]any{"status": "OK", "wallet": wallet, "catalog": domain.ShopCatalog, "ledger": ledger})
+}
+func (h Handler) ShopAction(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.GetUserID(r.Context())
+	var request domain.ShopAction
+	decoder := json.NewDecoder(http.MaxBytesReader(w, r.Body, 1<<20))
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&request); err != nil {
+		reply(w, 400, map[string]any{"code": "VALIDATION_ERROR", "message": "Некорректное действие магазина"})
+		return
+	}
+	wallet, err := h.Store.ShopAction(r.Context(), user, request)
+	if err != nil {
+		problem(w, err)
+		return
+	}
+	reply(w, 200, map[string]any{"status": "OK", "wallet": wallet})
+}
+func (h Handler) Cancel(w http.ResponseWriter, r *http.Request) {
+	user, _ := auth.GetUserID(r.Context())
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil || id < 1 {
+		reply(w, 400, map[string]any{"code": "VALIDATION_ERROR", "message": "Некорректный номер сессии"})
+		return
+	}
+	if err := h.Store.CancelPomodoroSession(r.Context(), user, id); err != nil {
+		problem(w, err)
+		return
+	}
+	reply(w, 200, map[string]any{"status": "OK"})
+}

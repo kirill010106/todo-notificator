@@ -40,9 +40,12 @@ import {
   errorText,
   hasSession,
   refreshAccess,
+  endSession,
+  sessionStorageChanged,
+  json,
 } from "../lib/api";
-import { Brand, State } from "../components/ui";
-import { AppProvider, rewards, useApp, useBootstrap } from "./context";
+import { Brand, State, Button, Sheet } from "../components/ui";
+import { AppProvider, useApp, useBootstrap } from "./context";
 import { FocusProvider, FocusPage, useFocus } from "../features/focus/Focus";
 import { TasksPage } from "../features/tasks/Tasks";
 import { CategoriesPage } from "../features/categories/Categories";
@@ -50,6 +53,7 @@ import { ProgressPage } from "../features/progress/Progress";
 import { RewardsPage } from "../features/rewards/Rewards";
 import { AccountPage, setTheme } from "../features/account/Account";
 import { Landing, AuthPage, Verification } from "../features/public/Public";
+import { useShop } from "../lib/shop";
 import s from "../styles/App.module.css";
 
 const client = new QueryClient({
@@ -68,9 +72,10 @@ const client = new QueryClient({
 const links = [
   ["today", CalendarDays, "Сегодня"],
   ["tasks", ListTodo, "Задачи"],
+  ["categories", Folder, "Категории"],
   ["focus", Timer, "Фокус"],
   ["progress", ChartNoAxesCombined, "Прогресс"],
-  ["categories", Folder, "Категории"],
+  ["rewards", Gift, "Магазин"],
 ] as const;
 function Protected() {
   const navigate = useNavigate();
@@ -84,6 +89,7 @@ function Protected() {
     };
     const storage = (event: StorageEvent) => {
       if (event.key === "access_token" || event.key === "refresh_token") {
+        if (!sessionStorageChanged()) return;
         void cache.cancelQueries();
         cache.clear();
         navigate(hasSession() ? "/app/today" : "/login", { replace: true });
@@ -128,15 +134,18 @@ function Protected() {
 function Shell() {
   const { data, notify, refresh } = useApp();
   const focus = useFocus();
+  const wallet = useShop(data.user.id);
+  const [logout, setLogout] = useState(false);
+  const [loggingOut, setLoggingOut] = useState(false);
   const [paymentHandled, setPaymentHandled] = useState(false);
   useEffect(() => {
-    try {
-      const wallet = rewards.load(data.user.id);
-      document.documentElement.dataset.accent = wallet.activeTheme;
-    } catch {
-      /* Rewards page displays storage errors. */
-    }
-  }, [data.user.id]);
+    document.documentElement.dataset.accent =
+      wallet.data?.wallet.activeTheme || "default";
+    localStorage.setItem(
+      "todo:active-sound",
+      wallet.data?.wallet.activeSound || "default",
+    );
+  }, [wallet.data?.wallet.activeTheme, wallet.data?.wallet.activeSound]);
   useEffect(() => {
     if (!new URLSearchParams(location.search).has("payment") || paymentHandled)
       return;
@@ -218,7 +227,7 @@ function Shell() {
             <span>
               <strong>{data.user.email.split("@")[0]}</strong>
               <small>
-                {data.user.is_premium ? "Premium" : "Личный аккаунт"}
+                {data.user.is_premium ? "Premium" : "Бесплатный тариф"}
               </small>
             </span>
             <Settings2 size={17} />
@@ -234,6 +243,11 @@ function Shell() {
             <Brand />
           </div>
           <div className={s.row}>
+            <Link to="/app/account" className={s.planChip}>
+              {data.user.is_premium
+                ? "Premium"
+                : "Бесплатный · Попробовать Premium"}
+            </Link>
             <span className={s.online}>
               <span className={s.dot} />
               Место для важного
@@ -257,7 +271,11 @@ function Shell() {
                     <Link to="/app/categories">Категории</Link>
                   </Menu.Item>
                   <Menu.Item asChild>
-                    <Link to="/app/rewards">Награды</Link>
+                    <Link to="/app/rewards">Магазин и награды</Link>
+                  </Menu.Item>
+                  <Menu.Separator className={s.menuSeparator} />
+                  <Menu.Item onSelect={() => setLogout(true)}>
+                    Выйти из аккаунта
                   </Menu.Item>
                 </Menu.Content>
               </Menu.Portal>
@@ -288,17 +306,53 @@ function Shell() {
       <Link className={s.fab} aria-label="Создать задачу" to="/app/tasks?new=1">
         <Plus size={26} />
       </Link>
+      <Sheet
+        open={logout}
+        onClose={() => {
+          if (!loggingOut) setLogout(false);
+        }}
+        title="Выйти из аккаунта?"
+        description="Задачи и покупки сохранятся на сервере."
+        wide
+      >
+        <Button
+          disabled={loggingOut}
+          onClick={async () => {
+            setLoggingOut(true);
+            try {
+              await api("/logout", {
+                method: "POST",
+                body: json({
+                  refresh_token: localStorage.getItem("refresh_token"),
+                }),
+              });
+            } catch {
+              notify("Вышли на этом устройстве, но сервер не подтвердил отзыв сессии.");
+            } finally {
+              endSession();
+              setLoggingOut(false);
+            }
+          }}
+        >
+          Выйти
+        </Button>
+        <Button quiet disabled={loggingOut} onClick={() => setLogout(false)}>
+          Остаться
+        </Button>
+      </Sheet>
       <nav className={s.bottomNav}>
-        {links.slice(0, 3).map(([path, Icon, label]) => (
-          <NavLink
-            key={path}
-            to={`/app/${path}`}
-            className={({ isActive }) => (isActive ? s.bottomActive : "")}
-          >
-            <Icon size={21} />
-            <span>{label}</span>
-          </NavLink>
-        ))}
+        {links
+          .filter(([path]) => ["today", "tasks", "focus"].includes(path))
+          .map(([path, Icon, label]) => (
+            <NavLink
+              key={path}
+              to={`/app/${path}`}
+              className={({ isActive }) => (isActive ? s.bottomActive : "")}
+            >
+              <Icon size={21} />
+              <span>{label}</span>
+            </NavLink>
+          ))}
         <NavLink
           to="/app/more"
           className={({ isActive }) => (isActive ? s.bottomActive : "")}
@@ -318,7 +372,7 @@ function More() {
         {[
           [ChartNoAxesCombined, "Прогресс", "progress"],
           [Folder, "Категории", "categories"],
-          [Gift, "Награды", "rewards"],
+          [Gift, "Магазин и награды", "rewards"],
           [Settings2, "Аккаунт и настройки", "account"],
         ].map(([Icon, title, path]) => {
           const Symbol = Icon as typeof Folder;

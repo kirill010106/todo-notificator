@@ -24,13 +24,15 @@ describe("API session handling", () => {
   });
   it("shares one refresh across concurrent 401 responses", async () => {
     const { api } = await import("./api");
-    localStorage.setItem("access_token", "old");
+    const token = (n: number) =>
+      `x.${btoa(JSON.stringify({ uid: 7, n })).replace(/=/g, "")}.x`;
+    localStorage.setItem("access_token", token(1));
     localStorage.setItem("refresh_token", "refresh");
     const fetcher = vi.fn(async (input: string, init?: RequestInit) => {
       if (input.endsWith("/refresh"))
-        return Response.json({ access_token: "new", refresh_token: "rotated" });
+        return Response.json({ access_token: token(2), refresh_token: "rotated" });
       return (init?.headers as Record<string, string>).Authorization ===
-        "Bearer old"
+        `Bearer ${token(1)}`
         ? Response.json({ error: "expired" }, { status: 401 })
         : Response.json({ value: 1 });
     });
@@ -70,6 +72,42 @@ describe("API session handling", () => {
     resolve(Response.json({ access_token: "stale" }));
     await expect(pending).rejects.toThrow("Сессия завершена");
     expect(localStorage.getItem("access_token")).toBeNull();
+  });
+  it("never retries a pending write after another tab switches accounts", async () => {
+    const { api, sessionStorageChanged } = await import("./api");
+    const token = (uid: number) =>
+      `x.${btoa(JSON.stringify({ uid })).replace(/=/g, "")}.x`;
+    localStorage.setItem("access_token", token(1));
+    let rejectFirst!: (response: Response) => void;
+    const fetcher = vi.fn(
+      () => new Promise<Response>((resolve) => (rejectFirst = resolve)),
+    );
+    vi.stubGlobal("fetch", fetcher);
+    const pending = api("/tasks", { method: "POST", body: '{"title":"A private task"}' });
+    localStorage.setItem("access_token", token(2));
+    localStorage.setItem("refresh_token", "account-b-refresh");
+    sessionStorageChanged();
+    rejectFirst(Response.json({ error: "expired" }, { status: 401 }));
+    await expect(pending).rejects.toThrow("Сессия завершена");
+    expect(fetcher).toHaveBeenCalledTimes(1);
+  });
+  it("uses the rotated refresh token when retrying logout", async () => {
+    const { api } = await import("./api");
+    const token = (uid: number, n: number) =>
+      `x.${btoa(JSON.stringify({ uid, n })).replace(/=/g, "")}.x`;
+    localStorage.setItem("access_token", token(1, 1));
+    localStorage.setItem("refresh_token", "old-refresh");
+    const fetcher = vi.fn(async (input: string, init?: RequestInit) => {
+      if (input.endsWith("/refresh"))
+        return Response.json({ access_token: token(1, 2), refresh_token: "new-refresh" });
+      if ((init?.headers as Record<string, string>).Authorization === `Bearer ${token(1, 1)}`)
+        return Response.json({}, { status: 401 });
+      expect(JSON.parse(String(init?.body))).toEqual({ refresh_token: "new-refresh" });
+      return new Response(null, { status: 204 });
+    });
+    vi.stubGlobal("fetch", fetcher);
+    await api("/logout", { method: "POST", body: JSON.stringify({ refresh_token: "old-refresh" }) });
+    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/logout"))).toHaveLength(2);
   });
   it("keeps credentials on a transient refresh failure", async () => {
     const { refreshAccess } = await import("./api");

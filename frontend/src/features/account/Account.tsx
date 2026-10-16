@@ -76,7 +76,7 @@ export function AccountPage() {
               onClick={() =>
                 void run(async () => {
                   await api("/verify/resend", { method: "POST" });
-                  notify("Письмо отправлено. Проверь входящие и папку «Спам».");
+                  notify("Письмо подтверждения поставлено в очередь и скоро придёт.");
                 })
               }
             >
@@ -93,7 +93,7 @@ export function AccountPage() {
           <p>
             {data.user.is_premium
               ? "Все возможности доступны без ограничений тарифа."
-              : "Без лимитов на категории и активные напоминания. Полная история активности."}
+              : "Без лимитов на категории и число напоминаний на задачу. Полная история активности."}
           </p>
           <strong className={s.statNumber}>
             {data.user.is_premium ? "Спасибо, что с нами" : "49 ₽"}
@@ -107,15 +107,22 @@ export function AccountPage() {
                 disabled={busy}
                 onClick={() =>
                   void run(async () => {
+                    const keyName = `todo:payment-operation:${data.user.id}`;
+                    let key = sessionStorage.getItem(keyName);
+                    if (!key) {
+                      key = crypto.randomUUID();
+                      sessionStorage.setItem(keyName, key);
+                    }
                     const result = await api<{ confirmation_url?: string }>(
                       "/payments/create",
-                      { method: "POST" },
+                      { method: "POST", headers: { "Idempotency-Key": key } },
                     );
                     if (!result.confirmation_url)
                       throw new Error("Missing payment URL");
                     const url = new URL(result.confirmation_url);
                     if (url.protocol !== "https:")
                       throw new Error("Invalid payment URL");
+                    sessionStorage.removeItem(keyName);
                     location.assign(url.href);
                   })
                 }

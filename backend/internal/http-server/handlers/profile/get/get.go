@@ -19,15 +19,15 @@ type ProfileProvider interface {
 }
 
 type ProfileData struct {
-	ID                   int64  `json:"id"`
-	Email                string `json:"email"`
-	IsVerified           bool   `json:"is_verified"`
-	IsPremium            bool   `json:"is_premium"`
-	CategoriesCount      int    `json:"categories_count"`
-	ActiveRemindersCount int    `json:"active_reminders_count"`
-	CategoriesLimit      int    `json:"categories_limit"`
-	RemindersLimit       int    `json:"reminders_limit"`
-	Timezone             string `json:"timezone"`
+	ID                    int64  `json:"id"`
+	Email                 string `json:"email"`
+	IsVerified            bool   `json:"is_verified"`
+	IsPremium             bool   `json:"is_premium"`
+	CategoriesCount       int    `json:"categories_count"`
+	ActiveRemindersCount  int    `json:"active_reminders_count"`
+	CategoriesLimit       int    `json:"categories_limit"`
+	RemindersPerTaskLimit *int   `json:"reminders_per_task_limit"`
+	Timezone              string `json:"timezone"`
 }
 
 type Response struct {
@@ -68,25 +68,26 @@ func New(log *slog.Logger, provider ProfileProvider) http.HandlerFunc {
 		}
 
 		catLimit := 3
-		remLimit := 3
+		remLimit := new(int)
+		*remLimit = 2
 		if user.IsPremium {
 			catLimit = -1
-			remLimit = -1
+			remLimit = nil
 		}
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{
 			Response: resp.OK(),
 			Profile: ProfileData{
-				Timezone:             zone,
-				ID:                   user.ID,
-				Email:                user.Email,
-				IsVerified:           user.IsVerified,
-				IsPremium:            user.IsPremium,
-				CategoriesCount:      catCount,
-				ActiveRemindersCount: remCount,
-				CategoriesLimit:      catLimit,
-				RemindersLimit:       remLimit,
+				Timezone:              zone,
+				ID:                    user.ID,
+				Email:                 user.Email,
+				IsVerified:            user.IsVerified,
+				IsPremium:             user.IsPremium,
+				CategoriesCount:       catCount,
+				ActiveRemindersCount:  remCount,
+				CategoriesLimit:       catLimit,
+				RemindersPerTaskLimit: remLimit,
 			},
 		})
 	}

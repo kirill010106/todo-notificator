@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
   title: "ToDo Notificator API"
-  description: "API задач, категорий, Pomodoro, профиля, геймификации и платежей. Защищенные методы используют Authorization: Bearer <access_token>. Текущие Premium и подтверждение email проверяются по БД. Общий лимит: 100 запросов в минуту на IP; превышение возвращает JSON 429 и Retry-After. Ошибки, кроме webhook YooKassa, содержат code, message, request_id, field_errors; legacy error сохранен. Метрики доступны отдельно (:9091/metrics)."
-  version: 1.3.0
+  description: "API задач, категорий, Pomodoro, профиля, геймификации и платежей. Защищенные методы используют Authorization: Bearer <access_token>. Текущие Premium и подтверждение email проверяются по БД. Авторизованные запросы: 100 в минуту на аккаунт; login/register: 20 на адрес клиента; публичные: 100; неверная авторизация: 20; webhook YooKassa: 300. Бюджеты независимы, действуют на один процесс; адрес определяется с учётом доверенных прокси, IPv6 группируется по /64. Превышение возвращает JSON 429 и Retry-After. Ошибки, кроме webhook YooKassa, содержат code, message, request_id, field_errors; legacy error сохранен. Метрики доступны отдельно (:9091/metrics)."
+  version: 1.5.0
 servers:
   - url: "https://todoapi.chkpnk.ru/api/v1"
     description: Production
@@ -111,6 +111,51 @@ components:
         total:
           type: integer
           example: 42
+    TaskReminder:
+      type: object
+      required: [id, offset_minutes, scheduled_at, status, sent_at, legacy_absolute]
+      properties:
+        id:
+          type: integer
+          format: int64
+        offset_minutes:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          maximum: 52560000
+        scheduled_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          type: string
+          enum: [scheduled, sent, failed]
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        legacy_absolute:
+          type: boolean
+          readOnly: true
+          description: "Только перенесенные исключения; их исходный момент сохраняется."
+    ReminderInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        offset_minutes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 52560000
+          nullable: true
+          description: "Минуты до deadline, 0 — в момент срока. Обязательно для новых. null/пропуск допускается только при сохранении существующего legacy_absolute по id."
     Task:
       type: object
       properties:
@@ -132,18 +177,16 @@ components:
           type: string
           format: date-time
           nullable: true
-        reminder_at:
-          type: string
-          format: date-time
-          nullable: true
+        reminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskReminder"
         status:
           type: string
           enum:
             - pending
             - done
             - burnt
-        is_notified:
-          type: boolean
         pomodoros_taken:
           type: integer
           format: int64
@@ -151,7 +194,7 @@ components:
           type: boolean
           readOnly: true
           description: "Награда за завершение задачи уже выдана; управляется сервером и не сбрасывается при повторном открытии задачи."
-      description: "category_id, deadline и reminder_at отсутствуют при nil; pomodoros_taken отсутствует при нулевом значении."
+      description: "category_id и deadline отсутствуют при nil; reminders всегда массив; pomodoros_taken отсутствует при нулевом значении. Старые reminder_at/is_notified больше не принимаются в записи и не возвращаются."
     TaskListResponse:
       type: object
       properties:
@@ -290,6 +333,7 @@ components:
             - active
             - completed
             - abandoned
+            - cancelled
         started_at:
           type: string
           format: date-time
@@ -401,10 +445,11 @@ components:
           type: integer
           format: int64
           description: "3 для бесплатного тарифа, -1 для Премиум (без лимита)"
-        reminders_limit:
+        reminders_per_task_limit:
           type: integer
-          format: int64
-          description: "3 для бесплатного тарифа, -1 для Премиум (без лимита)"
+          nullable: true
+          description: "2 на каждую задачу Free; null для Premium. Общего лимита аккаунта нет."
+
         timezone:
           type: string
           example: Europe/Moscow
@@ -597,6 +642,53 @@ components:
         payment_status:
           type: string
           description: "Статус шлюза (например pending, waiting_for_capture, succeeded, canceled) или not_found. Может отсутствовать, если Премиум уже активен или нет ожидающего платежа."
+    ShopWallet:
+      type: object
+      required: [version, coins, customRewards, boosters, ownedItems, activeTheme, activeSound, activeBooster, imported]
+      properties:
+        version: {type: integer, example: 2}
+        coins: {type: integer, format: int64, minimum: 0, description: "Начальный баланс 50; +5 за первое завершение задачи, +10 за засчитанный фокус"}
+        customRewards:
+          type: array
+          items:
+            type: object
+            required: [id, title, price]
+            properties:
+              id: {type: string}
+              title: {type: string, maxLength: 120}
+              price: {type: integer, minimum: 10, maximum: 1000000}
+        boosters:
+          type: object
+          additionalProperties: {type: integer, minimum: 0}
+        ownedItems: {type: array, items: {type: string}}
+        activeTheme: {type: string, enum: [default, ocean, violet]}
+        activeSound: {type: string, enum: [default, bell]}
+        activeBooster: {type: boolean, description: "Следующая засчитанная сессия даёт 40 XP вместо 20. Отмена и короткая сессия не расходуют бустер"}
+        imported: {type: boolean, description: "Однократный импорт наград и настроек выполнен; старые монеты и бустеры не начисляются"}
+    ShopResponse:
+      type: object
+      properties:
+        wallet: {$ref: "#/components/schemas/ShopWallet"}
+        catalog:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              title: {type: string}
+              kind: {type: string, enum: [theme, sound, booster]}
+              price: {type: integer, minimum: 0}
+              description: {type: string}
+        ledger:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            properties:
+              id: {type: integer, format: int64}
+              coins: {type: integer, description: "Положительное начисление или отрицательное списание"}
+              description: {type: string}
+              created_at: {type: string, format: date-time}
     FocusState:
       type: object
       properties:
@@ -619,6 +711,11 @@ components:
           type: string
           format: date-time
           nullable: true
+        cancel_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Граница отмены случайного старта: started_at + 30 секунд. Доступность проверяется временем БД."
         remaining_work_seconds:
           type: integer
           minimum: 0
@@ -636,6 +733,7 @@ components:
               - resume
               - finish_rest
               - complete_session
+              - cancel
               - complete_task
               - abandon
               - take_break
@@ -731,11 +829,88 @@ components:
 security:
   - bearerAuth: []
 paths:
+  /me/shop:
+    get:
+      tags: [Profile]
+      summary: "Серверный кошелёк, каталог, инвентарь и последние 30 движений монет"
+      responses:
+        "200":
+          description: "Баланс и магазин текущего пользователя"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ShopResponse"}
+        "401":
+          description: "Необходима авторизация"
+  /me/shop/actions:
+    post:
+      tags: [Profile]
+      summary: "Покупка, применение, личная награда, активация XP-бустера или однократный импорт"
+      description: "Атомарно под блокировкой пользователя. Idempotency-Key обеспечивает повтор ответа без повторного списания. Каталожная цена определяется сервером. Данные другого аккаунта недоступны."
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: {type: string, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              additionalProperties: false
+              properties:
+                action: {type: string, enum: [buy, equip, create_personal, delete_personal, redeem_personal, activate_booster, import_legacy]}
+                item_id: {type: string, description: "ID предмета каталога или собственной личной награды"}
+                title: {type: string, maxLength: 120, description: "Для create_personal"}
+                price: {type: integer, minimum: 10, maximum: 1000000, description: "Только цена новой личной награды; покупки используют серверную цену"}
+                legacy:
+                  type: object
+                  description: "Для import_legacy: customRewards, activeTheme и activeSound. coins и boosters не переносятся. Повтор не изменяет данные."
+                  properties:
+                    customRewards: {type: array, items: {type: object}}
+                    activeTheme: {type: string}
+                    activeSound: {type: string}
+      responses:
+        "200":
+          description: "Сохранённый кошелёк; также общие поля ActionResponse"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallet: {$ref: "#/components/schemas/ShopWallet"}
+        "400": {description: "Некорректное действие или личная награда"}
+        "403": {description: "Предмет не принадлежит пользователю"}
+        "404": {description: "Предмет или личная награда не найдены"}
+        "409": {description: "Недостаточно монет, предмет уже куплен, бустер активен или отсутствует"}
+  /pomodoros/{id}/cancel:
+    post:
+      tags: [Pomodoros]
+      summary: "Отменить случайный старт в первые 30 секунд"
+      description: "Не начисляет и не списывает XP/монеты, не меняет задачу и не расходует бустер. Статус сессии cancelled. Граница проверяется по clock_timestamp() в транзакции."
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+        - in: header
+          name: Idempotency-Key
+          schema: {type: string, maxLength: 128}
+      responses:
+        "200":
+          description: "Сессия отменена"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ActionResponse"}
+        "400": {description: "Неверный идентификатор"}
+        "404": {description: "Сессия не найдена или принадлежит другому пользователю"}
+        "409": {description: "Сессия не активна или прошло 30 секунд; CANCEL_WINDOW_EXPIRED"}
   /register:
     post:
       tags:
         - Auth
       summary: "Регистрация пользователя"
+      description: "Письмо подтверждения и токен сохраняются в PostgreSQL outbox. Успешный ответ означает постановку письма в очередь; доставка SMTP выполняется email-worker с повторами."
       security: []
       requestBody:
         required: true
@@ -774,12 +949,6 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "Внутренняя ошибка сервера"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: "Пользователь создан, но сервис отправки письма недоступен"
           content:
             application/json:
               schema:
@@ -1059,11 +1228,11 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
-                reminder_at:
-                  type: string
-                  format: date-time
-                  nullable: true
-                  description: "Должно быть в будущем."
+                reminders:
+                  type: array
+                  description: "Состав настроек: отсутствует — сохранить, [] — удалить. До двух на задачу Free, Premium без тарифного лимита. id только для своей существующей строки; offset_minutes=null только для неизменного legacy_absolute. Новые требуют deadline и будущей отправки, одинаковые моменты запрещены."
+                  items:
+                    $ref: "#/components/schemas/ReminderInput"
                 category_id:
                   type: integer
                   format: int64
@@ -1091,7 +1260,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: "Лимит 3 активных напоминаний бесплатного тарифа достигнут"
+          description: "Лимит 2 напоминаний на задачу бесплатного тарифа достигнут"
           content:
             application/json:
               schema:
@@ -1608,12 +1777,6 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-        "502":
-          description: "Не удалось передать письмо сервису уведомлений"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
   /me/logs:
     get:
       tags:
@@ -1828,7 +1991,7 @@ paths:
       tags:
         - Tasks
       summary: "Массово завершить задачи"
-      description: "Обрабатываются задачи текущего пользователя со статусом, отличным от done: устанавливаются done и reward_claimed=true, очищается reminder_at, обновляется updated_at. Каждая задача, награда которой раньше не выдавалась, дает 10 очков. Уже награжденные задачи можно завершить без повторной награды. Чужие, несуществующие и уже завершенные задачи пропускаются; повторяющиеся ID учитываются один раз. Изменения всех выбранных задач, начисление очков, пересчет уровня и достижения сохраняются в одной транзакции. affected_count — число задач с измененным статусом, а не число наград. Повторные и параллельные запросы дополнительных наград не создают."
+      description: "Обрабатываются задачи текущего пользователя со статусом, отличным от done: устанавливаются done и reward_claimed=true, отменяются неотправленные напоминания, обновляется updated_at. Каждая задача, награда которой раньше не выдавалась, дает 10 очков. Уже награжденные задачи можно завершить без повторной награды. Чужие, несуществующие и уже завершенные задачи пропускаются; повторяющиеся ID учитываются один раз. Изменения всех выбранных задач, начисление очков, пересчет уровня и достижения сохраняются в одной транзакции. affected_count — число задач с измененным статусом, а не число наград. Повторные и параллельные запросы дополнительных наград не создают."
       requestBody:
         required: true
         content:
@@ -1906,13 +2069,13 @@ paths:
       tags:
         - Payments
       summary: "Создать платеж за Премиум"
-      description: "Без тела запроса. Текущая сумма в обработчике: 49.00 RUB за Премиум навсегда. Возвращает URL подтверждения; сумма задается сервером. После оплаты используйте /payments/sync и обновите JWT для новых признаков тарифа."
+      description: "Без тела запроса. Текущая сумма в обработчике: 49.00 RUB за Премиум навсегда. Возвращает URL подтверждения; сумма задается сервером. После оплаты используйте /payments/sync; тариф проверяется по БД без обновления JWT. Создание внешнего платежа выполняется вне транзакции игровых действий."
       parameters:
         - in: header
           name: Idempotency-Key
           schema:
             type: string
-          description: "Необязательный ключ идемпотентности YooKassa; если не передан, сервер генерирует UUID. Текущий CORS не разрешает этот заголовок для запросов браузера с другого origin."
+          description: "Ключ одной попытки оплаты: сохраняйте и повторяйте его при сетевой ошибке или ошибке записи в БД. Сервер изолирует ключ по ID пользователя перед передачей в YooKassa. Без ключа создаётся новая попытка с UUID. Заголовок разрешён CORS."
       responses:
         "200":
           description: "Успешный ответ"
@@ -1942,8 +2105,8 @@ paths:
     post:
       tags:
         - Payments
-      summary: "Проверить последний ожидающий платеж"
-      description: "Без тела запроса. Сверяет платеж со шлюзом и выдает Премиум при succeeded. При отсутствии настроенного шлюза ожидающий платеж остается pending."
+      summary: "Сверить ожидающие платежи"
+      description: "Без тела запроса. Сверяет ожидающие платежи со шлюзом от новых к старым до найденного succeeded или ошибки провайдера и выдает Премиум. При отсутствии настроенного шлюза платежи остаются pending."
       responses:
         "200":
           description: "Успешный ответ"
@@ -2020,12 +2183,18 @@ paths:
             text/plain:
               schema:
                 type: string
+        "503":
+          description: "Шлюз проверки платежей не настроен; данные не изменены"
+          content:
+            text/plain:
+              schema:
+                type: string
   /dev/toggle-premium:
     post:
       tags:
         - Dev
       summary: "Переключить Премиум для текущего пользователя"
-      description: "Без тела запроса. Регистрируется только при ENV=local; в остальных окружениях 404. Обновите JWT через /refresh или /login для применения нового is_premium в защищенных методах."
+      description: "Без тела запроса. Регистрируется только при ENV=local; в остальных окружениях 404. Новый тариф применяется по актуальным данным БД без обновления JWT."
       responses:
         "200":
           description: "Успешный ответ"
@@ -2125,11 +2294,11 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
-                reminder_at:
-                  type: string
-                  format: date-time
-                  nullable: true
-                  description: "Должно быть в будущем."
+                reminders:
+                  type: array
+                  description: "Состав настроек: отсутствует — сохранить, [] — удалить. До двух на задачу Free, Premium без тарифного лимита. id только для своей существующей строки; offset_minutes=null только для неизменного legacy_absolute. Новые требуют deadline и будущей отправки, одинаковые моменты запрещены."
+                  items:
+                    $ref: "#/components/schemas/ReminderInput"
                 category_id:
                   type: integer
                   format: int64
@@ -2163,7 +2332,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "403":
-          description: "Лимит 3 активных напоминаний бесплатного тарифа достигнут"
+          description: "Лимит 2 напоминаний на задачу бесплатного тарифа достигнут"
           content:
             application/json:
               schema:
@@ -2180,7 +2349,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: "Отсутствующее поле сохраняется. Явный null снимает deadline, reminder_at или category_id. Нужно хотя бы одно распознанное поле. Первое завершение дает 10 XP; reward_claimed сохраняется после повторного открытия. Изменение, награда и достижения атомарны. Ответ дополнен ActionResponse."
+      description: "Отсутствующее поле сохраняется. Явный null снимает deadline или category_id. reminders отсутствует — сохранить; [] — удалить; массив заменяет настройки атомарно. Для снятия срока нужно явно удалить связанные относительные напоминания. Перенос срока сдвигает неотправленные относительные напоминания. Отправленные не повторяются. При потере Premium существующие сверх двух работают, но добавление/перепланирование сверх лимита запрещено. Нужно хотя бы одно распознанное поле. Первое завершение дает 10 XP; reward_claimed сохраняется после повторного открытия. Изменение, награда и достижения атомарны. Ответ дополнен ActionResponse."
     delete:
       tags:
         - Tasks

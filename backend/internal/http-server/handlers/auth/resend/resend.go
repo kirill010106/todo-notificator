@@ -104,15 +104,7 @@ func New(log *slog.Logger, resender TokenResender, webhookURL, webhookSecret str
 			return
 		}
 
-		ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
-		defer cancel()
-
-		if err := sendVerificationWebhook(ctx, webhookURL, webhookSecret, user.Email, token); err != nil {
-			log.Error("failed to send verification webhook", sl.Err(err))
-			render.Status(r, http.StatusBadGateway)
-			render.JSON(w, r, resp.Error("failed to send verification email"))
-			return
-		}
+		log.Info("verification email queued", slog.Int64("user_id", userID))
 
 		render.JSON(w, r, resp.OK())
 	}

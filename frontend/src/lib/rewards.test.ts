@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { LocalRewardsRepository } from "./rewards";
+import { LocalRewardsRepository, readLegacyRewards } from "./rewards";
 describe("local rewards migration", () => {
   it("imports legacy data once, preserves originals and isolates accounts", () => {
     localStorage.setItem("focus_coins", "125");
@@ -30,5 +30,16 @@ describe("local rewards migration", () => {
       coins: 50,
       customRewards: [],
     });
+  });
+  it("detects transferable legacy rewards without initializing or rewriting storage", () => {
+    localStorage.setItem("focus_coins", "9000");
+    localStorage.setItem("user_inventory", JSON.stringify({ customRewards: [{ id: "r", title: "Кофе", price: 5 }], activeTheme: "ocean" }));
+    const before = localStorage.getItem("user_inventory");
+    expect(readLegacyRewards(1)).toMatchObject({
+      available: true,
+      legacy: { customRewards: [{ id: "r", title: "Кофе", price: 5 }], activeTheme: "ocean" },
+    });
+    expect(localStorage.getItem("focus_coins")).toBe("9000");
+    expect(localStorage.getItem("user_inventory")).toBe(before);
   });
 });
