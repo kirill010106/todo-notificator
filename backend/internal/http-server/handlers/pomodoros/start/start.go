@@ -58,6 +58,11 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 
 		session, err := provider.StartPomodoroSession(r.Context(), userID, req.TaskID)
 		if err != nil {
+			if errors.Is(err, storage.ErrTaskNotFound) {
+				render.Status(r, http.StatusNotFound)
+				render.JSON(w, r, resp.Error("task not found"))
+				return
+			}
 			if errors.Is(err, storage.ErrSessionActive) {
 				log.Info("user already has an active pomodoro session")
 
@@ -90,7 +95,7 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 			if req.TaskID != nil {
 				details["task_id"] = *req.TaskID
 			}
-			eventLogger.LogEvent(userID, "POMODORO_STARTED", session.ID, details)
+			domain.AfterCommit(r.Context(), func() { eventLogger.LogEvent(userID, "POMODORO_STARTED", session.ID, details) })
 		}
 
 		render.Status(r, http.StatusCreated)

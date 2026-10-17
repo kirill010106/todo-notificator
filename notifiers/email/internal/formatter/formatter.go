@@ -49,11 +49,11 @@ func New(appURL string) (*Formatter, error) {
 	}, nil
 }
 
-func (f *Formatter) Format(task domain.Task, interval time.Duration) (string, error) {
+func (f *Formatter) Format(task domain.Task, interval time.Duration, timezone string) (string, error) {
 	data := deadlineTemplateData{
 		Task:              task,
 		BadgeClass:        formatBadgeClass(interval),
-		DeadlineFormatted: formatDeadline(task.Deadline),
+		DeadlineFormatted: formatDeadline(task.Deadline, timezone),
 	}
 
 	var buf bytes.Buffer
@@ -111,11 +111,17 @@ func formatBadgeClass(interval time.Duration) string {
 	}
 }
 
-func formatDeadline(deadline *time.Time) string {
+func formatDeadline(deadline *time.Time, timezone string) string {
 	if deadline == nil {
 		return "не задан"
 	}
-	return deadline.Format("02.01.2006 at 15:04")
+	loc := time.UTC
+	if timezone != "Local" && timezone != "" {
+		if configured, err := time.LoadLocation(timezone); err == nil {
+			loc = configured
+		}
+	}
+	return deadline.In(loc).Format("02.01.2006 at 15:04")
 }
 
 func pluralDay(n int) string {

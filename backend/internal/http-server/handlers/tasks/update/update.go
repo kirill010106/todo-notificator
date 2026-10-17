@@ -17,19 +17,39 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 type Request struct {
-	Title       *string    `json:"title" validate:"omitempty,max=255"`
-	Description *string    `json:"description" validate:"omitempty,max=2000"`
-	Deadline    *time.Time `json:"deadline,omitzero"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	Status      *string    `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
-	CategoryID  *int64     `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	Title         *string                 `json:"title" validate:"omitempty,max=255"`
+	Description   *string                 `json:"description" validate:"omitempty,max=2000"`
+	Deadline      *time.Time              `json:"deadline,omitzero"`
+	Reminders     *[]domain.ReminderInput `json:"reminders"`
+	Status        *string                 `json:"status,omitempty" validate:"omitempty,oneof=pending done burnt"`
+	CategoryID    *int64                  `json:"category_id,omitempty" validate:"omitempty,gt=0"`
+	ClearDeadline bool                    `json:"-"`
+
+	ClearCategoryID bool `json:"-"`
+}
+
+func (r *Request) UnmarshalJSON(data []byte) error {
+	if err := domain.ValidateReminderFields(data); err != nil {
+		return err
+	}
+	type plain Request
+	if err := json.Unmarshal(data, (*plain)(r)); err != nil {
+		return err
+	}
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(data, &fields); err != nil {
+		return err
+	}
+	r.ClearDeadline = string(bytes.TrimSpace(fields["deadline"])) == "null"
+	r.ClearCategoryID = string(bytes.TrimSpace(fields["category_id"])) == "null"
+	return nil
 }
 
 type Response struct {
@@ -40,7 +60,6 @@ type Response struct {
 type TaskUpdater interface {
 	GetTask(ctx context.Context, userID int64, taskID int64) (domain.Task, error)
 	UpdateTask(ctx context.Context, userID int64, taskID int64, task domain.TaskUpdate) error
-	ApplyStatsDelta(ctx context.Context, userID int64, delta domain.StatsDelta) error
 	CountActiveReminders(ctx context.Context, userID int64) (int, error)
 }
 
@@ -52,21 +71,22 @@ type schedulerWebhookPayload struct {
 
 func (r Request) ToDomain() domain.TaskUpdate {
 	return domain.TaskUpdate{
-		Title:       r.Title,
-		Description: r.Description,
-		Deadline:    r.Deadline,
-		ReminderAt:  r.ReminderAt,
-		Status:      r.Status,
-		CategoryID:  r.CategoryID,
+		Title:         r.Title,
+		Description:   r.Description,
+		Deadline:      r.Deadline,
+		Reminders:     r.Reminders,
+		Status:        r.Status,
+		CategoryID:    r.CategoryID,
+		ClearDeadline: r.ClearDeadline, ClearCategoryID: r.ClearCategoryID,
 	}
 }
 
 func (r Request) IsEmpty() bool {
-	return r.Title == nil &&
+	return !r.ClearDeadline && !r.ClearCategoryID && r.Title == nil &&
 		r.Description == nil &&
 		r.Deadline == nil &&
 		r.Status == nil &&
-		r.ReminderAt == nil &&
+		r.Reminders == nil &&
 		r.CategoryID == nil
 }
 
@@ -106,6 +126,9 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 
 		err = render.DecodeJSON(r.Body, &req)
 		if err != nil {
+			if helpers.RenderContractError(w, r, err) {
+				return
+			}
 			if errors.Is(err, io.EOF) {
 				log.Warn("request body is empty")
 
@@ -116,7 +139,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			log.Warn("failed to decode request body", sl.Err(err))
 
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			render.JSON(w, r, resp.Error("Некорректный запрос: "+err.Error()))
 			return
 		}
 
@@ -143,17 +166,14 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			return
 		}
 
-		if req.ReminderAt != nil && req.ReminderAt.Before(time.Now()) {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("reminder_at must be in the future"))
-			return
-		}
-
 		log.Debug("request body decoded", slog.Any("request", req))
 
 		taskUpdate := req.ToDomain()
-		existingTask, err := taskUpdater.GetTask(r.Context(), userID, taskID)
+		_, err = taskUpdater.GetTask(r.Context(), userID, taskID)
 		if err != nil {
+			if helpers.RenderContractError(w, r, err) {
+				return
+			}
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				log.Info("task not found or access denied")
 				render.Status(r, http.StatusNotFound)
@@ -166,43 +186,11 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			return
 		}
 
-		if req.ReminderAt != nil {
-			isPremium, _ := auth.GetPremiumStatus(r.Context())
-			if !isPremium && existingTask.ReminderAt == nil {
-				remindersCount, err := taskUpdater.CountActiveReminders(r.Context(), userID)
-				if err != nil {
-					log.Error("failed to count active reminders", sl.Err(err))
-					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, resp.Error("internal server error"))
-					return
-				}
-				if remindersCount >= 3 {
-					log.Warn("active reminders limit reached for free user", slog.Int("count", remindersCount))
-					render.Status(r, http.StatusForbidden)
-					render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 активных напоминаний. Перейдите на Премиум для снятия ограничений"))
-					return
-				}
-			}
-		}
-
-		if req.Status != nil && *req.Status == domain.TaskStatusDone && existingTask.Status != domain.TaskStatusDone {
-			if !existingTask.RewardClaimed {
-				statsDelta := domain.StatsDelta{
-					PointsDelta: domain.TaskCompleteReward,
-				}
-
-				err := taskUpdater.ApplyStatsDelta(r.Context(), userID, statsDelta)
-				if err != nil {
-					log.Error("failed to apply return reward", sl.Err(err))
-				} else {
-					log.Info("reward granted for task completion", slog.Int("points", domain.TaskCompleteReward))
-				}
-
-				taskUpdate.RewardClaimed = true
-			}
-		}
 		err = taskUpdater.UpdateTask(r.Context(), userID, taskID, taskUpdate)
 		if err != nil {
+			if helpers.RenderContractError(w, r, err) {
+				return
+			}
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				log.Info("task not found or access denied")
 				render.Status(r, http.StatusNotFound)
@@ -230,7 +218,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			if req.Status != nil {
 				details["status"] = *req.Status
 			}
-			eventLogger.LogEvent(userID, "TASK_UPDATED", taskID, details)
+			domain.AfterCommit(r.Context(), func() { eventLogger.LogEvent(userID, "TASK_UPDATED", taskID, details) })
 		}
 
 		render.Status(r, http.StatusOK)
@@ -240,7 +228,7 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 		})
 
 		if webhookURL != "" {
-			go notifyScheduler(log, webhookURL, webhookSecret, "task_updated")
+			domain.AfterCommit(r.Context(), func() { go notifyScheduler(log, webhookURL, webhookSecret, "task_updated") })
 		}
 	}
 }

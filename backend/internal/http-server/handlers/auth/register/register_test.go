@@ -105,7 +105,7 @@ func TestRegister(t *testing.T) {
 	}
 }
 
-func TestRegister_WebhookFailure(t *testing.T) {
+func TestRegisterReturnsSuccessWhenEmailIsDurablyQueued(t *testing.T) {
 	webhookSrv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
@@ -122,7 +122,6 @@ func TestRegister_WebhookFailure(t *testing.T) {
 	var response Response
 	err := json.NewDecoder(w.Body).Decode(&response)
 	assert.NoError(t, err)
-	assert.Equal(t, http.StatusBadGateway, w.Code)
-	assert.Equal(t, "Error", response.Response.Status)
-	assert.Equal(t, "user created, but failed to send verification email", response.Response.Error)
+	assert.Equal(t, http.StatusOK, w.Code)
+	assert.Equal(t, "OK", response.Response.Status)
 }

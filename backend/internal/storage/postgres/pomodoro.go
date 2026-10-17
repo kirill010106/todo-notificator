@@ -15,39 +15,34 @@ import (
 // StartPomodoroSession creates a new active Pomodoro session.
 // If the user already has an active session, storage.ErrSessionActive is returned.
 func (s *Storage) StartPomodoroSession(ctx context.Context, userID int64, taskID *int64) (*domain.PomodoroSession, error) {
-	const op = "storage.postgres.StartPomodoroSession"
-
-	var activeID int64
-
-	err := s.DB.QueryRowContext(ctx, "SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2", userID, domain.PomodoroStatusActive).Scan(&activeID)
-	if err == nil {
-		return nil, fmt.Errorf("%s: %w", op, storage.ErrSessionActive)
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	query := `
-        INSERT INTO pomodoro_sessions (user_id, task_id, status, started_at, duration_minutes, breaks_used, created_at)
-        VALUES ($1, $2, $3, NOW(), 25, 0, NOW())
-        RETURNING id, user_id, task_id, status, started_at, duration_minutes, breaks_used, created_at
-    `
-
 	session := &domain.PomodoroSession{}
-	err = s.DB.QueryRowContext(ctx, query, userID, taskID, domain.PomodoroStatusActive).Scan(
-		&session.ID,
-		&session.UserID,
-		&session.TaskID,
-		&session.Status,
-		&session.StartedAt,
-		&session.DurationMinutes,
-		&session.BreaksUsed,
-		&session.CreatedAt,
-	)
+	err := s.withUserTx(ctx, userID, func(tx *sql.Tx) error {
+		if taskID != nil {
+			if _, err := lockTask(ctx, tx, userID, *taskID); err != nil {
+				return err
+			}
+		}
+		var activeID int64
+		err := tx.QueryRowContext(ctx, "SELECT id from pomodoro_sessions WHERE user_id = $1 AND status = $2", userID, domain.PomodoroStatusActive).Scan(&activeID)
+		if err == nil {
+			return storage.ErrSessionActive
+		}
+		if !errors.Is(err, sql.ErrNoRows) {
+			return err
+		}
+		if _, err := tx.ExecContext(ctx, `INSERT INTO focus_states(user_id) VALUES($1) ON CONFLICT(user_id) DO UPDATE SET recovery_ends_at=NULL,recovery_task_id=NULL`, userID); err != nil {
+			return err
+		}
+		return tx.QueryRowContext(ctx, `INSERT INTO pomodoro_sessions (user_id, task_id, status, started_at, duration_minutes, breaks_used, created_at)
+            VALUES ($1, $2, $3, NOW(), 25, 0, NOW())
+            RETURNING id, user_id, task_id, status, started_at, duration_minutes, breaks_used, created_at`,
+			userID, taskID, domain.PomodoroStatusActive).Scan(
+			&session.ID, &session.UserID, &session.TaskID, &session.Status, &session.StartedAt,
+			&session.DurationMinutes, &session.BreaksUsed, &session.CreatedAt)
+	})
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
+		return nil, fmt.Errorf("storage.postgres.StartPomodoroSession: %w", err)
 	}
-
 	return session, nil
 }
 
@@ -61,7 +56,7 @@ func (s *Storage) GetActivePomodoroSession(ctx context.Context, userID int64) (*
     `
 
 	session := &domain.PomodoroSession{}
-	err := s.DB.QueryRowContext(ctx, query, userID, domain.PomodoroStatusActive).Scan(
+	err := s.executor(ctx).QueryRowContext(ctx, query, userID, domain.PomodoroStatusActive).Scan(
 		&session.ID,
 		&session.UserID,
 		&session.TaskID,
@@ -86,11 +81,11 @@ func (s *Storage) AddPomodoroBreak(ctx context.Context, userID int64, sessionID 
 
 	query := `
         UPDATE pomodoro_sessions 
-        SET breaks_used = 1 
+        SET breaks_used = 1, break_started_at=CURRENT_TIMESTAMP, break_ends_at=CURRENT_TIMESTAMP+INTERVAL '5 minutes'
         WHERE id = $1 AND breaks_used = 0 AND status = $2 AND user_id = $3
     `
 
-	res, err := s.DB.ExecContext(ctx, query, sessionID, domain.PomodoroStatusActive, userID)
+	res, err := s.executor(ctx).ExecContext(ctx, query, sessionID, domain.PomodoroStatusActive, userID)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -131,7 +126,6 @@ func (s *Storage) StopPomodoroSession(ctx context.Context, userID int64, session
 	return nil
 }
 
-
 func (s *Storage) DeletePomodoroSession(ctx context.Context, userID int64, sessionID int64) error {
 	const op = "storage.postgres.DeletePomodoroSession"
 
@@ -141,7 +135,7 @@ func (s *Storage) DeletePomodoroSession(ctx context.Context, userID int64, sessi
 		return fmt.Errorf("%s: %w", op, err)
 	}
 
-rows, err := res.RowsAffected()
+	rows, err := res.RowsAffected()
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}

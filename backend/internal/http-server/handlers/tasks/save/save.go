@@ -14,18 +14,26 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
-	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
+
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
 
 type Request struct {
-	Title       string     `json:"title" validate:"required,max=255"`
-	Description string     `json:"description" validate:"max=2000"`
-	Deadline    *time.Time `json:"deadline,omitzero"`
-	ReminderAt  *time.Time `json:"reminder_at,omitzero"`
-	CategoryID  *int64     `json:"category_id,omitzero" validate:"omitzero,gt=0"`
+	Title       string                 `json:"title" validate:"required,max=255"`
+	Description string                 `json:"description" validate:"max=2000"`
+	Deadline    *time.Time             `json:"deadline,omitzero"`
+	Reminders   []domain.ReminderInput `json:"reminders"`
+	CategoryID  *int64                 `json:"category_id,omitzero" validate:"omitzero,gt=0"`
+}
+
+func (r *Request) UnmarshalJSON(data []byte) error {
+	if err := domain.ValidateReminderFields(data); err != nil {
+		return err
+	}
+	type plain Request
+	return json.Unmarshal(data, (*plain)(r))
 }
 
 type Response struct {
@@ -44,13 +52,13 @@ type EventLogger interface {
 
 func (r Request) ToDomain(userID int64) domain.Task {
 	task := domain.Task{
-		UserID:      userID,
-		Title:       r.Title,
-		Description: r.Description,
-		Deadline:    r.Deadline,
-		ReminderAt:  r.ReminderAt,
-		CategoryID:  r.CategoryID,
-		Status:      domain.TaskStatusPending,
+		UserID:         userID,
+		Title:          r.Title,
+		Description:    r.Description,
+		Deadline:       r.Deadline,
+		ReminderInputs: r.Reminders,
+		CategoryID:     r.CategoryID,
+		Status:         domain.TaskStatusPending,
 	}
 	return task
 }
@@ -75,6 +83,9 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
+			if helpers.RenderContractError(w, r, err) {
+				return
+			}
 			if errors.Is(err, io.EOF) {
 				l.Warn("request body is empty")
 
@@ -85,7 +96,7 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			l.Warn("failed to decode request body", sl.Err(err))
 
 			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			render.JSON(w, r, resp.Error("Некорректный запрос: "+err.Error()))
 			return
 		}
 
@@ -106,36 +117,15 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			return
 		}
 
-		if req.ReminderAt != nil {
-			if req.ReminderAt.Before(time.Now()) {
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("reminder_at must be in the future"))
-				return
-			}
-			isPremium, _ := auth.GetPremiumStatus(r.Context())
-			if !isPremium {
-				remindersCount, err := taskSaver.CountActiveReminders(r.Context(), userID)
-				if err != nil {
-					l.Error("failed to count active reminders", sl.Err(err))
-					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, resp.Error("internal server error"))
-					return
-				}
-				if remindersCount >= 3 {
-					l.Warn("active reminders limit reached for free user", slog.Int("count", remindersCount))
-					render.Status(r, http.StatusForbidden)
-					render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 активных напоминаний. Перейдите на Премиум для снятия ограничений"))
-					return
-				}
-			}
-		}
-
 		l.Debug("request body decoded", slog.Any("request", req))
 
 		task := req.ToDomain(userID)
 
 		id, err := taskSaver.SaveTask(r.Context(), task)
 		if err != nil {
+			if helpers.RenderContractError(w, r, err) {
+				return
+			}
 			if errors.Is(err, storage.ErrTaskExists) {
 				l.Warn("task already exists", sl.Err(err))
 
@@ -165,15 +155,17 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			ID:       id,
 		})
 
-		 if eventLogger != nil {
-            eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
-                "title":       req.Title,
-                "category_id": req.CategoryID,
-            })
-        }
+		if eventLogger != nil {
+			domain.AfterCommit(r.Context(), func() {
+				eventLogger.LogEvent(userID, "TASK_CREATED", id, map[string]any{
+					"title":       req.Title,
+					"category_id": req.CategoryID,
+				})
+			})
+		}
 
 		if webhookURL != "" {
-			go notifyScheduler(l, webhookURL, webhookSecret, "task_created")
+			domain.AfterCommit(r.Context(), func() { go notifyScheduler(l, webhookURL, webhookSecret, "task_created") })
 		}
 	}
 }

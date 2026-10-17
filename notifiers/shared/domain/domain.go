@@ -7,14 +7,14 @@ type Task struct {
 	UserID      int64
 	Title       string
 	Description string
-	ReminderAt  *time.Time
 	Deadline    *time.Time
 	Status      string
 }
 
 type User struct {
-	ID    int64
-	Email string
+	ID       int64
+	Email    string
+	Timezone string
 }
 
 type TaskWithUser struct {
@@ -27,4 +27,24 @@ type NotificationEvent struct {
 	User     User
 	FireAt   time.Time
 	Interval time.Duration
+}
+
+// ReminderDelivery carries a fencing token: an expired worker cannot acknowledge
+// a newer lease or a reminder rescheduled by the user.
+type ReminderDelivery struct {
+	ID            int64
+	LeaseToken    string
+	Attempt       int
+	ScheduledAt   time.Time
+	OffsetMinutes *int64
+	Task          Task
+	User          User
+}
+
+type VerificationDelivery struct {
+	ID         int64
+	LeaseToken string
+	Attempt    int
+	Email      string
+	Token      string
 }

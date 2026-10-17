@@ -8,12 +8,14 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
+	"github.com/kirill010106/todo-notificator/notifiers/email/internal/verification"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/scheduler"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
 )
@@ -50,13 +52,24 @@ func main() {
 		logger,
 		storage,
 		sndr,
-		cfg.Intervals,
 	)
+	verificationWorker := verification.New(logger, storage, sndr)
 
 	webhookHandler := webhook.New(logger, sched, sndr, cfg.Webhook.Secret)
+	mux := http.NewServeMux()
+	mux.Handle("/", webhookHandler)
+	mux.HandleFunc("GET /health", func(w http.ResponseWriter, r *http.Request) {
+		ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+		defer cancel()
+		if err := storage.DB.PingContext(ctx); err != nil {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.WriteHeader(http.StatusOK)
+	})
 	srv := &http.Server{
 		Addr:    cfg.Webhook.Address,
-		Handler: webhookHandler,
+		Handler: mux,
 	}
 
 	ctx, cancel := signal.NotifyContext(
@@ -75,6 +88,7 @@ func main() {
 	}()
 
 	logger.Info("starting email notifier")
+	go verificationWorker.Run(ctx)
 	sched.Start(ctx)
 
 	// Graceful shutdown webhook server

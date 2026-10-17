@@ -7,6 +7,44 @@ on:
     branches: [ "main" ]
 
 jobs:
+  release-safety:
+    name: Release safety
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s scripts -p 'test_deploy_release*.py' -v
+        env:
+          RUN_RELEASE_INTEGRATION: '1'
+      - run: pip install ansible-core
+      - run: ansible-playbook -i localhost, ansible/deploy.yml --syntax-check
+
+  frontend-ci:
+    name: Frontend CI
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm test
+      - run: npm run build
+      - run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: frontend-test-results
+          path: frontend/test-results/
+
   # 1. Проверка Backend (Go)
   backend-ci:
     name: Backend CI
@@ -22,14 +60,32 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.0'
+          go-version: '1.27.2'
           cache-dependency-path: ./backend/go.sum
 
       - name: Download Go modules
         run: go mod download
 
-      - name: Run Tests
-        run: go test -v ./...
+      - name: Run backend tests with PostgreSQL, race detection and coverage
+        run: |
+          docker info > /dev/null
+          packages=$(go list ./... | grep -v '/mocks\($\|/\)' | paste -sd, -)
+          go test -count=1 -p 1 -race -tags integration -covermode=atomic -coverpkg="$packages" -coverprofile=coverage.out ./...
+
+      - name: Enforce 80 percent backend coverage
+        run: |
+          go test ../scripts/coveragecheck
+          go run ../scripts/coveragecheck -profile coverage.out -min 80
+          go tool cover -html=coverage.out -o coverage.html
+
+      - name: Upload backend coverage
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: backend-coverage
+          path: |
+            backend/coverage.out
+            backend/coverage.html
 
   # 2. Проверка Notifiers (Go микросервисы)
   notifiers-ci:
@@ -42,7 +98,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.0'
+          go-version: '1.27.2'
           cache-dependency-path: |
             ./notifiers/go.sum
             ./notifiers/email/go.sum
@@ -74,7 +130,7 @@ jobs:
       - name: Set up Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.25.0'
+          go-version: '1.27.2'
           cache-dependency-path: ./activity-logger/go.sum
 
       - name: Download Go modules

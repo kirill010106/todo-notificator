@@ -17,8 +17,8 @@ var (
 )
 
 type Storage interface {
-	GetPendingTasksWithUsers(ctx context.Context) ([]domain.TaskWithUser, error)
-	GetNearestPendingReminderAt(ctx context.Context) (*time.Time, error)
-	GetTasksDueBetween(ctx context.Context, from, to time.Time) ([]domain.Task, error)
-	MarkTaskAsNotified(ctx context.Context, taskID int64) error
+	ClaimReminder(context.Context) (*domain.ReminderDelivery, error)
+	ReminderReady(context.Context, domain.ReminderDelivery) (bool, error)
+	FinishReminder(context.Context, domain.ReminderDelivery, error) error
+	NextReminderAt(context.Context) (*time.Time, error)
 }

@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"log"
 	"log/slog"
 	"net/http"
@@ -12,15 +13,14 @@ import (
 
 	_ "github.com/jackc/pgx/v5/stdlib"
 	"github.com/joho/godotenv"
-	todonotificator "github.com/kirill010106/todo-notificator"
 	"github.com/kirill010106/todo-notificator/clients/activitylogger"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	"github.com/kirill010106/todo-notificator/internal/http-server/router"
 	slogpretty "github.com/kirill010106/todo-notificator/internal/lib/handlers"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/internal/migrations"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
-	"github.com/pressly/goose/v3"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rvinnie/yookassa-sdk-go/yookassa"
@@ -36,6 +36,15 @@ func main() {
 	if err := godotenv.Load(); err != nil {
 		log.Println("info: .env file not found, trying to read from system environment")
 	}
+	if len(os.Args) > 1 {
+		if len(os.Args) != 2 || os.Args[1] != "migrate" {
+			log.Fatal("usage: backend [migrate]")
+		}
+		if err := migrate(); err != nil {
+			log.Fatal(err)
+		}
+		return
+	}
 	cfg := config.MustLoad()
 
 	appLog := setupLogger(cfg.Env)
@@ -43,6 +52,17 @@ func main() {
 
 	dbURL := os.Getenv("DATABASE_URL")
 	storage, err := postgres.New(dbURL)
+	if err != nil {
+		appLog.Error("failed to init db", sl.Err(err))
+		os.Exit(1)
+	}
+	defer storage.Close() //nolint:errcheck
+	// Production only checks the schema. The release step migrates while every
+	// old writer is stopped; starting the HTTP service cannot trigger a cutover.
+	if err := migrations.Run(storage.DB, cfg.AutoMigrate); err != nil {
+		appLog.Error("database schema is not ready", sl.Err(err))
+		os.Exit(1)
+	}
 
 	// Экспорт метрик пула БД в Prometheus
 	prometheus.MustRegister(
@@ -72,12 +92,6 @@ func main() {
 		}, func() float64 { return storage.DB.Stats().WaitDuration.Seconds() }),
 	)
 
-	if err != nil {
-		appLog.Error("failed to init db", sl.Err(err))
-		os.Exit(1)
-	}
-	defer storage.Close() //nolint:errcheck
-
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -87,20 +101,6 @@ func main() {
 	}
 
 	cleanup.StartTokenCleanup(ctx, appLog, storage, 24*time.Hour)
-
-	// Database Migrations
-	goose.SetBaseFS(todonotificator.MigrationsFS)
-	if err := goose.SetDialect("postgres"); err != nil {
-		appLog.Error("failed to setup migrations", sl.Err(err))
-		os.Exit(1)
-	}
-
-	appLog.Info("Running migrations...")
-	if err := goose.Up(storage.DB, "migrations"); err != nil {
-		appLog.Error("failed to run migrations", sl.Err(err))
-		os.Exit(1)
-	}
-	appLog.Info("Migrations applied successfully!")
 
 	// YooKassa Client
 	var (
@@ -121,8 +121,9 @@ func main() {
 	metricsMux.Handle("/metrics", promhttp.Handler())
 
 	metricsSrv := &http.Server{
-		Addr:    cfg.MetricsServer.Address,
-		Handler: metricsMux,
+		Addr:              cfg.MetricsServer.Address,
+		Handler:           metricsMux,
+		ReadHeaderTimeout: 3 * time.Second,
 	}
 
 	go func() {
@@ -145,10 +146,11 @@ func main() {
 	})
 
 	srv := &http.Server{
-		Addr:        cfg.Address,
-		Handler:     appRouter,
-		ReadTimeout: cfg.Timeout,
-		IdleTimeout: cfg.IdleTimeout,
+		Addr:              cfg.Address,
+		Handler:           appRouter,
+		ReadTimeout:       cfg.Timeout,
+		ReadHeaderTimeout: 3 * time.Second,
+		IdleTimeout:       cfg.IdleTimeout,
 	}
 
 	go func() {
@@ -178,6 +180,15 @@ func main() {
 	}
 
 	appLog.Info("server stopped gracefully")
+}
+
+func migrate() error {
+	storage, err := postgres.New(os.Getenv("DATABASE_URL"))
+	if err != nil {
+		return fmt.Errorf("connect for migration: %w", err)
+	}
+	defer storage.Close()
+	return migrations.Run(storage.DB, true)
 }
 
 func setupLogger(env string) *slog.Logger {

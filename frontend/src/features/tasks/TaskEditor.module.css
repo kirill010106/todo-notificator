@@ -1,0 +1,80 @@
+.dateField {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  position: relative;
+}
+.dateField legend {
+  font-size: 0.9rem;
+  margin-bottom: 10px;
+}
+.dateRow {
+  display: grid;
+  grid-template-columns: minmax(0, 1.5fr) 34px minmax(0, 1fr);
+  gap: 6px;
+  align-items: center;
+}
+.dateRow input,
+.offsetRow input {
+  min-width: 0;
+  width: 100%;
+}
+.nativePicker {
+  position: absolute;
+  width: 1px !important;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+  bottom: 0;
+  left: 0;
+}
+.reminders {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+.reminders h3 {
+  margin: 0;
+}
+.reminder {
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  min-width: 0;
+  display: grid;
+  gap: 12px;
+}
+.reminder legend {
+  font-size: 0.85rem;
+  padding: 0 5px;
+}
+.rowHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.85rem;
+  gap: 8px;
+}
+.offsetRow {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+.textButton {
+  color: var(--accent);
+  background: none;
+  border: 0;
+  text-align: left;
+  padding: 4px 0;
+  cursor: pointer;
+  font: inherit;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.dateField p,
+.reminder p {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.5;
+}

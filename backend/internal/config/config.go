@@ -1,8 +1,11 @@
 package config
 
 import (
+	"fmt"
 	"log"
+	"net/netip"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/ilyakaznacheev/cleanenv"
@@ -20,6 +23,7 @@ type Config struct {
 	Webhook         Webhook       `yaml:"webhook"`
 	Clients         Clients       `yaml:"clients"`
 	YooKassa        YooKassa      `yaml:"yookassa"`
+	AutoMigrate     bool          `yaml:"auto_migrate" env:"AUTO_MIGRATE" env-default:"false"`
 }
 
 type YooKassa struct {
@@ -43,10 +47,30 @@ type Webhook struct {
 }
 
 type HTTPServer struct {
-	ClientURL   string        `yaml:"client_url" env:"CLIENT_URL" env-default:"http://localhost:3000"`
-	Address     string        `yaml:"address" env-default:"localhost:8080"`
-	Timeout     time.Duration `yaml:"timeout" env-default:"4s"`
-	IdleTimeout time.Duration `yaml:"idle_timeout" env-default:"60s"`
+	TrustedProxies []string      `yaml:"trusted_proxies" env:"TRUSTED_PROXIES" env-separator:","`
+	Address        string        `yaml:"address" env-default:"localhost:8080"`
+	Timeout        time.Duration `yaml:"timeout" env-default:"4s"`
+	IdleTimeout    time.Duration `yaml:"idle_timeout" env-default:"60s"`
+}
+
+// ProxyPrefixes rejects accidental trust of the entire Internet. Empty means
+// direct connections only; private networks are not implicitly trusted.
+func (c *Config) ProxyPrefixes() ([]netip.Prefix, error) {
+	var result []netip.Prefix
+	for _, raw := range c.TrustedProxies {
+		raw = strings.TrimSpace(raw)
+		p, err := netip.ParsePrefix(raw)
+		if err != nil {
+			if addr, addrErr := netip.ParseAddr(raw); addrErr == nil {
+				p, err = netip.PrefixFrom(addr.Unmap(), addr.Unmap().BitLen()), nil
+			}
+		}
+		if err != nil || p.Bits() == 0 {
+			return nil, fmt.Errorf("invalid trusted proxy %q: specify an IP or a restricted CIDR", raw)
+		}
+		result = append(result, p.Masked())
+	}
+	return result, nil
 }
 
 type MetricsServer struct {
@@ -66,6 +90,9 @@ func MustLoad() *Config {
 	var cfg Config
 	if err := cleanenv.ReadConfig(configPath, &cfg); err != nil {
 		log.Fatalf("cannot read config %s", err)
+	}
+	if _, err := cfg.ProxyPrefixes(); err != nil {
+		log.Fatal(err)
 	}
 	return &cfg
 }

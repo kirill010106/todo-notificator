@@ -1,37 +1,40 @@
 openapi: 3.0.3
 info:
-  title: ToDo Notificator API
-  description: API для управления задачами, категориями, статистикой и помодоро-сессиями
-  version: 1.2.0
+  title: "ToDo Notificator API"
+  description: "API задач, категорий, Pomodoro, профиля, геймификации и платежей. Защищенные методы используют Authorization: Bearer <access_token>. Текущие Premium и подтверждение email проверяются по БД. Авторизованные запросы: 100 в минуту на аккаунт; login/register: 20 на адрес клиента; публичные: 100; неверная авторизация: 20; webhook YooKassa: 300. Бюджеты независимы, действуют на один процесс; адрес определяется с учётом доверенных прокси, IPv6 группируется по /64. Превышение возвращает JSON 429 и Retry-After. Ошибки, кроме webhook YooKassa, содержат code, message, request_id, field_errors; legacy error сохранен. Метрики доступны отдельно (:9091/metrics)."
+  version: 1.5.0
 servers:
-  - url: https://todoapi.chkpnk.ru/api/v1
+  - url: "https://todoapi.chkpnk.ru/api/v1"
     description: Production
-  - url: http://localhost:8082/api/v1
-    description: Local backend
-
+  - url: "http://localhost:8082/api/v1"
+    description: "Local backend"
 tags:
   - name: Auth
-    description: Аутентификация и JWT
+    description: "Аутентификация и JWT"
   - name: Tasks
-    description: CRUD задач
+    description: "CRUD задач"
   - name: Categories
-    description: CRUD категорий пользователя
+    description: "CRUD категорий пользователя"
   - name: Stats
-    description: Статистика пользователя
+    description: "Статистика пользователя"
   - name: Pomodoros
-    description: Управление pomodoro-сессиями
+    description: "Управление pomodoro-сессиями"
   - name: ActivityLogs
-    description: Лог активности пользователя
+    description: "Лог активности пользователя"
   - name: System
-    description: Системные ручки
-
+    description: "Системные ручки"
+  - name: Profile
+    description: "Профиль, начальное состояние, достижения и ежедневные задания"
+  - name: Payments
+    description: "Премиум через YooKassa"
+  - name: Dev
+    description: "Методы, доступные только при ENV=local"
 components:
   securitySchemes:
     bearerAuth:
       type: http
       scheme: bearer
       bearerFormat: JWT
-
   schemas:
     StatusResponse:
       type: object
@@ -39,7 +42,6 @@ components:
         status:
           type: string
           example: OK
-
     ErrorResponse:
       type: object
       properties:
@@ -48,8 +50,21 @@ components:
           example: Error
         error:
           type: string
-          example: invalid request
-
+          example: "invalid request"
+        code:
+          type: string
+        validation_errors:
+          type: object
+          additionalProperties:
+            type: string
+        message:
+          type: string
+        request_id:
+          type: string
+        field_errors:
+          type: object
+          additionalProperties:
+            type: string
     TokensResponse:
       type: object
       properties:
@@ -63,8 +78,8 @@ components:
         expires_in:
           type: integer
           format: int64
-          example: 3600
-
+          example: 900
+          description: "Время жизни access token в секундах; локально 15 минут. Refresh token локально действует 168 часов."
     RegisterResponse:
       type: object
       properties:
@@ -74,17 +89,16 @@ components:
         user_id:
           type: integer
           format: int64
-
     LogoutRequest:
       type: object
-      required: [refresh_token]
+      required:
+        - refresh_token
       properties:
         refresh_token:
           type: string
         all_devices:
           type: boolean
           default: false
-
     Pagination:
       type: object
       properties:
@@ -97,7 +111,51 @@ components:
         total:
           type: integer
           example: 42
-
+    TaskReminder:
+      type: object
+      required: [id, offset_minutes, scheduled_at, status, sent_at, legacy_absolute]
+      properties:
+        id:
+          type: integer
+          format: int64
+        offset_minutes:
+          type: integer
+          format: int64
+          nullable: true
+          minimum: 0
+          maximum: 52560000
+        scheduled_at:
+          type: string
+          format: date-time
+          readOnly: true
+        status:
+          type: string
+          enum: [scheduled, sent, failed]
+          readOnly: true
+        sent_at:
+          type: string
+          format: date-time
+          nullable: true
+          readOnly: true
+        legacy_absolute:
+          type: boolean
+          readOnly: true
+          description: "Только перенесенные исключения; их исходный момент сохраняется."
+    ReminderInput:
+      type: object
+      additionalProperties: false
+      properties:
+        id:
+          type: integer
+          format: int64
+          minimum: 1
+        offset_minutes:
+          type: integer
+          format: int64
+          minimum: 0
+          maximum: 52560000
+          nullable: true
+          description: "Минуты до deadline, 0 — в момент срока. Обязательно для новых. null/пропуск допускается только при сохранении существующего legacy_absolute по id."
     Task:
       type: object
       properties:
@@ -119,21 +177,24 @@ components:
           type: string
           format: date-time
           nullable: true
-        reminder_at:
-          type: string
-          format: date-time
-          nullable: true
+        reminders:
+          type: array
+          items:
+            $ref: "#/components/schemas/TaskReminder"
         status:
           type: string
-          enum: [pending, done, burnt]
-        is_notified:
-          type: boolean
+          enum:
+            - pending
+            - done
+            - burnt
         pomodoros_taken:
           type: integer
           format: int64
         reward_claimed:
           type: boolean
-
+          readOnly: true
+          description: "Награда за завершение задачи уже выдана; управляется сервером и не сбрасывается при повторном открытии задачи."
+      description: "category_id и deadline отсутствуют при nil; reminders всегда массив; pomodoros_taken отсутствует при нулевом значении. Старые reminder_at/is_notified больше не принимаются в записи и не возвращаются."
     TaskListResponse:
       type: object
       properties:
@@ -143,10 +204,9 @@ components:
         tasks:
           type: array
           items:
-            $ref: '#/components/schemas/Task'
+            $ref: "#/components/schemas/Task"
         pagination:
-          $ref: '#/components/schemas/Pagination'
-
+          $ref: "#/components/schemas/Pagination"
     TaskCreatedResponse:
       type: object
       properties:
@@ -156,7 +216,6 @@ components:
         id:
           type: integer
           format: int64
-
     TaskUpdatedResponse:
       type: object
       properties:
@@ -166,7 +225,6 @@ components:
         task_id:
           type: integer
           format: int64
-
     Category:
       type: object
       properties:
@@ -178,7 +236,6 @@ components:
           format: int64
         name:
           type: string
-
     CategoriesResponse:
       type: object
       properties:
@@ -188,8 +245,7 @@ components:
         categories:
           type: array
           items:
-            $ref: '#/components/schemas/Category'
-
+            $ref: "#/components/schemas/Category"
     CategoryCreatedResponse:
       type: object
       properties:
@@ -199,7 +255,6 @@ components:
         id:
           type: integer
           format: int64
-
     CategoryUpdatedResponse:
       type: object
       properties:
@@ -209,7 +264,6 @@ components:
         category_id:
           type: integer
           format: int64
-
     UserStats:
       type: object
       properties:
@@ -247,7 +301,11 @@ components:
           type: string
           format: date-time
           nullable: true
-
+        last_activity_date:
+          type: string
+          format: date-time
+          description: "Отсутствует, если даты активности нет"
+      description: "total_pomodoros, total_burnt_tasks, current_streak и best_streak могут отсутствовать при nil."
     UserStatsResponse:
       type: object
       properties:
@@ -255,36 +313,7 @@ components:
           type: string
           example: OK
         user_stats:
-          $ref: '#/components/schemas/UserStats'
-
-    UserStatsUpdate:
-      type: object
-      properties:
-        points:
-          type: integer
-          format: int64
-          nullable: true
-        level:
-          type: integer
-          format: int64
-          nullable: true
-        total_pomodoros:
-          type: integer
-          format: int64
-          nullable: true
-        total_burnt_tasks:
-          type: integer
-          format: int64
-          nullable: true
-        current_streak:
-          type: integer
-          format: int64
-          nullable: true
-        best_streak:
-          type: integer
-          format: int64
-          nullable: true
-
+          $ref: "#/components/schemas/UserStats"
     PomodoroSession:
       type: object
       properties:
@@ -300,7 +329,11 @@ components:
           nullable: true
         status:
           type: string
-          enum: [active, completed, abandoned]
+          enum:
+            - active
+            - completed
+            - abandoned
+            - cancelled
         started_at:
           type: string
           format: date-time
@@ -319,7 +352,7 @@ components:
           type: string
           format: date-time
           nullable: true
-
+      description: "task_id отсутствует у свободной сессии и после удаления связанной задачи; breaks_used отсутствует при нулевом значении. Активная сессия при удалении задачи становится abandoned."
     PomodoroStartResponse:
       type: object
       properties:
@@ -327,8 +360,7 @@ components:
           type: string
           example: OK
         session:
-          $ref: '#/components/schemas/PomodoroSession'
-
+          $ref: "#/components/schemas/PomodoroSession"
     PomodoroActiveSessionConflictResponse:
       type: object
       properties:
@@ -337,10 +369,9 @@ components:
           example: Error
         error:
           type: string
-          example: pomodoro session is already active
+          example: "pomodoro session is already active"
         active_session:
-          $ref: '#/components/schemas/PomodoroSession'
-
+          $ref: "#/components/schemas/PomodoroSession"
     ActivityLog:
       type: object
       properties:
@@ -361,7 +392,6 @@ components:
         timestamp:
           type: string
           format: date-time
-
     ActivityLogsResponse:
       type: object
       properties:
@@ -371,16 +401,516 @@ components:
         logs:
           type: array
           items:
-            $ref: '#/components/schemas/ActivityLog'
+            $ref: "#/components/schemas/ActivityLog"
+    APIError:
+      type: object
+      properties:
+        status:
+          type: integer
+          example: 404
+        message:
+          type: string
+        code:
+          type: string
+        request_id:
+          type: string
+        field_errors:
+          type: object
+          additionalProperties:
+            type: string
+      required:
+        - status
+        - message
+        - code
+    Profile:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        email:
+          type: string
+          format: email
+        is_verified:
+          type: boolean
+        is_premium:
+          type: boolean
+        categories_count:
+          type: integer
+          format: int64
+        active_reminders_count:
+          type: integer
+          format: int64
+        categories_limit:
+          type: integer
+          format: int64
+          description: "3 для бесплатного тарифа, -1 для Премиум (без лимита)"
+        reminders_per_task_limit:
+          type: integer
+          nullable: true
+          description: "2 на каждую задачу Free; null для Premium. Общего лимита аккаунта нет."
 
+        timezone:
+          type: string
+          example: Europe/Moscow
+          description: "IANA timezone. По умолчанию UTC; определяет день заданий, наград и серии."
+    Achievement:
+      type: object
+      properties:
+        id:
+          type: integer
+          format: int64
+        user_id:
+          type: integer
+          format: int64
+        code:
+          type: string
+        title:
+          type: string
+        description:
+          type: string
+        icon:
+          type: string
+        points:
+          type: integer
+        unlocked:
+          type: boolean
+        unlocked_at:
+          type: string
+          format: date-time
+          description: "Отсутствует у незаработанного достижения"
+    DailyQuest:
+      type: object
+      properties:
+        code:
+          type: string
+        title:
+          type: string
+        icon:
+          type: string
+        target:
+          type: integer
+        current:
+          type: integer
+        completed:
+          type: boolean
+        reward_xp:
+          type: integer
+        claimed:
+          type: boolean
+    GamificationProfile:
+      type: object
+      properties:
+        level:
+          type: integer
+          format: int64
+        points:
+          type: integer
+          format: int64
+        current_level_xp:
+          type: integer
+          format: int64
+        next_level_xp:
+          type: integer
+          format: int64
+        progress_percent:
+          type: number
+          format: double
+        rank_title:
+          type: string
+        rank_icon:
+          type: string
+        streak:
+          type: integer
+          format: int64
+        best_streak:
+          type: integer
+          format: int64
+        streak_multiplier:
+          type: number
+          format: double
+        daily_quests:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyQuest"
+        unlocked_count:
+          type: integer
+        total_achievements:
+          type: integer
+        daily_chest_claimed:
+          type: boolean
+    ProfileResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        profile:
+          $ref: "#/components/schemas/Profile"
+    BootstrapResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        user:
+          $ref: "#/components/schemas/Profile"
+        categories:
+          type: array
+          items:
+            $ref: "#/components/schemas/Category"
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+        stats:
+          $ref: "#/components/schemas/UserStats"
+        gamification:
+          $ref: "#/components/schemas/GamificationProfile"
+        active_pomodoro:
+          $ref: "#/components/schemas/PomodoroSession"
+        focus:
+          $ref: "#/components/schemas/FocusState"
+      description: "Добавлены user.timezone и focus. active_pomodoro сохранен для совместимости. Ошибка загрузки focus возвращает 500; остальные необязательные поля сохраняют прежнее поведение."
+    AchievementsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Achievement"
+    QuestsResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        quests:
+          type: array
+          items:
+            $ref: "#/components/schemas/DailyQuest"
+    BulkTasksRequest:
+      type: object
+      properties:
+        task_ids:
+          type: array
+          minItems: 1
+          items:
+            type: integer
+            format: int64
+      required:
+        - task_ids
+    BulkTasksResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        affected_count:
+          type: integer
+          format: int64
+    PaymentCreatedResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        confirmation_url:
+          type: string
+          format: uri
+    PremiumResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        is_premium:
+          type: boolean
+    PaymentSyncResponse:
+      type: object
+      properties:
+        status:
+          type: string
+          example: OK
+        is_premium:
+          type: boolean
+        payment_status:
+          type: string
+          description: "Статус шлюза (например pending, waiting_for_capture, succeeded, canceled) или not_found. Может отсутствовать, если Премиум уже активен или нет ожидающего платежа."
+    ShopWallet:
+      type: object
+      required: [version, coins, customRewards, boosters, ownedItems, activeTheme, activeSound, activeBooster, imported]
+      properties:
+        version: {type: integer, example: 2}
+        coins: {type: integer, format: int64, minimum: 0, description: "Начальный баланс 50; +5 за первое завершение задачи, +10 за засчитанный фокус"}
+        customRewards:
+          type: array
+          items:
+            type: object
+            required: [id, title, price]
+            properties:
+              id: {type: string}
+              title: {type: string, maxLength: 120}
+              price: {type: integer, minimum: 10, maximum: 1000000}
+        boosters:
+          type: object
+          additionalProperties: {type: integer, minimum: 0}
+        ownedItems: {type: array, items: {type: string}}
+        activeTheme: {type: string, enum: [default, ocean, violet]}
+        activeSound: {type: string, enum: [default, bell]}
+        activeBooster: {type: boolean, description: "Следующая засчитанная сессия даёт 40 XP вместо 20. Отмена и короткая сессия не расходуют бустер"}
+        imported: {type: boolean, description: "Однократный импорт наград и настроек выполнен; старые монеты и бустеры не начисляются"}
+    ShopResponse:
+      type: object
+      properties:
+        wallet: {$ref: "#/components/schemas/ShopWallet"}
+        catalog:
+          type: array
+          items:
+            type: object
+            properties:
+              id: {type: string}
+              title: {type: string}
+              kind: {type: string, enum: [theme, sound, booster]}
+              price: {type: integer, minimum: 0}
+              description: {type: string}
+        ledger:
+          type: array
+          maxItems: 30
+          items:
+            type: object
+            properties:
+              id: {type: integer, format: int64}
+              coins: {type: integer, description: "Положительное начисление или отрицательное списание"}
+              description: {type: string}
+              created_at: {type: string, format: date-time}
+    FocusState:
+      type: object
+      properties:
+        server_now:
+          type: string
+          format: date-time
+        phase:
+          type: string
+          enum:
+            - idle
+            - focus
+            - extra_break
+            - recovery_break
+        session:
+          type: object
+          nullable: true
+          allOf:
+            - $ref: "#/components/schemas/PomodoroSession"
+        phase_ends_at:
+          type: string
+          format: date-time
+          nullable: true
+        cancel_until:
+          type: string
+          format: date-time
+          nullable: true
+          description: "Граница отмены случайного старта: started_at + 30 секунд. Доступность проверяется временем БД."
+        remaining_work_seconds:
+          type: integer
+          minimum: 0
+          maximum: 1500
+        completed_in_cycle:
+          type: integer
+          minimum: 0
+          maximum: 3
+        available_actions:
+          type: array
+          items:
+            type: string
+            enum:
+              - start
+              - resume
+              - finish_rest
+              - complete_session
+              - cancel
+              - complete_task
+              - abandon
+              - take_break
+      description: "Авторитетное состояние фокуса. idle всегда 200. Дополнительный перерыв продолжается до 5 минут и не останавливает рабочие часы. Resume возвращает к той же сессии. После засчитанной сессии recovery_break 5 минут, после каждой четвертой — 15. Отдых сохраняется после истечения времени до resume или finish_rest; resume начинает следующую сессию. Время вычислять относительно server_now и пересчитывать при возвращении во вкладку."
+    FocusResponse:
+      type: object
+      properties:
+        status:
+          type: string
+        focus:
+          $ref: "#/components/schemas/FocusState"
+    ActionResult:
+      type: object
+      properties:
+        pomodoro_counted:
+          type: boolean
+        task_completed:
+          type: boolean
+        changed_task_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+        skipped_task_ids:
+          type: array
+          items:
+            type: integer
+            format: int64
+    ActionRewards:
+      type: object
+      properties:
+        task_xp:
+          type: integer
+        pomodoro_xp:
+          type: integer
+        achievement_xp:
+          type: integer
+        quest_xp:
+          type: integer
+        penalty_xp:
+          type: integer
+      description: "Фактические изменения XP операции; penalty_xp — положительная величина реально списанных очков. Дополнительные достижения отражены отдельно."
+    ActionResponse:
+      type: object
+      properties:
+        operation_id:
+          type: string
+        result:
+          $ref: "#/components/schemas/ActionResult"
+        rewards:
+          $ref: "#/components/schemas/ActionRewards"
+        stats:
+          $ref: "#/components/schemas/UserStats"
+        unlocked_achievements:
+          type: array
+          items:
+            $ref: "#/components/schemas/Achievement"
+        focus:
+          $ref: "#/components/schemas/FocusState"
+        task:
+          $ref: "#/components/schemas/Task"
+      description: "Дополняет прежние поля успешного ответа. task возвращается для одного фактически измененного ID. Все поля результата, статистики и фокуса сохранены в одной транзакции; повтор с тем же ключом возвращает сохраненный ответ, включая прежний server_now. Для актуального таймера после replay запросите /me/focus."
+    TodayGroup:
+      type: object
+      properties:
+        tasks:
+          type: array
+          items:
+            $ref: "#/components/schemas/Task"
+        pagination:
+          $ref: "#/components/schemas/Pagination"
+    TodayState:
+      type: object
+      properties:
+        server_now:
+          type: string
+          format: date-time
+        timezone:
+          type: string
+        today:
+          $ref: "#/components/schemas/TodayGroup"
+        overdue:
+          $ref: "#/components/schemas/TodayGroup"
+  parameters:
+    IdempotencyKey:
+      in: header
+      name: Idempotency-Key
+      required: false
+      schema:
+        type: string
+        maxLength: 128
+      description: "Ключ уникален в пределах аккаунта. Повтор method + URI + того же JSON возвращает сохраненный успешный ответ без действия и наград. Другой запрос с тем же ключом: 409 IDEMPOTENCY_KEY_REUSED. JSON канонизируется; порядок полей неважен. Ошибки не кешируются. Ключи сейчас хранятся бессрочно. Для повтора после потери ответа сохраняйте тот же ключ."
 security:
   - bearerAuth: []
-
 paths:
+  /me/shop:
+    get:
+      tags: [Profile]
+      summary: "Серверный кошелёк, каталог, инвентарь и последние 30 движений монет"
+      responses:
+        "200":
+          description: "Баланс и магазин текущего пользователя"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ShopResponse"}
+        "401":
+          description: "Необходима авторизация"
+  /me/shop/actions:
+    post:
+      tags: [Profile]
+      summary: "Покупка, применение, личная награда, активация XP-бустера или однократный импорт"
+      description: "Атомарно под блокировкой пользователя. Idempotency-Key обеспечивает повтор ответа без повторного списания. Каталожная цена определяется сервером. Данные другого аккаунта недоступны."
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema: {type: string, maxLength: 128}
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [action]
+              additionalProperties: false
+              properties:
+                action: {type: string, enum: [buy, equip, create_personal, delete_personal, redeem_personal, activate_booster, import_legacy]}
+                item_id: {type: string, description: "ID предмета каталога или собственной личной награды"}
+                title: {type: string, maxLength: 120, description: "Для create_personal"}
+                price: {type: integer, minimum: 10, maximum: 1000000, description: "Только цена новой личной награды; покупки используют серверную цену"}
+                legacy:
+                  type: object
+                  description: "Для import_legacy: customRewards, activeTheme и activeSound. coins и boosters не переносятся. Повтор не изменяет данные."
+                  properties:
+                    customRewards: {type: array, items: {type: object}}
+                    activeTheme: {type: string}
+                    activeSound: {type: string}
+      responses:
+        "200":
+          description: "Сохранённый кошелёк; также общие поля ActionResponse"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  wallet: {$ref: "#/components/schemas/ShopWallet"}
+        "400": {description: "Некорректное действие или личная награда"}
+        "403": {description: "Предмет не принадлежит пользователю"}
+        "404": {description: "Предмет или личная награда не найдены"}
+        "409": {description: "Недостаточно монет, предмет уже куплен, бустер активен или отсутствует"}
+  /pomodoros/{id}/cancel:
+    post:
+      tags: [Pomodoros]
+      summary: "Отменить случайный старт в первые 30 секунд"
+      description: "Не начисляет и не списывает XP/монеты, не меняет задачу и не расходует бустер. Статус сессии cancelled. Граница проверяется по clock_timestamp() в транзакции."
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: {type: integer, format: int64, minimum: 1}
+        - in: header
+          name: Idempotency-Key
+          schema: {type: string, maxLength: 128}
+      responses:
+        "200":
+          description: "Сессия отменена"
+          content:
+            application/json:
+              schema: {$ref: "#/components/schemas/ActionResponse"}
+        "400": {description: "Неверный идентификатор"}
+        "404": {description: "Сессия не найдена или принадлежит другому пользователю"}
+        "409": {description: "Сессия не активна или прошло 30 секунд; CANCEL_WINDOW_EXPIRED"}
   /register:
     post:
-      tags: [Auth]
-      summary: Регистрация пользователя
+      tags:
+        - Auth
+      summary: "Регистрация пользователя"
+      description: "Письмо подтверждения и токен сохраняются в PostgreSQL outbox. Успешный ответ означает постановку письма в очередь; доставка SMTP выполняется email-worker с повторами."
       security: []
       requestBody:
         required: true
@@ -388,7 +918,9 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required:
+                - email
+                - password
               properties:
                 email:
                   type: string
@@ -398,33 +930,33 @@ paths:
                   minLength: 8
       responses:
         "200":
-          description: Успешная регистрация
+          description: "Успешная регистрация"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/RegisterResponse'
+                $ref: "#/components/schemas/RegisterResponse"
         "400":
-          description: Ошибка валидации
+          description: "Ошибка валидации"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Пользователь уже существует
+          description: "Пользователь уже существует"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
   /login:
     post:
-      tags: [Auth]
+      tags:
+        - Auth
       summary: Вход
       security: []
       requestBody:
@@ -433,43 +965,46 @@ paths:
           application/json:
             schema:
               type: object
-              required: [email, password]
+              required:
+                - email
+                - password
               properties:
                 email:
                   type: string
                   format: email
                 password:
                   type: string
+                  minLength: 8
       responses:
         "200":
-          description: Успешный вход
+          description: "Успешный вход"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokensResponse'
+                $ref: "#/components/schemas/TokensResponse"
         "400":
-          description: Ошибка запроса
+          description: "Ошибка запроса"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Неверные учетные данные
+          description: "Неверные учетные данные"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
   /refresh:
     post:
-      tags: [Auth]
-      summary: Обновление access token
+      tags:
+        - Auth
+      summary: "Обновление access token"
       security: []
       requestBody:
         required: true
@@ -477,40 +1012,41 @@ paths:
           application/json:
             schema:
               type: object
-              required: [refresh_token]
+              required:
+                - refresh_token
               properties:
                 refresh_token:
                   type: string
       responses:
         "200":
-          description: Токены обновлены
+          description: "Токены обновлены"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TokensResponse'
+                $ref: "#/components/schemas/TokensResponse"
         "400":
-          description: Ошибка запроса
+          description: "Ошибка запроса"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
-          description: Невалидный refresh token
+          description: "Невалидный refresh token"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
   /verify:
     get:
-      tags: [Auth]
-      summary: Подтверждение email
+      tags:
+        - Auth
+      summary: "Подтверждение email"
       security: []
       parameters:
         - in: query
@@ -520,126 +1056,167 @@ paths:
             type: string
       responses:
         "200":
-          description: Email подтвержден
+          description: "Email подтвержден"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                $ref: "#/components/schemas/StatusResponse"
         "400":
-          description: Неверный или просроченный токен
+          description: "Неверный или просроченный токен"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
   /logout:
     post:
-      tags: [Auth]
-      summary: Выход из системы
+      tags:
+        - Auth
+      summary: "Выход из системы"
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LogoutRequest'
+              $ref: "#/components/schemas/LogoutRequest"
       responses:
         "204":
-          description: Успешный logout
+          description: "Успешный logout"
         "400":
-          description: Ошибка запроса
+          description: "Ошибка запроса"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
   /tasks:
     get:
-      tags: [Tasks]
-      summary: Список задач
+      tags:
+        - Tasks
+      summary: "Список задач"
       parameters:
         - in: query
           name: limit
           schema:
             type: integer
             default: 20
-            maximum: 100
+            minimum: 1
+          description: "Положительное число; значения выше 100 ограничиваются до 100."
         - in: query
           name: offset
           schema:
             type: integer
             default: 0
+            minimum: 0
         - in: query
           name: status
-          description: Фильтр по статусу задачи
+          description: "Фильтр по статусу задачи"
           schema:
             type: string
-            enum: [all, pending, done, burnt]
+            enum:
+              - all
+              - pending
+              - done
+              - burnt
             default: all
         - in: query
           name: search
-          description: Поиск по title и description (case-insensitive)
+          description: "Поиск по title и description (case-insensitive)"
           schema:
             type: string
+        - in: query
+          name: category_id
+          schema:
+            type: integer
+            format: int64
+          description: "Фильтр категории"
+        - in: query
+          name: sort_by
+          schema:
+            type: string
+            default: created_at
+          description: "created_at или deadline; неизвестное значение использует created_at DESC"
+        - in: query
+          name: order
+          schema:
+            type: string
+          description: "asc или desc (без учета регистра). По умолчанию created_at DESC, deadline ASC; deadline без даты идут последними. order применяется при переданном sort_by."
+        - in: query
+          name: deadline_from
+          schema:
+            type: string
+            format: date-time
+          description: "Включительная граница RFC3339"
+        - in: query
+          name: deadline_before
+          schema:
+            type: string
+            format: date-time
+          description: "Исключительная граница RFC3339"
+        - in: query
+          name: has_deadline
+          schema:
+            type: boolean
+          description: "Наличие срока. false несовместим с границами дат. from должен быть раньше before."
       responses:
         "200":
-          description: Список задач
+          description: "Список задач"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskListResponse'
+                $ref: "#/components/schemas/TaskListResponse"
         "400":
-          description: Ошибка параметров пагинации
+          description: "Некорректная пагинация, статус или category_id"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Задачи не найдены
+          description: "Задачи не найдены"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
     post:
-      tags: [Tasks]
-      summary: Создать задачу
+      tags:
+        - Tasks
+      summary: "Создать задачу"
       requestBody:
         required: true
         content:
           application/json:
             schema:
               type: object
-              required: [title]
+              required:
+                - title
               properties:
                 title:
                   type: string
@@ -651,56 +1228,1046 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
-                reminder_at:
-                  type: string
-                  format: date-time
-                  nullable: true
+                reminders:
+                  type: array
+                  description: "Состав настроек: отсутствует — сохранить, [] — удалить. До двух на задачу Free, Premium без тарифного лимита. id только для своей существующей строки; offset_minutes=null только для неизменного legacy_absolute. Новые требуют deadline и будущей отправки, одинаковые моменты запрещены."
+                  items:
+                    $ref: "#/components/schemas/ReminderInput"
                 category_id:
                   type: integer
                   format: int64
                   nullable: true
+                  minimum: 1
       responses:
         "201":
-          description: Задача создана
+          description: "Задача создана"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskCreatedResponse'
+                allOf:
+                  - $ref: "#/components/schemas/TaskCreatedResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
         "400":
-          description: Ошибка валидации
+          description: "Ошибка валидации"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Категория не найдена
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Лимит 2 напоминаний на задачу бесплатного тарифа достигнут"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Категория не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
           description: Конфликт
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /tasks/{task_id}:
+                $ref: "#/components/schemas/ErrorResponse"
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+  /categories:
+    get:
+      tags:
+        - Categories
+      summary: "Список категорий пользователя"
+      responses:
+        "200":
+          description: "Категории получены"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoriesResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Категории не найдены"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    post:
+      tags:
+        - Categories
+      summary: "Создать категорию"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        "201":
+          description: "Категория создана"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryCreatedResponse"
+        "400":
+          description: "Ошибка валидации"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Лимит 3 категорий бесплатного тарифа достигнут"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Категория уже существует"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  "/categories/{category_id}":
+    get:
+      tags:
+        - Categories
+      summary: "Получить категорию по ID"
+      parameters:
+        - in: path
+          name: category_id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "200":
+          description: "Категория получена"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  category:
+                    $ref: "#/components/schemas/Category"
+        "400":
+          description: "Невалидный ID"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Категория не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
     patch:
-      tags: [Tasks]
-      summary: Обновить задачу
+      tags:
+        - Categories
+      summary: "Обновить категорию"
+      parameters:
+        - in: path
+          name: category_id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - name
+              properties:
+                name:
+                  type: string
+      responses:
+        "200":
+          description: "Категория обновлена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CategoryUpdatedResponse"
+        "400":
+          description: "Ошибка запроса"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Категория не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    delete:
+      tags:
+        - Categories
+      summary: "Удалить категорию"
+      description: "Удаляет категорию текущего пользователя. Связанные задачи сохраняются с category_id=NULL. Статусы задач, активные Pomodoro-сессии и статистика не изменяются. Клиенту следует обновить категории и задачи."
+      parameters:
+        - in: path
+          name: category_id
+          required: true
+          schema:
+            type: integer
+            format: int64
+      responses:
+        "204":
+          description: "Категория удалена"
+        "400":
+          description: "Ошибка запроса"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Категория не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/stats:
+    get:
+      tags:
+        - Stats
+      summary: "Получить статистику пользователя"
+      description: "Серверная статистика пользователя: очки, уровень, счетчики и стрики. Значения изменяются сервером при проверенных действиях над задачами и Pomodoro, а также при выдаче достижений. Прямое изменение статистики через PATCH /me/stats недоступно (405). Для чтения после действия используйте этот метод или /me/bootstrap."
+      responses:
+        "200":
+          description: "Статистика пользователя"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserStatsResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /pomodoros/active:
+    get:
+      tags:
+        - Pomodoros
+      summary: "Получить активную pomodoro-сессию"
+      responses:
+        "200":
+          description: "Активная сессия (если есть)"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: OK
+                  active_session:
+                    $ref: "#/components/schemas/PomodoroSession"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Активная сессия не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /pomodoros/start:
+    post:
+      tags:
+        - Pomodoros
+      summary: "Запустить pomodoro-сессию"
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                task_id:
+                  type: integer
+                  format: int64
+                  nullable: true
+      responses:
+        "201":
+          description: "Сессия запущена"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/PomodoroStartResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Ошибка запроса"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Задача не найдена или принадлежит другому пользователю"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "У пользователя уже есть активная сессия"
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/PomodoroActiveSessionConflictResponse"
+                  - $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Тело необязательно; без task_id или при task_id=null запускается свободная сессия. Задача должна существовать и принадлежать текущему пользователю, иначе возвращается 404. Параллельные запросы запуска сериализуются: у пользователя может быть только одна активная сессия. При конфликте возвращается 409."
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+  "/pomodoros/{id}/pause":
+    post:
+      tags:
+        - Pomodoros
+      summary: "Добавить перерыв в активной pomodoro-сессии"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: "Перерыв добавлен"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/StatusResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Ошибка запроса"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Активная сессия не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Дополнительный перерыв уже использован"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "undefined Момент начала и окончания дополнительного перерыва сохраняется на сервере. /me/focus показывает фазу extra_break; /me/focus/resume досрочно заканчивает перерыв. Рабочие часы продолжают идти."
+  "/pomodoros/{id}/stop":
+    post:
+      tags:
+        - Pomodoros
+      summary: "Остановить pomodoro-сессию"
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema:
+            type: integer
+            format: int64
+        - $ref: "#/components/parameters/IdempotencyKey"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  enum:
+                    - abandoned
+                    - completed
+                finish_task:
+                  type: boolean
+                  default: false
+                  description: "Завершить связанную задачу (completed) или сжечь ее (abandoned). Для свободной сессии игнорируется."
+      responses:
+        "200":
+          description: "Сессия завершена"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/StatusResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Ошибка запроса"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Сессия отсутствует, уже завершена, принадлежит другому пользователю или ее задача недоступна"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Останавливает именно активную сессию с ID из URL, принадлежащую текущему пользователю. Повторная остановка завершенной сессии возвращает 404 и не меняет статистику. completed: длительность не менее 24 минут по времени БД дает 20 очков и увеличивает счетчики засчитанных Pomodoro. При finish_task=true связанная задача становится done и дополнительно дает 10 очков, если ее награда раньше не выдавалась. Полноценный Pomodoro с первым завершением задачи дает 30 базовых очков; достижения могут добавить бонусы. Короткая сессия не дает награды за Pomodoro и не увеличивает его счетчики. Явное первое завершение задачи при finish_task=true может дать обычные 10 очков за задачу. abandoned: сессия со связанной задачей штрафуется на 30 очков (итоговые очки не ниже нуля). При finish_task=true задача становится burnt; первый переход в burnt увеличивает счетчик сожженных задач и сбрасывает текущий стрик. Свободная сессия при abandoned сохраняется в истории без штрафа. Прерывание при удалении задачи также не штрафуется. Состояния сессии и задачи, статистика, уровень и достижения сохраняются в одной транзакции. Ответ не содержит обновленную статистику — ее нужно прочитать отдельно. Успех дополнен ActionResponse с реальными наградами, статистикой и следующим состоянием focus. Повтор с тем же Idempotency-Key возвращает прежний успех; без ключа повторная остановка остается 404."
+  /verify/resend:
+    post:
+      tags:
+        - Auth
+      summary: "Повторная отправка письма подтверждения"
+      responses:
+        "200":
+          description: "Письмо успешно отправлено"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          description: "Пользователь уже подтвержден"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/logs:
+    get:
+      tags:
+        - ActivityLogs
+      summary: "Лог активности пользователя"
+      parameters:
+        - in: query
+          name: limit
+          schema:
+            type: integer
+            default: 50
+        - in: query
+          name: offset
+          schema:
+            type: integer
+            default: 0
+      responses:
+        "200":
+          description: "Логи получены"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ActivityLogsResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "Клиент activity-logger не настроен или недоступен"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Для бесплатного тарифа limit ограничен пятью записями и offset всегда 0. Тариф берется из access token. Невалидные параметры заменяются значениями по умолчанию."
+  /health:
+    get:
+      tags:
+        - System
+      summary: "Health check"
+      security: []
+      responses:
+        "200":
+          description: "Сервер работает"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "503":
+          description: "База данных недоступна"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/profile:
+    get:
+      tags:
+        - Profile
+      summary: "Профиль и лимиты пользователя"
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ProfileResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+    patch:
+      tags:
+        - Profile
+      summary: "Изменить часовой пояс аккаунта"
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          description: "Некорректный запрос"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Конфликт состояния или ключа"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                timezone:
+                  type: string
+                  example: Europe/Moscow
+              required:
+                - timezone
+  /me/bootstrap:
+    get:
+      tags:
+        - Profile
+      summary: "Начальное состояние веб-клиента"
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BootstrapResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Возвращает пользователя, категории, первые 20 задач (offset=0), статистику, геймификацию и активную Pomodoro-сессию. Параметры пагинации не принимает. Ответ также содержит focus с серверным временем и сохраненным состоянием перерывов."
+  /me/achievements:
+    get:
+      tags:
+        - Profile
+      summary: "Список достижений пользователя"
+      description: "Возвращает достижения и проверяет доступность новых по серверным данным. Запись достижения и его бонус сохраняются атомарно, один раз. Бонус за достижение не продлевает стрик и не обновляет дату активности."
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AchievementsResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/quests:
+    get:
+      tags:
+        - Profile
+      summary: "Ежедневные задания пользователя"
+      description: "Возвращает текущий прогресс ежедневных заданий по календарному дню БД. Для задания pomodoro_focus учитываются только completed-сессии длительностью не менее 24 минут; abandoned и короткие сессии не учитываются. reward_xp содержит объявленную награду задания. Автоматическое начисление этой награды и отдельный метод ее получения пока не реализованы."
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuestsResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /tasks/bulk-complete:
+    post:
+      tags:
+        - Tasks
+      summary: "Массово завершить задачи"
+      description: "Обрабатываются задачи текущего пользователя со статусом, отличным от done: устанавливаются done и reward_claimed=true, отменяются неотправленные напоминания, обновляется updated_at. Каждая задача, награда которой раньше не выдавалась, дает 10 очков. Уже награжденные задачи можно завершить без повторной награды. Чужие, несуществующие и уже завершенные задачи пропускаются; повторяющиеся ID учитываются один раз. Изменения всех выбранных задач, начисление очков, пересчет уровня и достижения сохраняются в одной транзакции. affected_count — число задач с измененным статусом, а не число наград. Повторные и параллельные запросы дополнительных наград не создают."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkTasksRequest"
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: "#/components/schemas/BulkTasksResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Пустое тело, некорректный JSON или пустой task_ids"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+  /tasks/bulk-delete:
+    post:
+      tags:
+        - Tasks
+      summary: "Массово удалить задачи"
+      description: "Удаляет только задачи текущего пользователя. Чужие и несуществующие ID пропускаются; повторяющиеся ID учитываются один раз. Связанные активные Pomodoro-сессии переходят в abandoned без штрафа. История сессий сохраняется с task_id=NULL. Удаление всех выбранных задач и завершение их активных сессий атомарны. affected_count — фактическое число удаленных задач."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/BulkTasksRequest"
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/BulkTasksResponse"
+        "400":
+          description: "Пустое тело, некорректный JSON или пустой task_ids"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /payments/create:
+    post:
+      tags:
+        - Payments
+      summary: "Создать платеж за Премиум"
+      description: "Без тела запроса. Текущая сумма в обработчике: 49.00 RUB за Премиум навсегда. Возвращает URL подтверждения; сумма задается сервером. После оплаты используйте /payments/sync; тариф проверяется по БД без обновления JWT. Создание внешнего платежа выполняется вне транзакции игровых действий."
+      parameters:
+        - in: header
+          name: Idempotency-Key
+          schema:
+            type: string
+          description: "Ключ одной попытки оплаты: сохраняйте и повторяйте его при сетевой ошибке или ошибке записи в БД. Сервер изолирует ключ по ID пользователя перед передачей в YooKassa. Без ключа создаётся новая попытка с UUID. Заголовок разрешён CORS."
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentCreatedResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "503":
+          description: "YooKassa не настроена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /payments/sync:
+    post:
+      tags:
+        - Payments
+      summary: "Сверить ожидающие платежи"
+      description: "Без тела запроса. Сверяет ожидающие платежи со шлюзом от новых к старым до найденного succeeded или ошибки провайдера и выдает Премиум. При отсутствии настроенного шлюза платежи остаются pending."
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PaymentSyncResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "502":
+          description: "Не удалось проверить платеж в YooKassa"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /webhooks/yookassa:
+    post:
+      tags:
+        - Payments
+      summary: "Уведомление YooKassa"
+      security: []
+      description: "Принимается с разрешенных IP YooKassa и loopback (127.0.0.1, ::1). Обрабатываются payment.succeeded и payment.canceled; прочие события подтверждаются без изменений. Успешный ответ не содержит тела. При настроенном шлюзе succeeded дополнительно проверяется через API YooKassa."
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type:
+                  type: string
+                  example: notification
+                event:
+                  type: string
+                  example: payment.succeeded
+                object:
+                  type: object
+                  properties:
+                    id:
+                      type: string
+                    status:
+                      type: string
+                  additionalProperties: true
+      responses:
+        "200":
+          description: "Событие обработано или не требует действий; пустое тело"
+        "400":
+          description: "Некорректный JSON, платеж не найден или статус не подтвержден"
+          content:
+            text/plain:
+              schema:
+                type: string
+        "403":
+          description: "IP не разрешен"
+          content:
+            text/plain:
+              schema:
+                type: string
+        "500":
+          description: "Ошибка обновления платежа; пустое тело или text/plain"
+        "502":
+          description: "Ошибка проверки платежа"
+          content:
+            text/plain:
+              schema:
+                type: string
+        "503":
+          description: "Шлюз проверки платежей не настроен; данные не изменены"
+          content:
+            text/plain:
+              schema:
+                type: string
+  /dev/toggle-premium:
+    post:
+      tags:
+        - Dev
+      summary: "Переключить Премиум для текущего пользователя"
+      description: "Без тела запроса. Регистрируется только при ENV=local; в остальных окружениях 404. Новый тариф применяется по актуальным данным БД без обновления JWT."
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PremiumResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Метод отсутствует вне local"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/APIError"
+        "500":
+          description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /:
+    get:
+      tags:
+        - System
+      summary: "Информация об API"
+      security: []
+      responses:
+        "200":
+          description: "API активен"
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: active
+                  project:
+                    type: string
+                    example: todo-notificator
+                  info:
+                    type: string
+                    example: "Use /api/v1/health for checking availability of the service"
+  /ping:
+    get:
+      tags:
+        - System
+      summary: "Проверка HTTP-сервера без обращения к БД"
+      security: []
+      servers:
+        - url: "https://todoapi.chkpnk.ru"
+          description: Production
+        - url: "http://localhost:8082"
+          description: "Local backend"
+      description: "Маршрут находится вне /api/v1: GET /ping на основном HTTP-сервере."
+      responses:
+        "200":
+          description: pong
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: pong
+  "/tasks/{task_id}":
+    patch:
+      tags:
+        - Tasks
+      summary: "Обновить задачу"
       parameters:
         - in: path
           name: task_id
@@ -708,6 +2275,7 @@ paths:
           schema:
             type: integer
             format: int64
+        - $ref: "#/components/parameters/IdempotencyKey"
       requestBody:
         required: true
         content:
@@ -726,52 +2294,67 @@ paths:
                   type: string
                   format: date-time
                   nullable: true
-                reminder_at:
-                  type: string
-                  format: date-time
-                  nullable: true
+                reminders:
+                  type: array
+                  description: "Состав настроек: отсутствует — сохранить, [] — удалить. До двух на задачу Free, Premium без тарифного лимита. id только для своей существующей строки; offset_minutes=null только для неизменного legacy_absolute. Новые требуют deadline и будущей отправки, одинаковые моменты запрещены."
+                  items:
+                    $ref: "#/components/schemas/ReminderInput"
                 category_id:
                   type: integer
                   format: int64
                   nullable: true
+                  minimum: 1
                 status:
                   type: string
-                  enum: [pending, done, burnt]
+                  enum:
+                    - pending
+                    - done
+                    - burnt
       responses:
         "200":
-          description: Задача обновлена
+          description: "Задача обновлена"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/TaskUpdatedResponse'
+                allOf:
+                  - $ref: "#/components/schemas/TaskUpdatedResponse"
+                  - $ref: "#/components/schemas/ActionResponse"
         "400":
-          description: Ошибка запроса
+          description: "Ошибка запроса"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+        "403":
+          description: "Лимит 2 напоминаний на задачу бесплатного тарифа достигнут"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Задача не найдена
+          description: "Задача или указанная категория не найдена либо принадлежит другому пользователю"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Отсутствующее поле сохраняется. Явный null снимает deadline или category_id. reminders отсутствует — сохранить; [] — удалить; массив заменяет настройки атомарно. Для снятия срока нужно явно удалить связанные относительные напоминания. Перенос срока сдвигает неотправленные относительные напоминания. Отправленные не повторяются. При потере Premium существующие сверх двух работают, но добавление/перепланирование сверх лимита запрещено. Нужно хотя бы одно распознанное поле. Первое завершение дает 10 XP; reward_claimed сохраняется после повторного открытия. Изменение, награда и достижения атомарны. Ответ дополнен ActionResponse."
     delete:
-      tags: [Tasks]
-      summary: Удалить задачу
+      tags:
+        - Tasks
+      summary: "Удалить задачу"
+      description: "Удаляет задачу текущего пользователя. Связанные активные Pomodoro-сессии переходят в abandoned с completed_at, без штрафа и изменения статистики. Все связанные сессии сохраняются как история с task_id=NULL. Завершение активных сессий и удаление задачи атомарны. Клиенту следует убрать удаленную задачу и остановить ее таймер после успешного ответа."
       parameters:
         - in: path
           name: task_id
@@ -781,561 +2364,313 @@ paths:
             format: int64
       responses:
         "204":
-          description: Задача удалена
+          description: "Задача удалена"
         "400":
-          description: Ошибка запроса
+          description: "Ошибка запроса"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "404":
-          description: Задача не найдена
+          description: "Задача не найдена"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка сервера"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /categories:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/focus:
     get:
-      tags: [Categories]
-      summary: Список категорий пользователя
+      tags:
+        - Pomodoros
+      summary: "Текущее серверное состояние фокуса, включая отсутствие сессии"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: Категории получены
+          description: "Успешный ответ"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/CategoriesResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Категории не найдены
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    post:
-      tags: [Categories]
-      summary: Создать категорию
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-                  maxLength: 255
-      responses:
-        "201":
-          description: Категория создана
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CategoryCreatedResponse'
+                $ref: "#/components/schemas/FocusResponse"
         "400":
-          description: Ошибка валидации
+          description: "Некорректный запрос"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Категория уже существует
+          description: "Конфликт состояния или ключа"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /categories/{category_id}:
-    get:
-      tags: [Categories]
-      summary: Получить категорию по ID
-      parameters:
-        - in: path
-          name: category_id
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "200":
-          description: Категория получена
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  category:
-                    $ref: '#/components/schemas/Category'
-        "400":
-          description: Невалидный ID
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Категория не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    patch:
-      tags: [Categories]
-      summary: Обновить категорию
-      parameters:
-        - in: path
-          name: category_id
-          required: true
-          schema:
-            type: integer
-            format: int64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [name]
-              properties:
-                name:
-                  type: string
-                  maxLength: 255
-      responses:
-        "200":
-          description: Категория обновлена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/CategoryUpdatedResponse'
-        "400":
-          description: Ошибка запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Категория не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    delete:
-      tags: [Categories]
-      summary: Удалить категорию
-      parameters:
-        - in: path
-          name: category_id
-          required: true
-          schema:
-            type: integer
-            format: int64
-      responses:
-        "204":
-          description: Категория удалена
-        "400":
-          description: Ошибка запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Категория не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /me/stats:
-    get:
-      tags: [Stats]
-      summary: Получить статистику пользователя
-      responses:
-        "200":
-          description: Статистика пользователя
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/UserStatsResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-    patch:
-      tags: [Stats]
-      summary: Обновить статистику пользователя
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/UserStatsUpdate'
-      responses:
-        "204":
-          description: Статистика обновлена
-        "400":
-          description: Ошибка запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pomodoros/active:
-    get:
-      tags: [Pomodoros]
-      summary: Получить активную pomodoro-сессию
-      responses:
-        "200":
-          description: Активная сессия (если есть)
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                    example: OK
-                  active_session:
-                    $ref: '#/components/schemas/PomodoroSession'
-        "404":
-          description: Активная сессия не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pomodoros/start:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/focus/resume:
     post:
-      tags: [Pomodoros]
-      summary: Запустить pomodoro-сессию
-      requestBody:
-        required: false
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                task_id:
-                  type: integer
-                  format: int64
-                  nullable: true
+      tags:
+        - Pomodoros
+      summary: "Продолжить работу после дополнительного или восстановительного перерыва"
+      security:
+        - bearerAuth: []
       responses:
-        "201":
-          description: Сессия запущена
+        "200":
+          description: "Успешный ответ"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/PomodoroStartResponse'
+                $ref: "#/components/schemas/ActionResponse"
         "400":
-          description: Ошибка запроса
+          description: "Некорректный запрос"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: У пользователя уже есть активная сессия
+          description: "Конфликт состояния или ключа"
           content:
             application/json:
               schema:
-                oneOf:
-                  - $ref: '#/components/schemas/PomodoroActiveSessionConflictResponse'
-                  - $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pomodoros/{id}/pause:
-    post:
-      tags: [Pomodoros]
-      summary: Добавить перерыв в активной pomodoro-сессии
+                $ref: "#/components/schemas/ErrorResponse"
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-            format: int64
+        - $ref: "#/components/parameters/IdempotencyKey"
+  /me/focus/rest/finish:
+    post:
+      tags:
+        - Pomodoros
+      summary: "Завершить восстановительный отдых без запуска сессии"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: Перерыв добавлен
+          description: "Успешный ответ"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
+                $ref: "#/components/schemas/ActionResponse"
         "400":
-          description: Ошибка запроса
+          description: "Некорректный запрос"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Активная сессия не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "409":
-          description: Дополнительный перерыв уже использован
+          description: "Конфликт состояния или ключа"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
-          description: Внутренняя ошибка сервера
+          description: "Внутренняя ошибка"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /pomodoros/{id}/stop:
-    post:
-      tags: [Pomodoros]
-      summary: Остановить pomodoro-сессию
+                $ref: "#/components/schemas/ErrorResponse"
       parameters:
-        - in: path
-          name: id
-          required: true
-          schema:
-            type: integer
-            format: int64
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              required: [action]
-              properties:
-                action:
-                  type: string
-                  enum: [abandoned, completed]
-                finish_task:
-                  type: boolean
-      responses:
-        "200":
-          description: Сессия завершена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StatusResponse'
-        "400":
-          description: Ошибка запроса
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "404":
-          description: Активная сессия не найдена
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /verify/resend:
-    post:
-      tags: [Auth]
-      summary: Повторная отправка письма подтверждения
-      responses:
-        "200":
-          description: Письмо успешно отправлено
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/StatusResponse'
-        "400":
-          description: Пользователь уже подтвержден
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "401":
-          description: Неавторизован
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /me/logs:
+        - $ref: "#/components/parameters/IdempotencyKey"
+  /me/today:
     get:
-      tags: [ActivityLogs]
-      summary: Лог активности пользователя
+      tags:
+        - Tasks
+      summary: "План на сегодня и просроченные задачи с отдельной пагинацией"
+      security:
+        - bearerAuth: []
+      responses:
+        "200":
+          description: "Успешный ответ"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TodayState"
+        "400":
+          description: "Некорректный запрос"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Конфликт состояния или ключа"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      description: "Только pending-задачи со сроком. overdue: deadline < server_now; today: deadline >= server_now и < начала завтрашнего дня в выбранном поясе. Группы не пересекаются. Без срока — только /tasks. Списки и полные totals читаются в одном снимке БД. Между запросами страниц данные могут измениться; стабильный курсор не реализован."
       parameters:
         - in: query
           name: limit
           schema:
             type: integer
-            default: 50
+            minimum: 1
+            maximum: 100
+            default: 20
+          description: null
         - in: query
-          name: offset
+          name: today_offset
           schema:
             type: integer
+            minimum: 0
             default: 0
+          description: null
+        - in: query
+          name: overdue_offset
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+          description: null
+        - in: query
+          name: timezone
+          schema:
+            type: string
+          description: "IANA; если отсутствует, используется профиль. Не меняет профиль."
+  "/me/quests/{code}/claim":
+    post:
+      tags:
+        - Profile
+      summary: "Получить серверную награду выполненного ежедневного задания"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: Логи получены
+          description: "Успешный ответ"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ActivityLogsResponse'
+                $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Некорректный запрос"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: Неавторизован
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-        "500":
-          description: Внутренняя ошибка сервера
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Награда не найдена"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
-
-  /health:
-    get:
-      tags: [System]
-      summary: Health check
-      security: []
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Конфликт состояния или ключа"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+        - in: path
+          name: code
+          required: true
+          schema:
+            type: string
+          description: "code из GET /me/quests"
+      description: "Размер XP задает сервер, клиентские points не используются. Уникальность аккаунт + день в timezone профиля + код. До выполнения: 409 QUEST_NOT_COMPLETED; повтор с новым ключом: 409 REWARD_ALREADY_CLAIMED; неизвестный код: 404 REWARD_NOT_FOUND. С тем же ключом возвращается сохраненный успех. Дневной сундук требует выполнения, но не обязательного получения наград отдельных заданий. Бонусы не продлевают серию."
+  /me/rewards/daily-chest/claim:
+    post:
+      tags:
+        - Profile
+      summary: "Получить 50 XP за выполнение всех ежедневных заданий"
+      security:
+        - bearerAuth: []
       responses:
         "200":
-          description: Сервер работает
+          description: "Успешный ответ"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/StatusResponse'
-        "503":
-          description: База данных недоступна
+                $ref: "#/components/schemas/ActionResponse"
+        "400":
+          description: "Некорректный запрос"
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ErrorResponse'
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: Неавторизован
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "404":
+          description: "Награда не найдена"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Конфликт состояния или ключа"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      description: "Размер XP задает сервер, клиентские points не используются. Уникальность аккаунт + день в timezone профиля + код. До выполнения: 409 QUEST_NOT_COMPLETED; повтор с новым ключом: 409 REWARD_ALREADY_CLAIMED; неизвестный код: 404 REWARD_NOT_FOUND. С тем же ключом возвращается сохраненный успех. Дневной сундук требует выполнения, но не обязательного получения наград отдельных заданий. Бонусы не продлевают серию."

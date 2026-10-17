@@ -2,6 +2,8 @@ package create
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"log/slog"
 	"net/http"
 	"strconv"
@@ -47,7 +49,13 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 		currency := "RUB"
 		description := "Оплата тарифа Премиум (навсегда)"
 
-		idempotencyKey := uuid.New().String()
+		idempotencyKey := r.Header.Get("Idempotency-Key")
+		if idempotencyKey == "" {
+			idempotencyKey = uuid.New().String()
+		}
+		// Provider keys share one shop-wide namespace, so isolate operations by user.
+		providerKey := sha256.Sum256([]byte(strconv.FormatInt(userID, 10) + ":" + idempotencyKey))
+		idempotencyKey = hex.EncodeToString(providerKey[:])
 
 		paymentHandler := yookassa.NewPaymentHandler(yooClient).WithIdempotencyKey(idempotencyKey)
 		redirectURL := returnURL
@@ -82,6 +90,9 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 		_, err = paymentSaver.CreatePayment(r.Context(), payment.ID, userID, amount, currency, string(payment.Status), description)
 		if err != nil {
 			log.Error("failed to save payment to db", sl.Err(err))
+			render.Status(r, http.StatusInternalServerError)
+			render.JSON(w, r, resp.Error("Failed to save payment"))
+			return
 		}
 		log.Info("payment created", slog.String("yookassa_id", payment.ID), slog.Int64("user_id", userID))
 

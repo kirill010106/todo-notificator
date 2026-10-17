@@ -14,9 +14,9 @@ import (
 )
 
 type PaymentStatusChecker interface {
-	GetLatestPendingPayment(ctx context.Context, userID int64) (string, error)
+	GetPendingPayments(ctx context.Context, userID int64) ([]string, error)
+	CompletePaymentAndGrantPremium(ctx context.Context, yookassaID string) (int64, error)
 	UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error)
-	GrantPremium(ctx context.Context, userID int64) error
 	GetUserByID(ctx context.Context, userID int64) (*domain.User, error)
 }
 
@@ -48,15 +48,15 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			return
 		}
 
-		paymentID, err := checker.GetLatestPendingPayment(r.Context(), userID)
+		paymentIDs, err := checker.GetPendingPayments(r.Context(), userID)
 		if err != nil {
-			log.Error("failed to get latest pending payment", sl.Err(err))
+			log.Error("failed to get pending payments", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)
 			render.JSON(w, r, resp.Error("failed to retrieve payment status"))
 			return
 		}
 
-		if paymentID == "" {
+		if len(paymentIDs) == 0 {
 			isPrem := false
 			if user != nil {
 				isPrem = user.IsPremium
@@ -78,63 +78,45 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			return
 		}
 
-		payment, err := finder.FindPayment(r.Context(), paymentID)
-		if err != nil {
-			log.Error("failed to find payment in yookassa", sl.Err(err), slog.String("payment_id", paymentID))
-			render.Status(r, http.StatusBadGateway)
-			render.JSON(w, r, resp.Error("failed to check payment with payment gateway"))
-			return
-		}
-
-		if payment == nil {
-			render.JSON(w, r, Response{
-				Response:      resp.OK(),
-				IsPremium:     false,
-				PaymentStatus: "not_found",
-			})
-			return
-		}
-
-		switch payment.Status {
-		case yoopayment.Succeeded:
-			_, err = checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusSucceeded)
+		latestStatus := domain.PaymentStatusPending
+		for index, paymentID := range paymentIDs {
+			payment, err := finder.FindPayment(r.Context(), paymentID)
 			if err != nil {
-				log.Error("failed to update payment status to succeeded", sl.Err(err))
-			}
-			err = checker.GrantPremium(r.Context(), userID)
-			if err != nil {
-				log.Error("failed to grant premium", sl.Err(err))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("failed to grant premium"))
+				log.Error("failed to find payment in yookassa", sl.Err(err), slog.String("payment_id", paymentID))
+				render.Status(r, http.StatusBadGateway)
+				render.JSON(w, r, resp.Error("failed to check payment with payment gateway"))
 				return
 			}
-			log.Info("payment succeeded via sync and premium granted", slog.String("payment_id", paymentID), slog.Int64("user_id", userID))
-
-			render.JSON(w, r, Response{
-				Response:      resp.OK(),
-				IsPremium:     true,
-				PaymentStatus: domain.PaymentStatusSucceeded,
-			})
-
-		case yoopayment.Canceled:
-			if _, err := checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusCanceled); err != nil {
-				log.Error("failed to update payment status to canceled", sl.Err(err), slog.String("payment_id", paymentID))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("failed to update payment status"))
-				return
+			if payment == nil {
+				if index == 0 {
+					latestStatus = "not_found"
+				}
+				continue
 			}
-			render.JSON(w, r, Response{
-				Response:      resp.OK(),
-				IsPremium:     false,
-				PaymentStatus: domain.PaymentStatusCanceled,
-			})
-
-		default:
-			render.JSON(w, r, Response{
-				Response:      resp.OK(),
-				IsPremium:     false,
-				PaymentStatus: string(payment.Status),
-			})
+			if index == 0 {
+				latestStatus = string(payment.Status)
+			}
+			switch payment.Status {
+			case yoopayment.Succeeded:
+				grantedUserID, err := checker.CompletePaymentAndGrantPremium(r.Context(), paymentID)
+				if err != nil {
+					log.Error("failed to complete payment and grant premium via sync", sl.Err(err))
+					render.Status(r, http.StatusInternalServerError)
+					render.JSON(w, r, resp.Error("failed to complete payment"))
+					return
+				}
+				log.Info("payment succeeded via sync and premium granted", slog.String("payment_id", paymentID), slog.Int64("user_id", grantedUserID))
+				render.JSON(w, r, Response{Response: resp.OK(), IsPremium: true, PaymentStatus: domain.PaymentStatusSucceeded})
+				return
+			case yoopayment.Canceled:
+				if _, err := checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusCanceled); err != nil {
+					log.Error("failed to update payment status to canceled", sl.Err(err), slog.String("payment_id", paymentID))
+					render.Status(r, http.StatusInternalServerError)
+					render.JSON(w, r, resp.Error("failed to update payment status"))
+					return
+				}
+			}
 		}
+		render.JSON(w, r, Response{Response: resp.OK(), IsPremium: false, PaymentStatus: latestStatus})
 	}
 }

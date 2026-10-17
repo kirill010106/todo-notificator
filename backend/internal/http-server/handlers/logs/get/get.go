@@ -32,6 +32,13 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 			return
 		}
 
+		if logsGetter == nil {
+			log.Warn("activity logger service is not configured or unavailable")
+			render.Status(r, http.StatusServiceUnavailable)
+			render.JSON(w, r, resp.Error("activity logger is unavailable"))
+			return
+		}
+
 		limitRaw := r.URL.Query().Get("limit")
 		limit := int32(50) // Default limit
 		if limitRaw != "" {

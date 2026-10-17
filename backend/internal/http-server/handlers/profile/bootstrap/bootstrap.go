@@ -24,14 +24,15 @@ type DataProvider interface {
 }
 
 type UserInfo struct {
-	ID                   int64  `json:"id"`
-	Email                string `json:"email"`
-	IsVerified           bool   `json:"is_verified"`
-	IsPremium            bool   `json:"is_premium"`
-	CategoriesCount      int    `json:"categories_count"`
-	ActiveRemindersCount int    `json:"active_reminders_count"`
-	CategoriesLimit      int    `json:"categories_limit"`
-	RemindersLimit       int    `json:"reminders_limit"`
+	ID                    int64  `json:"id"`
+	Email                 string `json:"email"`
+	IsVerified            bool   `json:"is_verified"`
+	IsPremium             bool   `json:"is_premium"`
+	CategoriesCount       int    `json:"categories_count"`
+	ActiveRemindersCount  int    `json:"active_reminders_count"`
+	CategoriesLimit       int    `json:"categories_limit"`
+	RemindersPerTaskLimit *int   `json:"reminders_per_task_limit"`
+	Timezone              string `json:"timezone"`
 }
 
 type Pagination struct {
@@ -49,6 +50,7 @@ type Response struct {
 	Stats          *domain.UserStats           `json:"stats,omitempty"`
 	Gamification   *domain.GamificationProfile `json:"gamification,omitempty"`
 	ActivePomodoro *domain.PomodoroSession     `json:"active_pomodoro,omitempty"`
+	Focus          *domain.FocusState          `json:"focus,omitempty"`
 }
 
 func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
@@ -97,29 +99,51 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 		}
 
 		activePomodoro, _ := provider.GetActivePomodoroSession(ctx, userID)
+		var focus *domain.FocusState
+		zone := "UTC"
+		if extended, ok := provider.(interface {
+			GetFocusState(context.Context, int64) (domain.FocusState, error)
+			GetTimezone(context.Context, int64) (string, error)
+		}); ok {
+			value, err := extended.GetFocusState(ctx, userID)
+			if err != nil {
+				render.Status(r, 500)
+				render.JSON(w, r, resp.Error("failed to load focus state"))
+				return
+			}
+			focus = &value
+			zone, err = extended.GetTimezone(ctx, userID)
+			if err != nil {
+				render.Status(r, 500)
+				render.JSON(w, r, resp.Error("failed to load timezone"))
+				return
+			}
+		}
 
 		catCount, _ := provider.CountCategories(ctx, userID)
 		remCount, _ := provider.CountActiveReminders(ctx, userID)
 
 		catLimit := 3
-		remLimit := 3
+		remLimit := new(int)
+		*remLimit = 2
 		if user.IsPremium {
 			catLimit = -1
-			remLimit = -1
+			remLimit = nil
 		}
 
 		render.Status(r, http.StatusOK)
 		render.JSON(w, r, Response{
 			Response: resp.OK(),
 			User: UserInfo{
-				ID:                   user.ID,
-				Email:                user.Email,
-				IsVerified:           user.IsVerified,
-				IsPremium:            user.IsPremium,
-				CategoriesCount:      catCount,
-				ActiveRemindersCount: remCount,
-				CategoriesLimit:      catLimit,
-				RemindersLimit:       remLimit,
+				ID:                    user.ID,
+				Email:                 user.Email,
+				IsVerified:            user.IsVerified,
+				IsPremium:             user.IsPremium,
+				CategoriesCount:       catCount,
+				ActiveRemindersCount:  remCount,
+				CategoriesLimit:       catLimit,
+				RemindersPerTaskLimit: remLimit,
+				Timezone:              zone,
 			},
 			Categories: categories,
 			Tasks:      tasks,
@@ -131,6 +155,7 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 			Stats:          statsPtr,
 			Gamification:   gamificationPtr,
 			ActivePomodoro: activePomodoro,
+			Focus:          focus,
 		})
 	}
 }

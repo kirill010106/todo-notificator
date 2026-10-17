@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log/slog"
 	"mime"
+	"net"
 	"net/smtp"
 	"strings"
 	"time"
@@ -44,7 +45,7 @@ func (s *Sender) senderName() string {
 
 func (s *Sender) Send(user domain.User, task domain.Task, interval time.Duration) error {
 	const op = "sender.Send"
-	body, err := s.formatter.Format(task, interval)
+	body, err := s.formatter.Format(task, interval, user.Timezone)
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -86,11 +87,15 @@ func (s *Sender) sendWithTLS(addr string, auth smtp.Auth, to string, msg []byte)
 		ServerName: s.cfg.Host,
 	}
 
-	conn, err := tls.Dial("tcp", addr, tlsConfig)
+	conn, err := tls.DialWithDialer(&net.Dialer{Timeout: 10 * time.Second}, "tcp", addr, tlsConfig)
 	if err != nil {
 		return fmt.Errorf("%s dial: %w", op, err)
 	}
 
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
+		return err
+	}
 	client, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
 		return fmt.Errorf("%s client: %w", op, err)
@@ -113,19 +118,26 @@ func (s *Sender) sendWithTLS(addr string, auth smtp.Auth, to string, msg []byte)
 	if err != nil {
 		return fmt.Errorf("%s data: %w", op, err)
 	}
-	defer w.Close()
 
 	if _, err := w.Write(msg); err != nil {
 		return fmt.Errorf("%s write: %w", op, err)
 	}
 
-	return nil
+	return w.Close()
 }
 
 func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []byte) error {
 	const op = "sender.sendWithSTARTTLS"
 
-	client, err := smtp.Dial(addr)
+	conn, err := net.DialTimeout("tcp", addr, 10*time.Second)
+	if err != nil {
+		return fmt.Errorf("%s dial: %w", op, err)
+	}
+	defer conn.Close()
+	if err := conn.SetDeadline(time.Now().Add(45 * time.Second)); err != nil {
+		return err
+	}
+	client, err := smtp.NewClient(conn, s.cfg.Host)
 	if err != nil {
 		return fmt.Errorf("%s dial: %w", op, err)
 	}
@@ -155,13 +167,12 @@ func (s *Sender) sendWithSTARTTLS(addr string, auth smtp.Auth, to string, msg []
 	if err != nil {
 		return fmt.Errorf("%s data: %w", op, err)
 	}
-	defer w.Close()
 
 	if _, err := w.Write(msg); err != nil {
 		return fmt.Errorf("%s write: %w", op, err)
 	}
 
-	return nil
+	return w.Close()
 }
 
 // buildMessage builds raw email message

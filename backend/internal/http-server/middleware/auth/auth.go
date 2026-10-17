@@ -2,6 +2,9 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 	"net/http"
 	"strings"
 
@@ -16,7 +19,11 @@ const userIDKey contextKey = "user_id"
 const isPremiumKey contextKey = "is_premium"
 const isVerifiedKey contextKey = "is_verified"
 
-func New(secret string) func(next http.Handler) http.Handler {
+type UserProvider interface {
+	GetUserByID(context.Context, int64) (*domain.User, error)
+}
+
+func New(secret string, providers ...UserProvider) func(next http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
@@ -42,6 +49,21 @@ func New(secret string) func(next http.Handler) http.Handler {
 				return
 			}
 
+			if len(providers) > 0 {
+				user, err := providers[0].GetUserByID(r.Context(), claims.UserID)
+				if err != nil {
+					if errors.Is(err, storage.ErrUserNotFound) {
+						render.Status(r, 401)
+						render.JSON(w, r, resp.ErrorCode("account not found", "UNAUTHORIZED"))
+						return
+					}
+					render.Status(r, 503)
+					render.JSON(w, r, resp.ErrorCode("cannot load current account", "ACCOUNT_UNAVAILABLE"))
+					return
+				}
+				claims.IsPremium = user.IsPremium
+				claims.IsVerified = user.IsVerified
+			}
 			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, isPremiumKey, claims.IsPremium)
 			ctx = context.WithValue(ctx, isVerifiedKey, claims.IsVerified)

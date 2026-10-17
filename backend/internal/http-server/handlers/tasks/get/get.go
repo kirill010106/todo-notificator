@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
@@ -119,6 +120,28 @@ func parsePagination(r *http.Request) (limit, offset int, err error) {
 
 func parseFilter(r *http.Request) (domain.TaskFilter, error) {
 	var filter domain.TaskFilter
+	for name, target := range map[string]**time.Time{"deadline_from": &filter.DeadlineFrom, "deadline_before": &filter.DeadlineBefore} {
+		if raw := r.URL.Query().Get(name); raw != "" {
+			value, err := time.Parse(time.RFC3339, raw)
+			if err != nil {
+				return filter, errors.New("invalid " + name + ", expected RFC3339")
+			}
+			*target = &value
+		}
+	}
+	if raw := r.URL.Query().Get("has_deadline"); raw != "" {
+		value, err := strconv.ParseBool(raw)
+		if err != nil {
+			return filter, errors.New("invalid has_deadline")
+		}
+		filter.HasDeadline = &value
+	}
+	if filter.HasDeadline != nil && !*filter.HasDeadline && (filter.DeadlineFrom != nil || filter.DeadlineBefore != nil) {
+		return filter, errors.New("date range requires has_deadline=true")
+	}
+	if filter.DeadlineFrom != nil && filter.DeadlineBefore != nil && !filter.DeadlineFrom.Before(*filter.DeadlineBefore) {
+		return filter, errors.New("deadline_from must precede deadline_before")
+	}
 
 	if raw := r.URL.Query().Get("status"); raw != "" {
 		if raw != "all" && !domain.ValidTaskStatuses[raw] {

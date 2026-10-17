@@ -33,6 +33,12 @@ func New(ctx context.Context, log *slog.Logger, addr string, timeout time.Durati
 }
 
 func (c *Client) LogEvent(userID int64, action string, entityID int64, details map[string]any) {
+	// Activity logging is best-effort. A nil client must not crash the API when
+	// the optional logger service failed to initialize.
+	if c == nil || c.api == nil {
+		return
+	}
+
 	go func() {
 		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
 		defer cancel()
@@ -69,6 +75,10 @@ func (c *Client) LogEvent(userID int64, action string, entityID int64, details m
 
 // GetLogs fetches activity logs from the microservice
 func (c *Client) GetLogs(ctx context.Context, userID int64, limit, offset int32) ([]domain.ActivityLog, error) {
+	if c == nil || c.api == nil {
+		return nil, fmt.Errorf("activity logger client is unavailable")
+	}
+
 	req := &pb.GetLogsRequest{
 		UserId: userID,
 		Limit:  limit,

@@ -1,6 +1,7 @@
 package webhook
 
 import (
+	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
@@ -46,7 +47,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 		return
 	}
-	if r.Header.Get("X-Webhook-Secret") != h.secret {
+	if subtle.ConstantTimeCompare([]byte(r.Header.Get("X-Webhook-Secret")), []byte(h.secret)) != 1 {
 		h.log.Warn("webhook: unauthorized request",
 			slog.String("remote_addr", r.RemoteAddr))
 		w.WriteHeader(http.StatusUnauthorized)
