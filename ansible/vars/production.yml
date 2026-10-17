@@ -1,0 +1,6 @@
+---
+app_dir: /opt/todo-notificator
+backup_dir: /opt/todo-notificator-backups
+traefik_dir: /opt/todo-traefik
+traefik_image: traefik:v3.7
+acme_email: "{{ lookup('ansible.builtin.env', 'ACME_EMAIL') }}"

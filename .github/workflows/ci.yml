@@ -25,6 +25,7 @@ jobs:
       - run: go test ./pkg/envconfig -count=1
       - run: pip install ansible-core
       - run: ansible-playbook -i localhost, ansible/deploy.yml --syntax-check
+      - run: python -m unittest discover -s scripts -p 'test_provisioning.py' -v
 
   frontend-ci:
     name: Frontend CI
