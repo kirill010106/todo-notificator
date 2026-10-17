@@ -1,6 +1,7 @@
 package jwt
 
 import (
+	rawjwt "github.com/golang-jwt/jwt/v5"
 	"testing"
 	"time"
 
@@ -77,4 +78,12 @@ func TestNewRefreshToken(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, t2, 64)
 	require.NotEqual(t, t1, t2)
+}
+
+func TestLegacyAccessTokenHasVersionZero(t *testing.T) {
+	token, err := rawjwt.NewWithClaims(rawjwt.SigningMethodHS256, rawjwt.MapClaims{"uid": 42, "type": "access", "exp": time.Now().Add(time.Hour).Unix()}).SignedString([]byte("secret"))
+	require.NoError(t, err)
+	claims, err := ParseAccessToken(token, "secret")
+	require.NoError(t, err)
+	require.Zero(t, claims.AuthVersion)
 }

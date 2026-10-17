@@ -152,10 +152,12 @@ export function AuthPage({ register = false }: { register?: boolean }) {
   const [accepted, setAccepted] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
-  const [created, setCreated] = useState(false);
+  const [displayName, setDisplayName] = useState("");
+  const completingAuth = useRef(false);
   const navigate = useNavigate();
   const client = useQueryClient();
-  if (hasSession()) return <Navigate to="/app/today" replace />;
+  if (hasSession() && !completingAuth.current)
+    return <Navigate to="/app/today" replace />;
   return (
     <div className={s.authPage}>
       <aside className={s.authAside}>
@@ -180,133 +182,129 @@ export function AuthPage({ register = false }: { register?: boolean }) {
         <div className={s.mobileBrand}>
           <Brand />
         </div>
-        {created ? (
-          <div className={s.authForm}>
-            <ShieldCheck size={40} className={s.green} />
-            <h1>Первый шаг сделан.</h1>
-            <p>
-              Аккаунт создан. Мы отправили письмо для подтверждения email. После
-              подтверждения войди в приложение.
-            </p>
-            <Link
-              to="/login"
-              className={s.button}
-              onClick={() => setCreated(false)}
-            >
-              Перейти ко входу
+        <form
+          className={s.authForm}
+          onSubmit={async (e) => {
+            e.preventDefault();
+            setBusy(true);
+            setError("");
+            try {
+              const result = await api<{
+                access_token: string;
+                refresh_token: string;
+              }>(
+                register ? "/register" : "/login",
+                {
+                  method: "POST",
+                  body: json({
+                    email,
+                    password,
+                    ...(register ? { display_name: displayName } : {}),
+                  }),
+                },
+                false,
+              );
+              completingAuth.current = true;
+              client.clear();
+              saveTokens(result);
+              localStorage.setItem("user_email", email);
+              navigate("/app/today", {
+                replace: true,
+                state: register ? { registered: true } : undefined,
+              });
+            } catch (err) {
+              setError(errorText(err));
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          <span className={s.eyebrow}>
+            {register ? "НАЧАЛО ЧЕГО-ТО ХОРОШЕГО" : "РАДЫ ВИДЕТЬ ТЕБЯ СНОВА"}
+          </span>
+          <h1>{register ? "Место для твоих планов." : "С возвращением."}</h1>
+          <p>
+            {register
+              ? "Создай аккаунт и освободи голову для важного."
+              : "Твои задачи и немного спокойствия уже здесь."}
+          </p>
+          {register && (
+            <label className={s.field}>
+              Отображаемое имя (необязательно)
+              <input
+                autoComplete="nickname"
+                maxLength={80}
+                value={displayName}
+                onChange={(e) => setDisplayName(e.target.value)}
+              />
+            </label>
+          )}
+          <label className={s.field}>
+            Email
+            <input
+              required
+              type="email"
+              autoComplete="email"
+              placeholder="you@example.com"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+            />
+          </label>
+          <label className={s.field}>
+            Пароль
+            <input
+              required
+              type="password"
+              minLength={8}
+              maxLength={72}
+              autoComplete={register ? "new-password" : "current-password"}
+              placeholder="Не менее 8 символов"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
+          </label>
+          {!register && (
+            <Link className={s.textLink} to="/forgot-password">
+              Забыли пароль?
             </Link>
-          </div>
-        ) : (
-          <form
-            className={s.authForm}
-            onSubmit={async (e) => {
-              e.preventDefault();
-              setBusy(true);
-              setError("");
-              try {
-                if (register) {
-                  await api(
-                    "/register",
-                    { method: "POST", body: json({ email, password }) },
-                    false,
-                  );
-                  setCreated(true);
-                } else {
-                  const result = await api<{
-                    access_token: string;
-                    refresh_token: string;
-                  }>(
-                    "/login",
-                    { method: "POST", body: json({ email, password }) },
-                    false,
-                  );
-                  client.clear();
-                  saveTokens(result);
-                  localStorage.setItem("user_email", email);
-                  navigate("/app/today", { replace: true });
-                }
-              } catch (err) {
-                setError(errorText(err));
-              } finally {
-                setBusy(false);
-              }
-            }}
-          >
-            <span className={s.eyebrow}>
-              {register ? "НАЧАЛО ЧЕГО-ТО ХОРОШЕГО" : "РАДЫ ВИДЕТЬ ТЕБЯ СНОВА"}
-            </span>
-            <h1>{register ? "Место для твоих планов." : "С возвращением."}</h1>
-            <p>
-              {register
-                ? "Создай аккаунт и освободи голову для важного."
-                : "Твои задачи и немного спокойствия уже здесь."}
-            </p>
-            <label className={s.field}>
-              Email
+          )}
+          {register && (
+            <label className={s.consent}>
               <input
                 required
-                type="email"
-                autoComplete="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="checkbox"
+                checked={accepted}
+                onChange={(e) => setAccepted(e.target.checked)}
               />
+              <span>
+                Принимаю{" "}
+                <a href="/offer.html" target="_blank" rel="noreferrer">
+                  оферту
+                </a>{" "}
+                и{" "}
+                <a href="/policy.html" target="_blank" rel="noreferrer">
+                  политику конфиденциальности
+                </a>
+                .
+              </span>
             </label>
-            <label className={s.field}>
-              Пароль
-              <input
-                required
-                type="password"
-                minLength={8}
-                maxLength={72}
-                autoComplete={register ? "new-password" : "current-password"}
-                placeholder="Не менее 8 символов"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-              />
-            </label>
-            {register && (
-              <label className={s.consent}>
-                <input
-                  required
-                  type="checkbox"
-                  checked={accepted}
-                  onChange={(e) => setAccepted(e.target.checked)}
-                />
-                <span>
-                  Принимаю{" "}
-                  <a href="/offer.html" target="_blank" rel="noreferrer">
-                    оферту
-                  </a>{" "}
-                  и{" "}
-                  <a href="/policy.html" target="_blank" rel="noreferrer">
-                    политику конфиденциальности
-                  </a>
-                  .
-                </span>
-              </label>
-            )}
-            {error && (
-              <p role="alert" className={s.error}>
-                {error}
-              </p>
-            )}
-            <Button disabled={busy || (register && !accepted)}>
-              {busy
-                ? "Подожди немного…"
-                : register
-                  ? "Создать аккаунт"
-                  : "Войти"}
-              <ArrowUpRight size={17} />
-            </Button>
-            <p className={s.authSwitch}>
-              {register ? "Уже есть аккаунт?" : "Первый раз здесь?"}{" "}
-              <Link to={register ? "/login" : "/register"}>
-                {register ? "Войти" : "Создать аккаунт"}
-              </Link>
+          )}
+          {error && (
+            <p role="alert" className={s.error}>
+              {error}
             </p>
-          </form>
-        )}
+          )}
+          <Button disabled={busy || (register && !accepted)}>
+            {busy ? "Подожди немного…" : register ? "Создать аккаунт" : "Войти"}
+            <ArrowUpRight size={17} />
+          </Button>
+          <p className={s.authSwitch}>
+            {register ? "Уже есть аккаунт?" : "Первый раз здесь?"}{" "}
+            <Link to={register ? "/login" : "/register"}>
+              {register ? "Войти" : "Создать аккаунт"}
+            </Link>
+          </p>
+        </form>
       </main>
     </div>
   );

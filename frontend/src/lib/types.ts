@@ -53,6 +53,7 @@ export interface Gamification {
   total_achievements: number;
 }
 export interface User {
+  display_name?: string;
   timezone?: string;
   id: number;
   email: string;

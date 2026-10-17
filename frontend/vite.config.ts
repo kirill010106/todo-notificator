@@ -9,7 +9,10 @@ export default defineConfig({
   build: {
     rollupOptions: { input: ["index.html", "offer.html", "policy.html"] },
   },
-  server: { proxy: { "/api": "http://127.0.0.1:8082" } },
+  server: {
+    headers: { "Referrer-Policy": "no-referrer" },
+    proxy: { "/api": "http://127.0.0.1:8082" },
+  },
   test: {
     pool: "threads",
     maxWorkers: 2,

@@ -1,3 +1,4 @@
+import { IdentitySettings } from "./IdentitySettings";
 import { useState } from "react";
 import { useNavigate, Link } from "react-router-dom";
 import {
@@ -60,6 +61,7 @@ export function AccountPage() {
           {error}
         </p>
       )}
+      <IdentitySettings key={data.user.id} />
       <div className={s.settingsGrid}>
         <section className={s.card}>
           <Mail className={s.green} />
@@ -76,7 +78,9 @@ export function AccountPage() {
               onClick={() =>
                 void run(async () => {
                   await api("/verify/resend", { method: "POST" });
-                  notify("Письмо подтверждения поставлено в очередь и скоро придёт.");
+                  notify(
+                    "Письмо подтверждения поставлено в очередь и скоро придёт.",
+                  );
                 })
               }
             >

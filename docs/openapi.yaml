@@ -2,7 +2,7 @@ openapi: 3.0.3
 info:
   title: "ToDo Notificator API"
   description: "API задач, категорий, Pomodoro, профиля, геймификации и платежей. Защищенные методы используют Authorization: Bearer <access_token>. Текущие Premium и подтверждение email проверяются по БД. Авторизованные запросы: 100 в минуту на аккаунт; login/register: 20 на адрес клиента; публичные: 100; неверная авторизация: 20; webhook YooKassa: 300. Бюджеты независимы, действуют на один процесс; адрес определяется с учётом доверенных прокси, IPv6 группируется по /64. Превышение возвращает JSON 429 и Retry-After. Ошибки, кроме webhook YooKassa, содержат code, message, request_id, field_errors; legacy error сохранен. Метрики доступны отдельно (:9091/metrics)."
-  version: 1.5.0
+  version: 1.6.0
 servers:
   - url: "https://todoapi.chkpnk.ru/api/v1"
     description: Production
@@ -81,14 +81,13 @@ components:
           example: 900
           description: "Время жизни access token в секундах; локально 15 минут. Refresh token локально действует 168 часов."
     RegisterResponse:
-      type: object
-      properties:
-        status:
-          type: string
-          example: OK
-        user_id:
-          type: integer
-          format: int64
+      allOf:
+        - $ref: "#/components/schemas/TokensResponse"
+        - type: object
+          properties:
+            user_id:
+              type: integer
+              format: int64
     LogoutRequest:
       type: object
       required:
@@ -428,6 +427,10 @@ components:
         id:
           type: integer
           format: int64
+        display_name:
+          type: string
+          maxLength: 80
+          description: "Необязательное имя; пустая строка включает отображение части email до @."
         email:
           type: string
           format: email
@@ -910,7 +913,7 @@ paths:
       tags:
         - Auth
       summary: "Регистрация пользователя"
-      description: "Письмо подтверждения и токен сохраняются в PostgreSQL outbox. Успешный ответ означает постановку письма в очередь; доставка SMTP выполняется email-worker с повторами."
+      description: "Письмо подтверждения и токен сохраняются в PostgreSQL outbox. Регистрация сразу выдаёт access/refresh tokens; подтверждение почты требуется только для email-уведомлений. Аккаунт, refresh token и письмо сохраняются атомарно. Успешный ответ означает постановку письма в очередь; доставка SMTP выполняется email-worker с повторами."
       security: []
       requestBody:
         required: true
@@ -922,12 +925,16 @@ paths:
                 - email
                 - password
               properties:
+                display_name:
+                  type: string
+                  maxLength: 80
                 email:
                   type: string
                   format: email
                 password:
                   type: string
                   minLength: 8
+                  description: "Не более 72 байт UTF-8."
       responses:
         "200":
           description: "Успешная регистрация"
@@ -949,6 +956,212 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "Внутренняя ошибка сервера"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /password/forgot:
+    post:
+      tags: [Auth]
+      summary: "Запросить восстановление пароля"
+      description: "Для существующего и неизвестного email одинаковый ответ 202. Ссылка действует 30 минут. Не более 1 письма в минуту и 5 в час на адрес; подавление по лимиту адреса не меняет ответ. Подтверждение почты не требуется."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email]
+              properties:
+                email:
+                  type: string
+                  format: email
+      responses:
+        "202":
+          description: "Запрос обработан"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          description: "Некорректные данные или ссылка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: "Лимит запросов"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /password/reset:
+    post:
+      tags: [Auth]
+      summary: "Сбросить забытый пароль"
+      description: "Одноразовая ссылка. Атомарно меняет пароль и завершает все сессии; статус подтверждения почты сохраняется. После сброса требуется вход."
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [token, new_password]
+              properties:
+                token:
+                  type: string
+                  description: "Секрет из письма восстановления."
+                new_password:
+                  type: string
+                  description: "Минимум 8 символов, максимум 72 байта UTF-8."
+      responses:
+        "200":
+          description: "Запрос обработан"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StatusResponse"
+        "400":
+          description: "Некорректные данные или ссылка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: "Лимит запросов"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/email:
+    post:
+      tags: [Auth]
+      summary: "Сменить email"
+      description: "Новый email сразу становится логином. Уведомления отключены до подтверждения. Старые ссылки аннулируются. Ответ выдаёт новую пару токенов, остальные сессии завершаются. Если адрес не меняется: status=OK, changed=false, без токенов."
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [email, current_password]
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: "Новый адрес."
+                current_password:
+                  type: string
+                  description: "Текущий пароль."
+      responses:
+        "200":
+          description: "Запрос обработан"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokensResponse"
+        "400":
+          description: "Некорректные данные или ссылка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: "Требуется вход"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Email уже используется"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: "Лимит запросов"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+  /me/password:
+    post:
+      tags: [Auth]
+      summary: "Сменить пароль"
+      description: "Возвращает новую пару токенов для текущего браузера, остальные сессии завершаются."
+      security: [{bearerAuth: []}]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              additionalProperties: false
+              required: [current_password, new_password]
+              properties:
+                current_password:
+                  type: string
+                  description: "Текущий пароль."
+                new_password:
+                  type: string
+                  description: "Минимум 8 символов, максимум 72 байта UTF-8."
+      responses:
+        "200":
+          description: "Запрос обработан"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/TokensResponse"
+        "400":
+          description: "Некорректные данные или ссылка"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "401":
+          description: "Требуется вход"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "409":
+          description: "Email уже используется"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          description: "Лимит запросов"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "500":
+          description: "Внутренняя ошибка"
           content:
             application/json:
               schema:
@@ -1906,11 +2119,13 @@ paths:
             schema:
               type: object
               properties:
+                display_name:
+                  type: string
+                  maxLength: 80
+                  description: "Пустая строка очищает имя; пропуск сохраняет прежнее."
                 timezone:
                   type: string
                   example: Europe/Moscow
-              required:
-                - timezone
   /me/bootstrap:
     get:
       tags:

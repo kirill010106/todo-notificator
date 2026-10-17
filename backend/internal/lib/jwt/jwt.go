@@ -12,13 +12,14 @@ import (
 
 func NewAccessToken(user domain.User, secret string, duration time.Duration) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"uid":         user.ID,
-		"email":       user.Email,
-		"type":        "access",
-		"exp":         time.Now().Add(duration).Unix(),
-		"iat":         time.Now().Unix(),
-		"is_verified": user.IsVerified,
-		"is_premium":  user.IsPremium,
+		"uid":          user.ID,
+		"auth_version": user.AuthVersion,
+		"email":        user.Email,
+		"type":         "access",
+		"exp":          time.Now().Add(duration).Unix(),
+		"iat":          time.Now().Unix(),
+		"is_verified":  user.IsVerified,
+		"is_premium":   user.IsPremium,
 	})
 
 	return token.SignedString([]byte(secret))
@@ -33,10 +34,11 @@ func NewRefreshToken() (string, error) {
 }
 
 type UserClaims struct {
-	UserID     int64
-	Email      string
-	IsVerified bool
-	IsPremium  bool
+	AuthVersion int64
+	UserID      int64
+	Email       string
+	IsVerified  bool
+	IsPremium   bool
 }
 
 func ParseAccessToken(tokenString string, secret string) (*UserClaims, error) {
@@ -74,10 +76,12 @@ func ParseAccessToken(tokenString string, secret string) (*UserClaims, error) {
 	isVerified, _ := claims["is_verified"].(bool)
 	isPremium, _ := claims["is_premium"].(bool)
 
+	version, _ := claims["auth_version"].(float64)
 	return &UserClaims{
-		UserID:     int64(uid),
-		Email:      email,
-		IsVerified: isVerified,
-		IsPremium:  isPremium,
+		AuthVersion: int64(version),
+		UserID:      int64(uid),
+		Email:       email,
+		IsVerified:  isVerified,
+		IsPremium:   isPremium,
 	}, nil
 }

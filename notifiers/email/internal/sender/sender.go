@@ -210,3 +210,11 @@ func (s *Sender) SendVerificationEmail(email, token string) error {
 	)
 	return nil
 }
+
+func (s *Sender) SendPasswordResetEmail(email, token string) error {
+	body, err := s.formatter.PasswordReset(token)
+	if err != nil {
+		return err
+	}
+	return s.send(email, "Восстановление пароля ToDo Notificator", body)
+}

@@ -20,6 +20,7 @@ type ProfileProvider interface {
 
 type ProfileData struct {
 	ID                    int64  `json:"id"`
+	DisplayName           string `json:"display_name"`
 	Email                 string `json:"email"`
 	IsVerified            bool   `json:"is_verified"`
 	IsPremium             bool   `json:"is_premium"`
@@ -82,6 +83,7 @@ func New(log *slog.Logger, provider ProfileProvider) http.HandlerFunc {
 				Timezone:              zone,
 				ID:                    user.ID,
 				Email:                 user.Email,
+				DisplayName:           user.DisplayName,
 				IsVerified:            user.IsVerified,
 				IsPremium:             user.IsPremium,
 				CategoriesCount:       catCount,

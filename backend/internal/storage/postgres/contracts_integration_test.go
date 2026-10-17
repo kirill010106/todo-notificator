@@ -4,6 +4,7 @@ package postgres
 
 import (
 	"context"
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -17,6 +18,7 @@ import (
 	"github.com/testcontainers/testcontainers-go"
 	tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
 	"github.com/testcontainers/testcontainers-go/wait"
+	"golang.org/x/crypto/bcrypt"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -52,6 +54,187 @@ func TestFrontendContracts(t *testing.T) {
 		require.NoError(t, err)
 		return id
 	}
+
+	t.Run("account registration credentials and password recovery", func(t *testing.T) {
+		password := []byte("password123")
+		hash, err := bcrypt.GenerateFromPassword(password, bcrypt.MinCost)
+		require.NoError(t, err)
+		u, err := s.RegisterAccount(ctx, "account@test.local", "  Кирилл  ", hash, "initial-verify", "initial-session", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		require.Equal(t, "Кирилл", u.DisplayName)
+		loaded, err := s.GetUserByID(ctx, u.ID)
+		require.NoError(t, err)
+		require.False(t, loaded.IsVerified)
+		require.NoError(t, s.RequestPasswordReset(ctx, u.Email, "reset-initial"))
+		var digest, raw string
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token_hash FROM password_reset_tokens WHERE user_id=$1`, u.ID).Scan(&digest))
+		require.Equal(t, ResetTokenHash("reset-initial"), digest)
+		q, err := queue.New(dsn)
+		require.NoError(t, err)
+		defer q.Close()
+		d, err := q.ClaimPasswordResetDelivery(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, d)
+		ready, err := q.PasswordResetReady(ctx, *d)
+		require.NoError(t, err)
+		require.True(t, ready)
+		require.NoError(t, q.FinishPasswordResetDelivery(ctx, *d, errors.New("smtp unavailable")))
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token FROM password_reset_outbox WHERE id=$1`, d.ID).Scan(&raw))
+		require.Equal(t, "reset-initial", raw)
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token_hash FROM password_reset_tokens WHERE user_id=$1`, u.ID).Scan(&digest))
+		// Requests inside one minute neither create a delivery nor retire the usable link.
+		require.NoError(t, s.RequestPasswordReset(ctx, u.Email, "suppressed"))
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token_hash FROM password_reset_tokens WHERE user_id=$1`, u.ID).Scan(&raw))
+		require.Equal(t, digest, raw)
+		require.NoError(t, s.RequestPasswordReset(ctx, "unknown@test.local", "unknown"))
+		// Invalid/expired tokens leave the password and session intact.
+		require.Error(t, s.ResetPassword(ctx, "missing", hash))
+		_, err = s.DB.ExecContext(ctx, `UPDATE password_reset_tokens SET expires_at=CURRENT_TIMESTAMP-INTERVAL '1 second' WHERE user_id=$1`, u.ID)
+		require.NoError(t, err)
+		require.Error(t, s.ResetPassword(ctx, "reset-initial", hash))
+		_, err = s.DB.ExecContext(ctx, `UPDATE password_reset_tokens SET expires_at=CURRENT_TIMESTAMP+INTERVAL '30 minutes' WHERE user_id=$1`, u.ID)
+		require.NoError(t, err)
+		// Competing uses serialize: exactly one succeeds and all sessions are revoked.
+		var successes atomic.Int32
+		var wg sync.WaitGroup
+		newHash, err := bcrypt.GenerateFromPassword([]byte("newpassword123"), bcrypt.MinCost)
+		require.NoError(t, err)
+		for i := 0; i < 2; i++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				if s.ResetPassword(ctx, "reset-initial", newHash) == nil {
+					successes.Add(1)
+				}
+			}()
+		}
+		wg.Wait()
+		require.Equal(t, int32(1), successes.Load())
+		loaded, err = s.GetUserByID(ctx, u.ID)
+		require.NoError(t, err)
+		require.False(t, loaded.IsVerified)
+		require.Equal(t, int64(1), loaded.AuthVersion)
+		require.NoError(t, bcrypt.CompareHashAndPassword(loaded.PassHash, []byte("newpassword123")))
+		require.Error(t, bcrypt.CompareHashAndPassword(loaded.PassHash, password))
+		_, err = s.RotateRefreshToken(ctx, "initial-session", "replacement", time.Now().Add(time.Hour))
+		require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)
+		var count int
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_reset_outbox WHERE user_id=$1 AND token IS NOT NULL`, u.ID).Scan(&count))
+		require.Zero(t, count)
+		require.NoError(t, s.ConfirmEmail(ctx, "initial-verify"))
+		oldReset := "before-change"
+		_, err = s.DB.ExecContext(ctx, `UPDATE password_reset_outbox SET created_at=CURRENT_TIMESTAMP-INTERVAL '2 minutes' WHERE user_id=$1`, u.ID)
+		require.NoError(t, err)
+		require.NoError(t, s.RequestPasswordReset(ctx, u.Email, oldReset))
+		address := "changed@test.local"
+		_, _, err = s.ChangeCredentials(ctx, u.ID, 1, "wrong", &address, nil, "new-verify", "new-session", time.Now().Add(time.Hour))
+		require.Error(t, err)
+		changed, ok, err := s.ChangeCredentials(ctx, u.ID, 1, "newpassword123", &address, nil, "new-verify", "new-session", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		require.True(t, ok)
+		require.False(t, changed.IsVerified)
+		require.Equal(t, int64(2), changed.AuthVersion)
+		require.Error(t, s.ResetPassword(ctx, oldReset, hash))
+		require.Error(t, s.ConfirmEmail(ctx, "initial-verify"))
+		require.NoError(t, s.ConfirmEmail(ctx, "new-verify"))
+		_, ok, err = s.ChangeCredentials(ctx, u.ID, 2, "newpassword123", &address, nil, "unused", "unused", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		require.False(t, ok)
+		name := ""
+		zone := "Europe/Moscow"
+		require.NoError(t, s.UpdateAccountProfile(ctx, u.ID, &name, &zone))
+		loaded, err = s.GetUserByID(ctx, u.ID)
+		require.NoError(t, err)
+		require.Empty(t, loaded.DisplayName)
+		require.NoError(t, s.UpdateAccountProfile(ctx, u.ID, nil, nil))
+		gotZone, err := s.GetTimezone(ctx, u.ID)
+		require.NoError(t, err)
+		require.Equal(t, zone, gotZone)
+		// Existing address conflict rolls the whole credential operation back.
+		_, err = s.SaveUser(ctx, "occupied@test.local", hash)
+		require.NoError(t, err)
+		occupied := "occupied@test.local"
+		_, _, err = s.ChangeCredentials(ctx, u.ID, 2, "newpassword123", &occupied, nil, "unused", "unused", time.Now().Add(time.Hour))
+		require.Error(t, err)
+		loaded, err = s.GetUserByID(ctx, u.ID)
+		require.NoError(t, err)
+		require.Equal(t, address, loaded.Email)
+		require.Equal(t, int64(2), loaded.AuthVersion)
+		_, err = s.RotateRefreshToken(ctx, "new-session", "rotated-session", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		// Authenticated password changes keep just the newly created session.
+		_, ok, err = s.ChangeCredentials(ctx, u.ID, 2, "newpassword123", nil, hash, "unused", "password-session", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		require.True(t, ok)
+		_, err = s.RotateRefreshToken(ctx, "rotated-session", "bad", time.Now().Add(time.Hour))
+		require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)
+		_, err = s.RotateRefreshToken(ctx, "password-session", "good", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+	})
+
+	t.Run("reset rate limits replacement delivery and verification race", func(t *testing.T) {
+		hash, err := bcrypt.GenerateFromPassword([]byte("password123"), bcrypt.MinCost)
+		require.NoError(t, err)
+		u, err := s.RegisterAccount(ctx, "rate@test.local", "", hash, "rate-verify", "rate-session", time.Now().Add(time.Hour))
+		require.NoError(t, err)
+		t.Cleanup(func() { _, _ = s.DB.ExecContext(context.Background(), `DELETE FROM users WHERE id=$1`, u.ID) })
+		require.NoError(t, s.RequestPasswordReset(ctx, u.Email, "rate-0"))
+		for i := 1; i < 5; i++ {
+			_, err = s.DB.ExecContext(ctx, `UPDATE password_reset_outbox SET created_at=created_at-INTERVAL '2 minutes' WHERE user_id=$1`, u.ID)
+			require.NoError(t, err)
+			require.NoError(t, s.RequestPasswordReset(ctx, u.Email, fmt.Sprintf("rate-%d", i)))
+		}
+		var count int
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_reset_outbox WHERE user_id=$1`, u.ID).Scan(&count))
+		require.Equal(t, 5, count)
+		require.Error(t, s.ResetPassword(ctx, "rate-0", hash))
+		_, err = s.DB.ExecContext(ctx, `UPDATE password_reset_outbox SET created_at=created_at-INTERVAL '2 minutes' WHERE user_id=$1`, u.ID)
+		require.NoError(t, err)
+		require.NoError(t, s.RequestPasswordReset(ctx, u.Email, "rate-5"))
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_reset_outbox WHERE user_id=$1`, u.ID).Scan(&count))
+		require.Equal(t, 5, count)
+		var digest string
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token_hash FROM password_reset_tokens WHERE user_id=$1`, u.ID).Scan(&digest))
+		require.Equal(t, ResetTokenHash("rate-4"), digest)
+		q, err := queue.New(dsn)
+		require.NoError(t, err)
+		defer q.Close()
+		d, err := q.ClaimPasswordResetDelivery(ctx)
+		require.NoError(t, err)
+		require.NotNil(t, d)
+		require.Equal(t, "rate-4", d.Token)
+		require.NoError(t, q.FinishPasswordResetDelivery(ctx, *d, nil))
+		var raw sql.NullString
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token FROM password_reset_outbox WHERE id=$1`, d.ID).Scan(&raw))
+		require.False(t, raw.Valid)
+		// A stale acknowledgement cannot restore an erased token.
+		require.NoError(t, q.FinishPasswordResetDelivery(ctx, *d, errors.New("stale failure")))
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT token FROM password_reset_outbox WHERE id=$1`, d.ID).Scan(&raw))
+		require.False(t, raw.Valid)
+		for i := 0; i < 6; i++ {
+			oldToken := fmt.Sprintf("race-verify-%d", i)
+			race, err := s.RegisterAccount(ctx, fmt.Sprintf("race%d@test.local", i), "", hash, oldToken, fmt.Sprintf("race-session-%d", i), time.Now().Add(time.Hour))
+			require.NoError(t, err)
+			raceID := race.ID
+			t.Cleanup(func() { _, _ = s.DB.ExecContext(context.Background(), `DELETE FROM users WHERE id=$1`, raceID) })
+			address := fmt.Sprintf("race-new%d@test.local", i)
+			var wg sync.WaitGroup
+			wg.Add(2)
+			var changeErr error
+			go func() { defer wg.Done(); _ = s.ConfirmEmail(ctx, oldToken) }()
+			go func() {
+				defer wg.Done()
+				_, _, changeErr = s.ChangeCredentials(ctx, race.ID, 0, "password123", &address, nil, fmt.Sprintf("race-new-verify-%d", i), fmt.Sprintf("race-new-session-%d", i), time.Now().Add(time.Hour))
+			}()
+			wg.Wait()
+			require.NoError(t, changeErr)
+			loaded, err := s.GetUserByID(ctx, race.ID)
+			require.NoError(t, err)
+			require.Equal(t, address, loaded.Email)
+			require.False(t, loaded.IsVerified)
+			require.Error(t, s.ConfirmEmail(ctx, oldToken))
+		}
+	})
 	t.Run("verification leases respect retry budget and reject stale acknowledgements", func(t *testing.T) {
 		user := newUser()
 		require.NoError(t, s.SaveEmailVerificationToken(ctx, user, "lease-budget", time.Now().Add(time.Hour)))

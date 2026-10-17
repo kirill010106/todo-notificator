@@ -52,6 +52,8 @@ import { CategoriesPage } from "../features/categories/Categories";
 import { ProgressPage } from "../features/progress/Progress";
 import { RewardsPage } from "../features/rewards/Rewards";
 import { AccountPage, setTheme } from "../features/account/Account";
+import { PasswordRecovery } from "../features/public/PasswordRecovery";
+import { VerificationNotice } from "../features/account/VerificationNotice";
 import { Landing, AuthPage, Verification } from "../features/public/Public";
 import { useShop } from "../lib/shop";
 import s from "../styles/App.module.css";
@@ -135,6 +137,7 @@ function Shell() {
   const { data, notify, refresh } = useApp();
   const focus = useFocus();
   const wallet = useShop(data.user.id);
+  const accountName = data.user.display_name || data.user.email.split("@")[0];
   const [logout, setLogout] = useState(false);
   const [loggingOut, setLoggingOut] = useState(false);
   const [paymentHandled, setPaymentHandled] = useState(false);
@@ -222,10 +225,10 @@ function Shell() {
           </div>
           <NavLink className={s.profileLink} to="/app/account">
             <span className={s.avatar}>
-              {data.user.email.slice(0, 1).toUpperCase()}
+              {accountName.slice(0, 1).toUpperCase()}
             </span>
             <span>
-              <strong>{data.user.email.split("@")[0]}</strong>
+              <strong>{accountName}</strong>
               <small>
                 {data.user.is_premium ? "Premium" : "Бесплатный тариф"}
               </small>
@@ -258,7 +261,7 @@ function Shell() {
                 aria-label="Меню аккаунта"
               >
                 <span className={s.avatar}>
-                  {data.user.email.slice(0, 1).toUpperCase()}
+                  {accountName.slice(0, 1).toUpperCase()}
                 </span>
                 <ChevronDown size={14} />
               </Menu.Trigger>
@@ -283,6 +286,7 @@ function Shell() {
           </div>
         </header>
         <main id="main" className={s.content}>
+          <VerificationNotice />
           <Outlet />
         </main>
         <footer className={s.appFooter}>
@@ -327,7 +331,9 @@ function Shell() {
                 }),
               });
             } catch {
-              notify("Вышли на этом устройстве, но сервер не подтвердил отзыв сессии.");
+              notify(
+                "Вышли на этом устройстве, но сервер не подтвердил отзыв сессии.",
+              );
             } finally {
               endSession();
               setLoggingOut(false);
@@ -439,6 +445,14 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Entry />} />
+            <Route
+              path="/forgot-password"
+              element={<PasswordRecovery key="forgot" />}
+            />
+            <Route
+              path="/reset-password"
+              element={<PasswordRecovery key="reset" reset />}
+            />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/register" element={<AuthPage register />} />
             <Route path="/frontend" element={<Navigate to="/" replace />} />

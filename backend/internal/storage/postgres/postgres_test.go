@@ -530,11 +530,11 @@ func TestUser_Success(t *testing.T) {
 	email := "test@example.com"
 	passHash := []byte("hashed_password")
 
-	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium FROM users WHERE email = $1`)
+	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users WHERE email = $1`)
 	mock.ExpectQuery(query).
 		WithArgs(email).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
-			AddRow(int64(42), email, passHash, false, true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium", "display_name", "auth_version"}).
+			AddRow(int64(42), email, passHash, false, true, "", 0))
 
 	user, err := s.User(context.Background(), email)
 	require.NoError(t, err)
@@ -554,7 +554,7 @@ func TestUser_NotFound(t *testing.T) {
 	s := &Storage{DB: db}
 	email := "notfound@example.com"
 
-	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium FROM users WHERE email = $1`)
+	query := regexp.QuoteMeta(`SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users WHERE email = $1`)
 	mock.ExpectQuery(query).
 		WithArgs(email).
 		WillReturnError(sql.ErrNoRows)
@@ -577,13 +577,13 @@ func TestGetUserByID_Success(t *testing.T) {
 	passHash := []byte("hashed_password")
 
 	query := regexp.QuoteMeta(`
-	SELECT id, email, password_hash, is_verified, is_premium FROM users
+	SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users
 	WHERE id = $1
 	`)
 	mock.ExpectQuery(query).
 		WithArgs(userID).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
-			AddRow(userID, email, passHash, true, true))
+		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium", "display_name", "auth_version"}).
+			AddRow(userID, email, passHash, true, true, "", 0))
 
 	user, err := s.GetUserByID(context.Background(), userID)
 	require.NoError(t, err)
@@ -604,7 +604,7 @@ func TestGetUserByID_NotFound(t *testing.T) {
 	userID := int64(999)
 
 	query := regexp.QuoteMeta(`
-	SELECT id, email, password_hash, is_verified, is_premium FROM users
+	SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users
 	WHERE id = $1
 	`)
 	mock.ExpectQuery(query).
@@ -933,107 +933,41 @@ func TestRotateRefreshToken_Success(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-
 	s := &Storage{DB: db}
-
-	oldToken := "old_refresh_token"
-	newToken := "new_refresh_token"
-	expiresAt := time.Now().UTC().Add(24 * time.Hour)
-	passHash := []byte("hashed_password")
-
-	query := regexp.QuoteMeta(`
-		WITH rotated AS (
-			UPDATE refresh_tokens
-			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
-			RETURNING user_id
-		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
-		FROM rotated r
-		JOIN users u ON u.id = r.user_id
-	`)
-
-	mock.ExpectQuery(query).
-		WithArgs(oldToken, newToken, expiresAt).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium"}).
-			AddRow(int64(42), "user@example.com", passHash, true, true))
-
-	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
+	expires := time.Now().UTC().Add(time.Hour)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs("old").WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(42))
+	mock.ExpectQuery("SELECT id,email,password_hash,is_verified,is_premium,display_name,auth_version FROM users").WithArgs(42).WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium", "display_name", "auth_version"}).AddRow(42, "user@example.com", []byte("hash"), true, true, "Name", 3))
+	mock.ExpectExec("UPDATE refresh_tokens SET").WithArgs("old", "new", expires, 42).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectCommit()
+	u, err := s.RotateRefreshToken(context.Background(), "old", "new", expires)
 	require.NoError(t, err)
-	require.NotNil(t, user)
-	require.Equal(t, int64(42), user.ID)
-	require.Equal(t, "user@example.com", user.Email)
-	require.Equal(t, passHash, user.PassHash)
-	require.True(t, user.IsVerified)
-	require.True(t, user.IsPremium)
+	require.Equal(t, int64(3), u.AuthVersion)
+	require.Equal(t, "Name", u.DisplayName)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
-
 func TestRotateRefreshToken_Invalid(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-
 	s := &Storage{DB: db}
-
-	oldToken := "old_refresh_token"
-	newToken := "new_refresh_token"
-	expiresAt := time.Now().UTC().Add(24 * time.Hour)
-
-	query := regexp.QuoteMeta(`
-		WITH rotated AS (
-			UPDATE refresh_tokens
-			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
-			RETURNING user_id
-		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
-		FROM rotated r
-		JOIN users u ON u.id = r.user_id
-	`)
-
-	mock.ExpectQuery(query).
-		WithArgs(oldToken, newToken, expiresAt).
-		WillReturnError(sql.ErrNoRows)
-
-	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
-	require.Error(t, err)
-	require.Nil(t, user)
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs("old").WillReturnError(sql.ErrNoRows)
+	mock.ExpectRollback()
+	_, err = s.RotateRefreshToken(context.Background(), "old", "new", time.Now())
 	require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
-
 func TestRotateRefreshToken_DBError(t *testing.T) {
 	db, mock, err := sqlmock.New()
 	require.NoError(t, err)
 	defer db.Close()
-
 	s := &Storage{DB: db}
-
-	oldToken := "old_refresh_token"
-	newToken := "new_refresh_token"
-	expiresAt := time.Now().UTC().Add(24 * time.Hour)
-
-	query := regexp.QuoteMeta(`
-		WITH rotated AS (
-			UPDATE refresh_tokens
-			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
-			RETURNING user_id
-		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
-		FROM rotated r
-		JOIN users u ON u.id = r.user_id
-	`)
-
-	mock.ExpectQuery(query).
-		WithArgs(oldToken, newToken, expiresAt).
-		WillReturnError(errors.New("db error"))
-
-	user, err := s.RotateRefreshToken(context.Background(), oldToken, newToken, expiresAt)
-	require.Error(t, err)
-	require.Nil(t, user)
-	require.Contains(t, err.Error(), "db error")
+	mock.ExpectBegin()
+	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WillReturnError(errors.New("db error"))
+	mock.ExpectRollback()
+	_, err = s.RotateRefreshToken(context.Background(), "old", "new", time.Now())
+	require.ErrorContains(t, err, "db error")
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -1049,9 +983,11 @@ func TestSaveEmailVerificationToken_Success(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	mock.ExpectBegin()
+	mock.ExpectQuery(regexp.QuoteMeta(`SELECT id FROM users WHERE id=$1 FOR UPDATE`)).WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(userID))
+	mock.ExpectExec(regexp.QuoteMeta(`DELETE FROM email_verification_tokens WHERE user_id=$1`)).WithArgs(userID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectExec(regexp.QuoteMeta(`UPDATE verification_email_outbox SET status='failed',last_error='Replaced by a newer verification link',lease_token=NULL,lease_until=NULL WHERE user_id=$1 AND status='scheduled'`)).
 		WithArgs(userID).WillReturnResult(sqlmock.NewResult(0, 0))
-	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1,$2,$3)`)).
+	mock.ExpectExec(regexp.QuoteMeta(`INSERT INTO email_verification_tokens (user_id, token, expires_at, email) SELECT $1,$2,$3,email FROM users WHERE id=$1`)).
 		WithArgs(userID, token, expiresAt).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 	mock.ExpectQuery(regexp.QuoteMeta(`SELECT email FROM users WHERE id=$1`)).

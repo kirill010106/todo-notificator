@@ -1929,3 +1929,23 @@
     white-space: nowrap;
   }
 }
+
+.identityFields {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.verificationBanner {
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.verificationBanner p {
+  margin: 0 0 8px;
+}

@@ -73,6 +73,7 @@ export async function fixture(
   elapsedSeconds = 60,
   completedCount = 0,
   questsReady = false,
+  authenticated = true,
 ) {
   let active = session
     ? {
@@ -154,12 +155,14 @@ export async function fixture(
     completed_in_cycle: count,
     available_actions: [],
   });
-  await page.addInitScript(() => {
-    localStorage.setItem("access_token", "test-token");
-    localStorage.setItem("refresh_token", "test-refresh");
+  await page.addInitScript((authenticated) => {
+    if (authenticated) {
+      localStorage.setItem("access_token", "test-token");
+      localStorage.setItem("refresh_token", "test-refresh");
+    }
     if (!localStorage.getItem("todo:theme"))
       localStorage.setItem("todo:theme", "light");
-  });
+  }, authenticated);
   await page.route("**/api/v1/**", async (route) => {
     const url = new URL(route.request().url());
     const path = url.pathname.replace("/api/v1", "");

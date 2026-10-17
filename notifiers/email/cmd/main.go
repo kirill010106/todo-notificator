@@ -13,6 +13,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
+	"github.com/kirill010106/todo-notificator/notifiers/email/internal/passwordreset"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/verification"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
@@ -93,6 +94,7 @@ func main() {
 
 	logger.Info("starting email notifier")
 	go verificationWorker.Run(ctx)
+	go passwordreset.New(logger, storage, sndr).Run(ctx)
 	sched.Start(ctx)
 
 	// Graceful shutdown webhook server
