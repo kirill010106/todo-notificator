@@ -2,15 +2,16 @@ package main
 
 import (
 	"context"
-	"log"
-	"net"
-    "os"
-	"time"
 	pb "github.com/kirill010106/todo-notificator/root/pkg/activity_logger/v1"
+	"github.com/kirill010106/todo-notificator/root/pkg/envconfig"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"google.golang.org/grpc"
+	"log"
+	"net"
+	"os"
+	"time"
 )
 
 const (
@@ -114,6 +115,9 @@ func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLo
 }
 
 func main() {
+	if err := envconfig.Load(); err != nil {
+		log.Fatal(err)
+	}
 	uri := mongoURI
 	if v := os.Getenv("MONGO_URL"); v != "" {
 		uri = v
@@ -148,4 +152,3 @@ func main() {
 		log.Fatalf("failed to serve: %v", err)
 	}
 }
-

@@ -14,13 +14,17 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/config"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/formatter"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/sender"
-	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
 	"github.com/kirill010106/todo-notificator/notifiers/email/internal/verification"
+	"github.com/kirill010106/todo-notificator/notifiers/email/internal/webhook"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/scheduler"
 	"github.com/kirill010106/todo-notificator/notifiers/shared/storage/postgres"
+	"github.com/kirill010106/todo-notificator/root/pkg/envconfig"
 )
 
 func main() {
+	if err := envconfig.Load(); err != nil {
+		log.Fatal(err)
+	}
 	cfg := config.MustLoad()
 
 	logger := slog.New(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{

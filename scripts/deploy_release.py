@@ -2,12 +2,16 @@
 import argparse
 import contextlib
 import hashlib
+import json
 import os
 from pathlib import Path
 import re
 import subprocess
 import sys
 from datetime import datetime, timezone
+from urllib.parse import urlsplit
+from release_config import validate_config
+from trusted_proxies import discover
 
 
 class Release:
@@ -16,15 +20,45 @@ class Release:
     def __init__(self, root, backups, runner=subprocess.run):
         self.root, self.backups, self.runner = Path(root), Path(backups), runner
         self.compose = ["docker", "compose", "--project-directory", str(self.root),
-                        "--env-file", str(self.root / ".env"), "-f", str(self.root / "docker-compose.yml"), "--profile", "tools"]
+                        "--env-file", str(self.root / ".env"), "-f", str(self.root / "docker-compose.yml"), "--profile", "tools", "--profile", "database"]
         self.backup = None
+        self.compose_env = None
+        self.managed_postgres = False
 
     def call(self, args, **kwargs):
         # Never print resolved Compose configuration or database credentials.
         return self.runner(args, check=True, **kwargs)
 
     def compose_call(self, args, **kwargs):
+        if self.compose_env is not None:
+            kwargs["env"] = self.compose_env
         return self.call(self.compose + list(args), **kwargs)
+
+    def preflight(self, resolve_proxies=False):
+        try:
+            result = self.compose_call(["config", "--format", "json"], capture_output=True, text=True)
+        except subprocess.CalledProcessError as exc:
+            # Compose diagnostics may contain interpolated credentials. Print names only.
+            names = sorted(set(re.findall(r"required variable ([A-Z_]+)", exc.stderr or "")))
+            detail = ": " + ", ".join(names) if names else "; check .env and Compose syntax"
+            raise RuntimeError("Production Compose configuration failed" + detail) from None
+        config = json.loads(result.stdout)
+        errors = validate_config(config, allow_auto_proxies=self.compose_env is None)
+        if errors:
+            raise RuntimeError("Production configuration is incomplete:\n- " + "\n- ".join(errors))
+        backend_env = config["services"]["backend"]["environment"]
+        self.managed_postgres = urlsplit(backend_env["DATABASE_URL"]).hostname == "postgres"
+        if backend_env.get("TRUSTED_PROXIES") == "auto":
+            if resolve_proxies:
+                proxies = discover(config, self.call)
+                self.compose_env = dict(os.environ, TRUSTED_PROXIES=proxies)
+                # Re-resolve the actual Compose interpolation before any mutation.
+                # The same environment is used for every subsequent Compose call.
+                self.preflight()
+                print("Traefik discovered automatically; trusted addresses:", proxies, flush=True)
+                return
+            print("TRUSTED_PROXIES=auto: Traefik will be discovered on the deployment host before services stop.", flush=True)
+        print("Production configuration checked; no containers changed. External services are not verified.", flush=True)
 
     def disable_restarts(self):
         ids = self.compose_call(["ps", "--all", "--quiet", *self.services], capture_output=True, text=True).stdout.split()
@@ -66,9 +100,25 @@ class Release:
             f.write(digest.hexdigest() + "  " + self.backup.name + "\n")
         print("Verified archive and checksum:", self.backup, flush=True)
 
+    def prepare_database(self):
+        if self.managed_postgres:
+            # Start a fresh/stopped database, but never recreate an existing DB as
+            # a side effect of releasing application code or pulling a newer image.
+            self.compose_call(["up", "-d", "--no-deps", "--no-recreate", "--wait", "--wait-timeout", "120", "postgres"])
+        try:
+            self.compose_call(["run", "--rm", "-T", "--no-deps", "db-tools", "sh", "-ec",
+                               'exec psql --dbname="$DATABASE_URL" --no-psqlrc -v ON_ERROR_STOP=1 -tAc "SELECT 1"'],
+                              capture_output=True)
+        except subprocess.CalledProcessError:
+            raise RuntimeError("PostgreSQL connection failed before stopping application services; check database credentials and availability") from None
+
     def deploy(self):
-        self.compose_call(["config", "--quiet"])
-        self.compose_call(["pull", "backend", "frontend", "email-notifier", "activity-logger", "mongo", "db-tools"])
+        self.preflight(resolve_proxies=True)
+        images = ["backend", "frontend", "email-notifier", "activity-logger", "mongo", "db-tools"]
+        if self.managed_postgres:
+            images.append("postgres")
+        self.compose_call(["pull", *images])
+        self.prepare_database()
         quiescing = False
         try:
             quiescing = True
@@ -112,12 +162,19 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True)
     parser.add_argument("--backups", type=Path, required=True)
+    parser.add_argument("--check", action="store_true", help="validate configuration only; no pull, stop, migration or startup")
     args = parser.parse_args()
-    if not re.fullmatch(r"[0-9a-f]{40}", os.environ.get("IMAGE_TAG", "")):
-        parser.error("IMAGE_TAG must be the immutable 40-character release commit SHA")
+    release = Release(args.root.resolve(), args.backups.resolve())
+    if args.check:
+        release.preflight()
+        return
     with release_lock(args.backups):
-        Release(args.root.resolve(), args.backups.resolve()).deploy()
+        release.deploy()
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        sys.exit(1)

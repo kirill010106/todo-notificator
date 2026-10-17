@@ -98,43 +98,17 @@ Go-модули объединены в `go.work`. React-клиент наход
 
 Все команды ниже выполняются из корня репозитория, если не указано иначе.
 
-### 1. Настройки backend и email
-
-Скопируйте существующий шаблон в рабочие директории сервисов:
+### 1. Один корневой .env
 
 ```powershell
-Copy-Item .env.example backend/.env
-Copy-Item .env.example notifiers/email/.env
+Copy-Item .env.example .env
 ```
 
-Для backend укажите:
+Не перезаписывайте существующий `.env`: перенесите недостающие параметры из шаблона. Backend, email, activity-logger и Telegram-заготовка используют один файл в корне. Вложенные `.env` не читаются. Заполните SMTP и секреты; локальный адрес PostgreSQL по умолчанию — `127.0.0.1:5433/todo`, MongoDB — `127.0.0.1:27017`.
 
-```dotenv
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/todo?sslmode=disable
-CONFIG_PATH=./config/local.yaml
-APP_SECRET=replace-with-a-long-random-secret
-WEBHOOK_URL=http://localhost:8084
-WEBHOOK_SECRET=replace-with-shared-webhook-secret
-CLIENT_URL=http://localhost:3030
-ACTIVITY_LOGGER_ADDR=localhost:50051
-```
+Относительные `CONFIG_PATH=backend/config/local.yaml` и `EMAIL_CONFIG_PATH=notifiers/email/config/local.yaml` разрешаются от корня проекта, независимо от текущей папки. Для запуска из другой директории можно передать абсолютный `ENV_FILE`; пути YAML тогда разрешаются от каталога выбранного файла. Переменные процесса имеют приоритет. В контейнерах `.env` не копируется: Compose передаёт настройки окружением и задаёт абсолютные пути `/app/config/prod.yaml`.
 
-Для email-сервиса укажите тот же DSN и тот же `WEBHOOK_SECRET`, а также действующие SMTP-настройки:
-
-```dotenv
-DATABASE_URL=postgres://postgres:postgres@127.0.0.1:5433/todo?sslmode=disable
-EMAIL_CONFIG_PATH=./config/local.yaml
-WEBHOOK_SECRET=replace-with-shared-webhook-secret
-SMTP_HOST=smtp-relay.brevo.com
-SMTP_PORT=587
-SMTP_USERNAME=your-smtp-login
-SMTP_PASSWORD=your-smtp-key
-SMTP_FROM=your-verified-sender@example.com
-SMTP_SENDER_NAME=ToDoNotificator
-APP_URL=http://localhost:3030
-```
-
-`APP_SECRET` и `CONFIG_PATH` обязательны для backend. Для email обязательны `DATABASE_URL`, `WEBHOOK_SECRET`, `SMTP_USERNAME` и `SMTP_PASSWORD`; адрес отправителя должен соответствовать настройкам SMTP-провайдера. Backend читает `.env` из рабочей директории; email также ищет `.env` в нескольких родительских директориях. Уже заданные переменные окружения имеют приоритет над `.env`.
+После изменения `.env` перезапустите процессы сервисов целиком. Air не отслеживает этот файл. Правила загрузки и проверка перехода: [ENVIRONMENT.md](docs/ENVIRONMENT.md).
 
 Локальные YAML-конфиги находятся в `backend/config/local.yaml` и `notifiers/email/config/local.yaml`. Backend слушает `8082`, email webhook — `8084`, activity-logger — `50051`, метрики — `9091`.
 
@@ -152,7 +126,7 @@ go install github.com/air-verse/air@latest
 ./dev.ps1
 ```
 
-Скрипт создает или запускает PostgreSQL (`todo-local-pg-alt`, порт `5433`) и MongoDB (`todo-mongodb`, порт `27017`), ждет готовности и открывает три PowerShell-окна с Air: backend, email и activity-logger. DSN PostgreSQL и пути конфигов он передает сам; секреты и SMTP берутся из подготовленных `.env`. Скрипт завершает ранее запущенные процессы `app` этого проекта. При остановке сервисов контейнеры БД остаются запущенными.
+Скрипт создает или запускает PostgreSQL (`todo-local-pg-alt`, порт `5433`) и MongoDB (`todo-mongodb`, порт `27017`), ждет готовности и открывает три PowerShell-окна с Air: backend, email и activity-logger. Все настройки сервисов берутся из корневого `.env`; скрипт передаёт только абсолютный `ENV_FILE`. Он подготавливает базы со стандартными локальными портами; для своих баз используйте `./dev.ps1 -SkipDatabases`. Скрипт завершает ранее запущенные процессы `app` этого проекта. При остановке сервисов контейнеры БД остаются запущенными.
 
 ### 3. Альтернатива: ручной запуск
 
@@ -166,8 +140,7 @@ docker run --name todo-mongodb -p 127.0.0.1:27017:27017 -d mongo:7
 Если эти контейнеры уже созданы, используйте `docker start todo-local-pg-alt todo-mongodb`.
 
 Эти учетные данные предназначены только для локальной разработки. Команды выше
-ограничивают доступ loopback-адресом. Текущий `dev.ps1` пока публикует порты баз
-на всех интерфейсах; это открытая задача. Запуск существующего контейнера не
+и `dev.ps1` ограничивают доступ новых контейнеров loopback-адресом. Запуск существующего контейнера не
 меняет его привязки портов. Не используйте демонстрационный пароль для внешней БД;
 не пересоздавайте контейнер с нужными данными без резервной копии и плана переноса.
 
@@ -176,7 +149,6 @@ docker run --name todo-mongodb -p 127.0.0.1:27017:27017 -d mongo:7
 ```powershell
 # Терминал 1
 Set-Location activity-logger
-$env:MONGO_URL = 'mongodb://127.0.0.1:27017'
 go run ./cmd/main.go
 ```
 
@@ -204,7 +176,7 @@ npm ci
 npm run dev
 ```
 
-Откройте [http://127.0.0.1:3030](http://127.0.0.1:3030). Vite перенаправляет `/api` на `127.0.0.1:8082`. Ссылки из писем и оплаты используют `APP_URL` и `CLIENT_URL`; используйте одно имя хоста для сохранения браузерной сессии. При необходимости задайте полный адрес API с `/api/v1` в `frontend/.env.local`: `VITE_API_BASE_URL=http://localhost:8082/api/v1`.
+Откройте [http://127.0.0.1:3030](http://127.0.0.1:3030). Vite перенаправляет `/api` на `127.0.0.1:8082`. Ссылки из писем и оплаты используют `APP_URL` и `CLIENT_URL`; используйте одно имя хоста для сохранения браузерной сессии. При необходимости задайте полный адрес API с `/api/v1` в корневом `.env`: `VITE_API_BASE_URL=http://localhost:8082/api/v1`.
 
 Для production выполните `npm run build`; результат — `frontend/dist/`. Dockerfile собирает приложение и раздаёт его через Nginx с поддержкой внутренних маршрутов. Аргумент сборки `VITE_API_BASE_URL` по умолчанию равен `https://todoapi.chkpnk.ru/api/v1`. Шрифт Manrope с кириллицей включён в сборку; внешние CDN для интерфейса не нужны.
 
@@ -222,9 +194,11 @@ node server.js
 
 ## Платежи и развертывание
 
+Для серверного окружения есть отдельный шаблон `.env.production.example`. В отдельном checkout заполните его и сохраните как `.env`, затем выполните `python scripts/deploy_release.py --root . --backups .local-backups --check`. Это проверка конфигурации без запуска и остановки контейнеров. `IMAGE_BASE` и единый SHA в `IMAGE_TAG` обязательны; `TRUSTED_PROXIES` автоматически определяется при выпуске на сервере; локальный `.env` не заменяет production-настройки. Локально SMTP меняется в корневом `.env` с полным перезапуском email-процесса; основной Compose предназначен для сервера.
+
 Интеграция YooKassa включается при заданных `SHOP_ID` и `SECRET_KEY` в окружении backend. Без них `/payments/create` и webhook возвращают `503`, `/payments/sync` оставляет ожидающие платежи pending. Сумма сейчас задана в обработчике: `49.00 RUB` за Премиум навсегда. Backend формирует URL возврата из `CLIENT_URL`; webhook провайдера должен указывать на `/api/v1/webhooks/yookassa`. Доступ к webhook ограничен IP YooKassa и loopback. Локально тариф можно переключить через `/dev/toggle-premium`; новый тариф проверяется по БД без обновления JWT.
 
-`docker-compose.yml` предназначен для развертывания с готовыми образами `${IMAGE_BASE}-backend`, `${IMAGE_BASE}-email`, `${IMAGE_BASE}-activity-logger`, `${IMAGE_BASE}-frontend`, внешней PostgreSQL и внешней сетью Traefik `traefik`. Это не локальный Compose с секциями `build`. Он запускает MongoDB, сервисы приложения, Prometheus (`9090`) и Grafana (`3001`); backend и frontend публикуются через Traefik. Backend и email используют корневой `.env` и конфиги `prod.yaml`. Настройки деплоя также находятся в `ansible/`, `prometheus.yml` и `deploy/grafana/`. Для обновлений использовать [сценарий безопасного выпуска](docs/DEPLOYMENT.md): обязательны единый `IMAGE_TAG` (SHA) и явно заданные `TRUSTED_PROXIES`. Прямой `compose up` не выполняет безопасный перенос.
+`docker-compose.yml` предназначен для развертывания с готовыми образами `${IMAGE_BASE}-backend`, `${IMAGE_BASE}-email`, `${IMAGE_BASE}-activity-logger`, `${IMAGE_BASE}-frontend`, PostgreSQL на том же сервере с именованным томом и внешней сетью Traefik `traefik`. В production задайте `POSTGRES_PASSWORD` (имена `POSTGRES_USER` и `POSTGRES_DB` по умолчанию `todo`); строку подключения Compose соберёт сам. Явный `DATABASE_URL` позволяет использовать внешнюю БД вместо встроенной. Это не локальный Compose с секциями `build`. Он запускает MongoDB, сервисы приложения, Prometheus (`9090`) и Grafana (`3001`); backend и frontend публикуются через Traefik. Backend и email используют корневой `.env` и конфиги `prod.yaml`. Настройки деплоя также находятся в `ansible/`, `prometheus.yml` и `deploy/grafana/`. Для обновлений использовать [сценарий безопасного выпуска](docs/DEPLOYMENT.md): обязателен единый `IMAGE_TAG` (SHA); адрес Traefik определяется автоматически. Прямой `compose up` не выполняет безопасный перенос.
 
 ## Тестирование
 

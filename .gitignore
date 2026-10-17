@@ -1,5 +1,7 @@
 .idea/
 .env
+.env.local
+.env.*.local
 node_modules/
 tmp/
 .local-backups/
@@ -23,3 +25,10 @@ __pycache__/
 
 # Локальные журналы аудита и временные артефакты Codex
 /.workbench/
+
+# Игнорировать все .env-файлы
+.env*
+
+# Но оставить шаблоны
+!.env.example
+!.env.production.example

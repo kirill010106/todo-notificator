@@ -1,6 +1,23 @@
-version: '3.8'
-
 services:
+  postgres:
+    image: postgres:16-alpine
+    profiles: ["database"]
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-todo}
+      POSTGRES_DB: ${POSTGRES_DB:-todo}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 5s
+      timeout: 3s
+      retries: 24
+      start_period: 10s
+    # Internal Compose network only: no published host port and no Traefik access.
+    networks: [default]
+
   # MONGO FOR PRODUCTION (or use external)
   mongo:
     image: mongo:7
@@ -13,13 +30,13 @@ services:
     #  - "27017:27017" # disable external access to prod mongo for safety
 
   activity-logger:
-    image: ${IMAGE_BASE}-activity-logger:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
+    image: ${IMAGE_BASE:?set IMAGE_BASE to the registry image prefix}-activity-logger:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
       mongo:
         condition: service_started
     environment:
-      - MONGO_URL=mongodb://mongo:27017
+      - MONGO_URL=${MONGO_URL:-mongodb://mongo:27017}
     networks:
       - default
 
@@ -30,17 +47,24 @@ services:
       timeout: 3s
       retries: 12
       start_period: 10s
-    image: ${IMAGE_BASE}-backend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
+    image: ${IMAGE_BASE:?set IMAGE_BASE to the registry image prefix}-backend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
       - activity-logger
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgres://${POSTGRES_USER:-todo}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-todo}?sslmode=disable}
       - CONFIG_PATH=/app/config/prod.yaml
       - AUTO_MIGRATE=false
-      - TRUSTED_PROXIES=${TRUSTED_PROXIES:?set trusted Traefik IPs or CIDRs}
-    env_file:
-      - .env
+      - ENV=prod
+      # Resolved by deploy_release.py on the deployment host before startup.
+      - TRUSTED_PROXIES=${TRUSTED_PROXIES:-auto}
+      - APP_SECRET=${APP_SECRET}
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - CLIENT_URL=${CLIENT_URL:-https://todo.chkpnk.ru}
+      - WEBHOOK_URL=${WEBHOOK_URL:-http://email-notifier:8084}
+      - ACTIVITY_LOGGER_ADDR=${ACTIVITY_LOGGER_ADDR:-activity-logger:50051}
+      - SHOP_ID=${SHOP_ID:-}
+      - SECRET_KEY=${SECRET_KEY:-}
     volumes:
       - ./backend/config:/app/config:ro
     # Подключаем к внешней сети Traefik:
@@ -73,17 +97,23 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
-    image: ${IMAGE_BASE}-email:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
+    image: ${IMAGE_BASE:?set IMAGE_BASE to the registry image prefix}-email:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     depends_on:
       backend:
         condition: service_healthy
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgres://${POSTGRES_USER:-todo}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-todo}?sslmode=disable}
       # ВАЖНО: Указываем путь к конфигу email
       - EMAIL_CONFIG_PATH=/app/config/prod.yaml
-    env_file:
-      - .env
+      - WEBHOOK_SECRET=${WEBHOOK_SECRET}
+      - APP_URL=${APP_URL:-https://todo.chkpnk.ru}
+      - SMTP_HOST=${SMTP_HOST:-smtp-relay.brevo.com}
+      - SMTP_PORT=${SMTP_PORT:-587}
+      - SMTP_USERNAME=${SMTP_USERNAME}
+      - SMTP_PASSWORD=${SMTP_PASSWORD}
+      - SMTP_FROM=${SMTP_FROM}
+      - SMTP_SENDER_NAME=${SMTP_SENDER_NAME:-ToDoNotificator}
     volumes:
       # Пробрасываем локальные конфиги воркера в папку /app/config внутри контейнера
       - ./notifiers/email/config:/app/config:ro
@@ -94,7 +124,7 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
-    image: ${IMAGE_BASE}-frontend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
+    image: ${IMAGE_BASE:?set IMAGE_BASE to the registry image prefix}-frontend:${IMAGE_TAG:?set IMAGE_TAG to the release SHA}
     restart: always
     networks:
       - default
@@ -111,7 +141,8 @@ services:
     image: ${POSTGRES_TOOLS_IMAGE:-postgres:16-alpine}
     profiles: ["tools"]
     environment:
-      - DATABASE_URL=${DATABASE_URL}
+      - DATABASE_URL=${DATABASE_URL:-postgres://${POSTGRES_USER:-todo}:${POSTGRES_PASSWORD:-}@postgres:5432/${POSTGRES_DB:-todo}?sslmode=disable}
+      - PGCONNECT_TIMEOUT=10
 
   prometheus:
     image: prom/prometheus
@@ -119,12 +150,12 @@ services:
       - ./prometheus.yml:/etc/prometheus/prometheus.yml
       - prometheus_data:/prometheus
     ports:
-      - "9090:9090"
+      - "127.0.0.1:9090:9090"
 
   grafana:
     image: grafana/grafana
     ports:
-    - "3001:3000"
+    - "127.0.0.1:3001:3000"
     volumes:
     - grafana_data:/var/lib/grafana
     - ./deploy/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources:ro
@@ -136,6 +167,7 @@ networks:
     external: true
     name: traefik
 volumes:
+  postgres_data:
   mongo_data:
   prometheus_data:
   grafana_data:
