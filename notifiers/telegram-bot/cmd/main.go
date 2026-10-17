@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/kirill010106/todo-notificator/root/pkg/envconfig"
 	"log"
 	"os"
 	"time"
@@ -10,6 +11,9 @@ import (
 
 // TODO: notification via tele/element bot
 func main() {
+	if err := envconfig.Load(); err != nil {
+		log.Fatal(err)
+	}
 	pref := tele.Settings{
 		Token:  os.Getenv("BOT_TOKEN"),
 		Poller: &tele.LongPoller{Timeout: 10 * time.Second},

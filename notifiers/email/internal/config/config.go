@@ -5,7 +5,6 @@ import (
 	"os"
 
 	"github.com/ilyakaznacheev/cleanenv"
-	"github.com/joho/godotenv"
 )
 
 type Config struct {
@@ -34,19 +33,9 @@ type Database struct {
 }
 
 func MustLoad() *Config {
-	// Load environment variables without overwriting already set vars (like DATABASE_URL from dev.ps1)
-	_ = godotenv.Load()
-	_ = godotenv.Load("../../.env")
-	_ = godotenv.Load("../.env")
-	_ = godotenv.Load("../backend/.env")
-	_ = godotenv.Load("../../backend/.env")
-
 	configPath := os.Getenv("EMAIL_CONFIG_PATH")
-	if configPath == "" || !fileExists(configPath) {
-		configPath = "config/local.yaml"
-	}
-	if !fileExists(configPath) {
-		configPath = "notifiers/email/config/local.yaml"
+	if configPath == "" {
+		log.Fatal("EMAIL_CONFIG_PATH is not set")
 	}
 	if !fileExists(configPath) {
 		log.Fatalf("config file not found: %s", configPath)

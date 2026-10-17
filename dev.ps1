@@ -1,8 +1,9 @@
+param([switch]$SkipDatabases)
+
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding           = [System.Text.Encoding]::UTF8
 $ErrorActionPreference = "Stop"
 
-$ErrorActionPreference = "Stop"
 # Отключаем падение PowerShell от обычных сообщений Docker в stderr
 if (Test-Path Variable:PSNativeCommandUseErrorActionPreference) {
     $PSNativeCommandUseErrorActionPreference = $false
@@ -14,11 +15,19 @@ $pgPort      = 5433
 $pgDb        = "todo"
 $pgUser      = "postgres"
 $pgPass      = "postgres"
-$dbUrl       = "postgres://${pgUser}:${pgPass}@127.0.0.1:${pgPort}/${pgDb}?sslmode=disable"
 
 $mongoContainer = "todo-mongodb"
 $mongoPort      = 27017
-$mongoUrl       = "mongodb://127.0.0.1:${mongoPort}"
+
+# Applications parse the root file themselves; never evaluate secrets as shell code.
+# Database endpoints and config paths come from .env, without script overrides.
+$env:ENV_FILE = Join-Path $PSScriptRoot '.env'
+if (-not (Test-Path -LiteralPath $env:ENV_FILE -PathType Leaf)) {
+    throw "Создайте корневой .env из .env.example перед запуском."
+}
+if (-not (Get-Command air -ErrorAction SilentlyContinue)) {
+    throw "Air не найден в PATH."
+}
 
 # --- Универсальная функция запуска контейнеров ---
 function Ensure-Container {
@@ -55,40 +64,42 @@ function Ensure-Container {
 }
 
 # --- 1. Проверка наличия Docker ---
-if (-not (Get-Command docker -ErrorAction SilentlyContinue)) {
+if (-not $SkipDatabases -and -not (Get-Command docker -ErrorAction SilentlyContinue)) {
     throw "Docker не найден в PATH. Убедитесь, что Docker Desktop запущен."
 }
 
-Write-Host "=== Подготовка локальных баз данных ===" -ForegroundColor Cyan
+if (-not $SkipDatabases) {
+    Write-Host "=== Подготовка локальных баз данных ===" -ForegroundColor Cyan
 
-# --- 2. Запуск PostgreSQL ---
-Ensure-Container -Name $pgContainer `
-    -RunCommand {
-        docker run --name $pgContainer `
-            -e "POSTGRES_USER=$pgUser" `
-            -e "POSTGRES_PASSWORD=$pgPass" `
-            -e "POSTGRES_DB=$pgDb" `
-            -p "${pgPort}:5432" `
-            -d postgres:16-alpine | Out-Null
-    } `
-    -HealthCheck {
-        $null = docker exec $pgContainer pg_isready -U $pgUser -d $pgDb 2>$null
-        return ($LASTEXITCODE -eq 0)
-    } `
-    -SuccessMessage "Postgres готов: 127.0.0.1:$pgPort"
+    # --- 2. Запуск PostgreSQL ---
+    Ensure-Container -Name $pgContainer `
+        -RunCommand {
+            docker run --name $pgContainer `
+                -e "POSTGRES_USER=$pgUser" `
+                -e "POSTGRES_PASSWORD=$pgPass" `
+                -e "POSTGRES_DB=$pgDb" `
+                -p "127.0.0.1:${pgPort}:5432" `
+                -d postgres:16-alpine | Out-Null
+        } `
+        -HealthCheck {
+            $null = docker exec $pgContainer pg_isready -U $pgUser -d $pgDb 2>$null
+            return ($LASTEXITCODE -eq 0)
+        } `
+        -SuccessMessage "Postgres готов: 127.0.0.1:$pgPort"
 
-# --- 3. Запуск MongoDB ---
-Ensure-Container -Name $mongoContainer `
-    -RunCommand {
-        docker run --name $mongoContainer `
-            -p "${mongoPort}:27017" `
-            -d mongo:7 | Out-Null
-    } `
-    -HealthCheck {
-        $null = docker exec $mongoContainer mongosh --eval "db.adminCommand('ping')" --quiet 2>$null
-        return ($LASTEXITCODE -eq 0)
-    } `
-    -SuccessMessage "MongoDB готова: 127.0.0.1:$mongoPort"
+    # --- 3. Запуск MongoDB ---
+    Ensure-Container -Name $mongoContainer `
+        -RunCommand {
+            docker run --name $mongoContainer `
+                -p "127.0.0.1:${mongoPort}:27017" `
+                -d mongo:7 | Out-Null
+        } `
+        -HealthCheck {
+            $null = docker exec $mongoContainer mongosh --eval "db.adminCommand('ping')" --quiet 2>$null
+            return ($LASTEXITCODE -eq 0)
+        } `
+        -SuccessMessage "MongoDB готова: 127.0.0.1:$mongoPort"
+}
 
 # --- 4. Очистка старых зависших процессов app.exe ---
 Get-Process app -ErrorAction SilentlyContinue | 
@@ -103,21 +114,16 @@ $emailDir          = Join-Path $PSScriptRoot "notifiers\email"
 $activityLoggerDir = Join-Path $PSScriptRoot "activity-logger"
 
 $backendCmd = @"
-`$env:DATABASE_URL = '$dbUrl'
-`$env:CONFIG_PATH   = '.\config\local.yaml'
 Set-Location '$backendDir'
 air -c .air.toml
 "@
 
 $emailCmd = @"
-`$env:DATABASE_URL        = '$dbUrl'
-`$env:EMAIL_CONFIG_PATH   = '.\config\local.yaml'
 Set-Location '$emailDir'
 air -c .air.toml
 "@
 
 $activityCmd = @"
-`$env:MONGO_URL = '$mongoUrl'
 Set-Location '$activityLoggerDir'
 air -c .air.toml
 "@

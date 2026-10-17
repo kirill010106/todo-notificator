@@ -12,7 +12,6 @@ import (
 	"time"
 
 	_ "github.com/jackc/pgx/v5/stdlib"
-	"github.com/joho/godotenv"
 	"github.com/kirill010106/todo-notificator/clients/activitylogger"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	"github.com/kirill010106/todo-notificator/internal/http-server/router"
@@ -21,6 +20,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/migrations"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/kirill010106/todo-notificator/internal/workers/cleanup"
+	"github.com/kirill010106/todo-notificator/root/pkg/envconfig"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rvinnie/yookassa-sdk-go/yookassa"
@@ -33,8 +33,8 @@ const (
 )
 
 func main() {
-	if err := godotenv.Load(); err != nil {
-		log.Println("info: .env file not found, trying to read from system environment")
+	if err := envconfig.Load(); err != nil {
+		log.Fatal(err)
 	}
 	if len(os.Args) > 1 {
 		if len(os.Args) != 2 || os.Args[1] != "migrate" {
