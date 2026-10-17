@@ -1,0 +1,88 @@
+---
+- name: Require a supported Ubuntu server
+  ansible.builtin.assert:
+    that:
+      - ansible_facts['distribution'] == 'Ubuntu'
+      - ansible_facts['distribution_release'] in ['jammy', 'noble', 'resolute', 'stonking']
+    fail_msg: "Automatic provisioning requires a supported Ubuntu release (22.04, 24.04, 26.04 or 26.10)."
+
+- name: Install provisioning dependencies
+  ansible.builtin.apt:
+    name: [ca-certificates, curl, git, python3, python3-apt]
+    state: present
+    update_cache: true
+    cache_valid_time: 3600
+
+- name: Read installed packages before installing Docker
+  ansible.builtin.package_facts:
+    manager: apt
+
+- name: Refuse to replace another container runtime automatically
+  ansible.builtin.assert:
+    that:
+      - item not in ansible_facts['packages']
+    fail_msg: "Conflicting package {{ item }} is installed. Migrate the existing runtime explicitly; provisioning will not remove it."
+  loop: [docker.io, docker-compose, docker-compose-v2, podman-docker, containerd, runc]
+
+- name: Create the APT key directory
+  ansible.builtin.file:
+    path: /etc/apt/keyrings
+    state: directory
+    mode: '0755'
+
+- name: Install Docker repository signing key
+  ansible.builtin.get_url:
+    url: https://download.docker.com/linux/ubuntu/gpg
+    dest: /etc/apt/keyrings/docker.asc
+    mode: '0644'
+
+- name: Read Debian architecture
+  ansible.builtin.command: dpkg --print-architecture
+  register: docker_arch
+  changed_when: false
+
+- name: Configure the official Docker repository
+  ansible.builtin.copy:
+    dest: /etc/apt/sources.list.d/docker.sources
+    mode: '0644'
+    content: |
+      Types: deb
+      URIs: https://download.docker.com/linux/ubuntu
+      Suites: {{ ansible_facts['distribution_release'] }}
+      Components: stable
+      Architectures: {{ docker_arch.stdout }}
+      Signed-By: /etc/apt/keyrings/docker.asc
+  register: docker_repository
+
+- name: Install Docker Engine and Compose without upgrading installed versions
+  ansible.builtin.apt:
+    name: [docker-ce, docker-ce-cli, containerd.io, docker-buildx-plugin, docker-compose-plugin]
+    state: present
+    update_cache: "{{ docker_repository.changed }}"
+
+- name: Enable and start Docker
+  ansible.builtin.systemd_service:
+    name: docker
+    enabled: true
+    state: started
+
+- name: Verify Docker daemon and Compose
+  ansible.builtin.command:
+    argv: "{{ item }}"
+  loop:
+    - [docker, info]
+    - [docker, compose, version]
+  changed_when: false
+
+- name: Inspect the shared proxy network
+  ansible.builtin.command: docker network inspect traefik
+  register: proxy_network
+  changed_when: false
+  failed_when: proxy_network.rc != 0 and 'not found' not in proxy_network.stderr
+
+- name: Create the shared proxy network on first deployment
+  ansible.builtin.command: docker network create --driver bridge traefik
+  when: proxy_network.rc != 0
+
+- name: Provision or reuse the reverse proxy
+  ansible.builtin.import_tasks: proxy.yml

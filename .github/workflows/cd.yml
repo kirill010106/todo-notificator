@@ -96,11 +96,37 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
+      - name: Validate deployment inputs
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}
+          PROD_ENV_FILE: ${{ secrets.PROD_ENV_FILE }}
+        run: |
+          python3 - <<'PY'
+          import os
+          for name in ('SERVER_IP', 'SERVER_USER', 'PROD_ENV_FILE'):
+              if not os.environ[name].strip():
+                  raise SystemExit(f'Configure Actions secret {name}')
+          for name in ('SERVER_IP', 'SERVER_USER'):
+              value = os.environ[name]
+              if value.startswith('-') or any(c.isspace() for c in value):
+                  raise SystemExit(f'Invalid {name}: use a plain host or username')
+          port = os.environ['SERVER_SSH_PORT']
+          if not port.isdecimal() or not 1 <= int(port) <= 65535:
+              raise SystemExit('SERVER_SSH_PORT must be a TCP port number')
+          PY
+
       - name: Install Ansible
         run: sudo apt-get update && sudo apt-get install -y ansible
 
       - name: Add server to known_hosts
-        run: ssh-keyscan -H ${{ secrets.SERVER_IP }} >> ~/.ssh/known_hosts
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}
+        run: |
+          install -d -m 700 ~/.ssh
+          ssh-keyscan -T 15 -p "$SERVER_SSH_PORT" -H "$SERVER_IP" >> ~/.ssh/known_hosts
 
       - name: Generate .env file
         env:
@@ -117,7 +143,27 @@ jobs:
             echo "Skipping outdated release $RELEASE_SHA; main is $current_main"
             exit 0
           fi
+          umask 077
+          python3 - <<'PY'
+          import json, os
+          values = {
+              'ansible_host': os.environ['SERVER_IP'],
+              'ansible_user': os.environ['SERVER_USER'],
+              'ansible_port': int(os.environ['SERVER_SSH_PORT']),
+              'github_username': os.environ['GITHUB_ACTOR'],
+              'github_token': os.environ['REGISTRY_TOKEN'],
+              'image_base': os.environ['IMAGE_BASE'],
+              'release_tag': os.environ['RELEASE_SHA'],
+          }
+          with open(os.path.join(os.environ['RUNNER_TEMP'], 'deploy-vars.json'), 'w') as output:
+              json.dump(values, output)
+          PY
+          trap 'rm -f "$RUNNER_TEMP/deploy-vars.json"' EXIT
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
-          --extra-vars "ansible_host=${{ secrets.SERVER_IP }} ansible_user=${{ secrets.SERVER_USER }} github_username=${{ github.actor }} github_token=${{ secrets.GITHUB_TOKEN }} image_base=${{ env.IMAGE_BASE }} release_tag=${{ env.RELEASE_SHA }}"
+            --extra-vars "@$RUNNER_TEMP/deploy-vars.json"
         env:
-          ANSIBLE_HOST_KEY_CHECKING: "False"
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_USER: ${{ secrets.SERVER_USER }}
+          SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}
+          ACME_EMAIL: ${{ vars.ACME_EMAIL }}
+          REGISTRY_TOKEN: ${{ secrets.GITHUB_TOKEN }}

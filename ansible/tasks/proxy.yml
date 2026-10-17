@@ -1,0 +1,67 @@
+---
+# Docker inspection stays on the server: its full output can contain credentials.
+- name: Find existing Traefik containers on the proxy network
+  ansible.builtin.shell:
+    cmd: |
+      set -o pipefail
+      docker ps --all --filter network=traefik --format '{% raw %}{{json .}}{% endraw %}' | python3 -c '
+      import json, re, sys
+      rows = [json.loads(line) for line in sys.stdin if line.strip()]
+      images = r"^(?:(?:docker\.io/)?(?:library/)?)traefik(?::|@|$)|^dhi\.io/traefik(?::|@|$)"
+      print(json.dumps([row["ID"] for row in rows if re.match(images, row["Image"])]))'
+    executable: /bin/bash
+  register: existing_proxies
+  changed_when: false
+
+- name: Require an unambiguous proxy
+  ansible.builtin.assert:
+    that:
+      - existing_proxies.stdout | from_json | length <= 1
+    fail_msg: "Multiple Traefik containers use network traefik. Select one before deploying."
+
+- name: Check whether this playbook already manages the proxy
+  ansible.builtin.stat:
+    path: "{{ traefik_dir }}/compose.yml"
+  register: managed_proxy
+
+- name: Configure the managed proxy on first installation or subsequent releases
+  when: managed_proxy.stat.exists or (existing_proxies.stdout | from_json | length == 0)
+  block:
+    - name: Require the certificate registration email
+      ansible.builtin.assert:
+        that:
+          - acme_email is match('^[^\s@]+@[^\s@]+\.[^\s@]+$')
+        fail_msg: "Set the repository Actions variable ACME_EMAIL (or Ansible acme_email) before provisioning HTTPS."
+
+    - name: Create the proxy configuration directory
+      ansible.builtin.file:
+        path: "{{ traefik_dir }}"
+        state: directory
+        mode: '0755'
+
+    - name: Render managed Traefik configuration
+      ansible.builtin.template:
+        src: traefik-compose.yml.j2
+        dest: "{{ traefik_dir }}/compose.yml"
+        mode: '0644'
+
+    - name: Start the managed proxy and wait for its healthcheck
+      ansible.builtin.command:
+        argv: [docker, compose, --project-name, todo-edge, --file, "{{ traefik_dir }}/compose.yml", up, -d, --wait, --wait-timeout, '90']
+      register: proxy_start
+      changed_when: "'Started' in proxy_start.stderr or 'Created' in proxy_start.stderr or 'Recreated' in proxy_start.stderr"
+
+- name: Start an existing externally managed proxy without replacing its configuration
+  ansible.builtin.command:
+    argv: [docker, start, "{{ (existing_proxies.stdout | from_json)[0] }}"]
+  when:
+    - not managed_proxy.stat.exists
+    - existing_proxies.stdout | from_json | length == 1
+  changed_when: false
+
+- name: Check that the proxy accepts HTTP and HTTPS locally
+  ansible.builtin.wait_for:
+    host: 127.0.0.1
+    port: "{{ item }}"
+    timeout: 30
+  loop: [80, 443]
