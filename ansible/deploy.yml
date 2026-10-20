@@ -3,9 +3,8 @@
   hosts: webservers
   become: yes
 
-  vars:
-    app_dir: "/opt/todo-notificator"
-    backup_dir: "/opt/todo-notificator-backups"
+  vars_files:
+    - vars/production.yml
 
   tasks:
     - name: Require an immutable release version
@@ -14,6 +13,9 @@
           - release_tag is defined
           - release_tag is match("^[0-9a-f]{40}$")
 
+    - name: Prepare the production host before releasing application code
+      ansible.builtin.import_tasks: tasks/bootstrap.yml
+
     - name: Ensure app directory exists
       file:
         path: "{{ app_dir }}"
@@ -21,11 +23,17 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
 
+    - name: Check whether the application repository exists
+      ansible.builtin.stat:
+        path: "{{ app_dir }}/.git"
+      register: app_repository
+
     - name: Prune stale remote branches
       command: git remote prune origin
       args:
         chdir: "{{ app_dir }}"
-      ignore_errors: yes
+      when: app_repository.stat.exists
+      changed_when: false
 
     - name: Clone/Pull repository
       git:
@@ -41,6 +49,7 @@
         owner: "{{ ansible_user }}"
         group: "{{ ansible_user }}"
         mode: '0600'      
+      no_log: true
 
     # Авторизуемся в реестре GitHub пакетов (необходим для приватных репозиториев)
     - name: Log in to GitHub Container Registry
@@ -48,11 +57,6 @@
         argv: [docker, login, ghcr.io, -u, "{{ github_username }}", --password-stdin]
         stdin: "{{ github_token }}"
       no_log: true
-
-    - name: Install the release runtime
-      package:
-        name: python3
-        state: present
 
     - name: Deploy with stopped writers and a verified database archive
       command:
