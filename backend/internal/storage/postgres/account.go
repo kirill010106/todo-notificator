@@ -63,7 +63,7 @@ func retireReset(ctx context.Context, tx *sql.Tx, id int64) error {
 	return err
 }
 func createSession(ctx context.Context, tx *sql.Tx, id int64, token string, expires time.Time) error {
-	_, err := tx.ExecContext(ctx, `INSERT INTO refresh_tokens(user_id,token,expires_at) VALUES($1,$2,$3)`, id, token, expires.UTC())
+	_, err := tx.ExecContext(ctx, `INSERT INTO refresh_tokens(user_id,token_hash,expires_at) VALUES($1,$2,$3)`, id, refreshTokenHash(token), expires.UTC())
 	return err
 }
 func (s *Storage) RegisterAccount(ctx context.Context, email, name string, hash []byte, verification, refresh string, expires time.Time) (domain.User, error) {
