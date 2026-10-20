@@ -93,6 +93,12 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 				}
 				continue
 			}
+			if payment.ID != paymentID {
+				log.Warn("payment verification returned a different id", slog.String("payment_id", paymentID))
+				render.Status(r, http.StatusBadGateway)
+				render.JSON(w, r, resp.Error("invalid payment gateway response"))
+				return
+			}
 			if index == 0 {
 				latestStatus = string(payment.Status)
 			}

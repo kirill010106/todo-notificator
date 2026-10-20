@@ -42,8 +42,11 @@ function tokenIdentity(token: string | null) {
   try {
     const part = token.split(".")[1];
     if (!part) return `token:${token}`;
-    const payload = JSON.parse(atob(part.replace(/-/g, "+").replace(/_/g, "/")));
-    return payload && (typeof payload.uid === "string" || typeof payload.uid === "number")
+    const payload = JSON.parse(
+      atob(part.replace(/-/g, "+").replace(/_/g, "/")),
+    );
+    return payload &&
+      (typeof payload.uid === "string" || typeof payload.uid === "number")
       ? `user:${payload.uid}`
       : `token:${token}`;
   } catch {
@@ -55,8 +58,7 @@ function syncSessionIdentity() {
   if (observedIdentity === undefined) {
     observedIdentity = identity;
     return false;
-  }
-  else if (identity !== observedIdentity) {
+  } else if (identity !== observedIdentity) {
     observedIdentity = identity;
     epoch++;
     refreshing = null;
@@ -84,36 +86,74 @@ export async function refreshAccess() {
   syncSessionIdentity();
   if (!refreshing) {
     const currentEpoch = epoch;
-    refreshing = (async () => {
-      const token = valid(localStorage.getItem("refresh_token"));
-      if (!token) {
-        endSession();
-        throw new ApiError(401, "Войдите в аккаунт заново.");
-      }
-      const response = await fetch(`${base}/refresh`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: token }),
-      });
-      const data = await decode(response);
-      if (
-        currentEpoch !== epoch ||
-        localStorage.getItem("refresh_token") !== token
-      )
-        throw new ApiError(401, "Сессия завершена.");
-      if (!response.ok || typeof data.access_token !== "string") {
-        if (response.status === 401 || response.status === 403) endSession();
-        throw new ApiError(
-          response.status,
-          "Не удалось обновить сессию. Попробуйте ещё раз.",
-          data,
-        );
-      }
-      saveTokens(data as { access_token: string; refresh_token?: string });
-      syncSessionIdentity();
-    })().finally(() => {
-      refreshing = null;
+    const requestedToken = valid(localStorage.getItem("refresh_token"));
+    const identity = tokenIdentity(valid(localStorage.getItem("access_token")));
+    if (!navigator.locks) {
+      // An uncoordinated refresh can revoke a valid session in another tab.
+      endSession();
+      throw new ApiError(
+        401,
+        "Для обновления сессии нужен современный браузер и HTTPS.",
+      );
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 15_000);
+    const pending = Promise.resolve(
+      navigator.locks.request(
+        "todo-notificator:refresh",
+        { signal: controller.signal },
+        async () => {
+          syncSessionIdentity();
+          if (currentEpoch !== epoch)
+            throw new ApiError(401, "Сессия завершена.");
+          const token = valid(localStorage.getItem("refresh_token"));
+          if (token !== requestedToken) {
+            // A previous lock holder already rotated this account's credentials.
+            // Never adopt credentials belonging to a different/unknown account.
+            if (
+              token &&
+              identity &&
+              identity ===
+                tokenIdentity(valid(localStorage.getItem("access_token")))
+            )
+              return;
+            throw new ApiError(401, "Сессия завершена.");
+          }
+          if (!token) {
+            endSession();
+            throw new ApiError(401, "Войдите в аккаунт заново.");
+          }
+          const response = await fetch(`${base}/refresh`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ refresh_token: token }),
+            signal: controller.signal,
+          });
+          const data = await decode(response);
+          syncSessionIdentity();
+          if (
+            currentEpoch !== epoch ||
+            localStorage.getItem("refresh_token") !== token
+          )
+            throw new ApiError(401, "Сессия завершена.");
+          if (!response.ok || typeof data.access_token !== "string") {
+            if (response.status === 401 || response.status === 403)
+              endSession();
+            throw new ApiError(
+              response.status,
+              "Не удалось обновить сессию. Попробуйте ещё раз.",
+              data,
+            );
+          }
+          saveTokens(data as { access_token: string; refresh_token?: string });
+          syncSessionIdentity();
+        },
+      ),
+    ).finally(() => {
+      clearTimeout(timeout);
+      if (refreshing === pending) refreshing = null;
     });
+    refreshing = pending;
   }
   return refreshing;
 }
@@ -127,6 +167,7 @@ export async function api<T = Record<string, unknown>>(
     await refreshAccess();
   const requestEpoch = epoch;
   const sentToken = localStorage.getItem("access_token");
+  let lastSentToken = sentToken;
   const send = () => {
     syncSessionIdentity();
     if (authenticated && requestEpoch !== epoch)
@@ -136,7 +177,11 @@ export async function api<T = Record<string, unknown>>(
     if (path === "/logout" && typeof body === "string") {
       try {
         const payload = JSON.parse(body);
-        if (payload && typeof payload === "object" && "refresh_token" in payload)
+        if (
+          payload &&
+          typeof payload === "object" &&
+          "refresh_token" in payload
+        )
           body = JSON.stringify({
             ...payload,
             refresh_token: localStorage.getItem("refresh_token"),
@@ -145,30 +190,39 @@ export async function api<T = Record<string, unknown>>(
         // Preserve malformed input so that the server reports its usual error.
       }
     }
+    lastSentToken = localStorage.getItem("access_token");
     return fetch(`${base}${path}`, {
       ...init,
       body,
       headers: {
         ...(init.body ? { "Content-Type": "application/json" } : {}),
         ...init.headers,
-        ...(authenticated
-          ? { Authorization: `Bearer ${localStorage.getItem("access_token")}` }
-          : {}),
+        ...(authenticated ? { Authorization: `Bearer ${lastSentToken}` } : {}),
       },
     });
   };
   let response = await send();
+  syncSessionIdentity();
   if (authenticated && response.status === 401) {
     if (requestEpoch !== epoch) throw new ApiError(401, "Сессия завершена.");
     if (sentToken === localStorage.getItem("access_token"))
       await refreshAccess();
     response = await send();
   }
+  syncSessionIdentity();
   if (authenticated && requestEpoch !== epoch)
     throw new ApiError(401, "Сессия завершена.");
   const data = await decode(response);
+  syncSessionIdentity();
+  if (authenticated && requestEpoch !== epoch)
+    throw new ApiError(401, "Сессия завершена.");
   if (!response.ok || data.status === "Error" || data.status === "ERROR") {
-    if (authenticated && response.status === 401) endSession();
+    if (
+      authenticated &&
+      response.status === 401 &&
+      lastSentToken === localStorage.getItem("access_token")
+    )
+      endSession();
     const message =
       typeof data.message === "string"
         ? data.message

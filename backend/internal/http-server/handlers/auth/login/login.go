@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -21,7 +22,7 @@ import (
 )
 
 type Request struct {
-	Email    string `json:"email" validate:"required,email"`
+	Email    string `json:"email" validate:"required,email,max=254"`
 	Password string `json:"password" validate:"required,min=8"`
 }
 
@@ -54,7 +55,13 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config, eventL
 
 		var req Request
 
-		if err := render.DecodeJSON(r.Body, &req); err != nil {
+		if err := helpers.DecodeAuthJSON(w, r, &req); err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				render.Status(r, http.StatusRequestEntityTooLarge)
+				render.JSON(w, r, resp.ErrorCode("request body exceeds 4096 bytes", "PAYLOAD_TOO_LARGE"))
+				return
+			}
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
 				render.Status(r, http.StatusBadRequest)
@@ -67,6 +74,11 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config, eventL
 			return
 		}
 
+		if len(req.Password) > 72 {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("password exceeds 72 bytes"))
+			return
+		}
 		if err := validate.Struct(req); err != nil {
 			var validateErrs validator.ValidationErrors
 			if errors.As(err, &validateErrs) {

@@ -1173,6 +1173,7 @@ paths:
       summary: Вход
       security: []
       requestBody:
+        description: "Размер всего JSON-тела не более 4096 байт; превышение возвращает 413."
         required: true
         content:
           application/json:
@@ -1185,9 +1186,12 @@ paths:
                 email:
                   type: string
                   format: email
+                  maxLength: 254
                 password:
                   type: string
                   minLength: 8
+                  maxLength: 72
+                  description: "Не более 72 байт UTF-8, как при регистрации."
       responses:
         "200":
           description: "Успешный вход"
@@ -1207,6 +1211,12 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: "JSON-тело превышает 4096 байт"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "500":
           description: "Внутренняя ошибка сервера"
           content:
@@ -1220,6 +1230,7 @@ paths:
       summary: "Обновление access token"
       security: []
       requestBody:
+        description: "Размер всего JSON-тела не более 4096 байт; превышение возвращает 413."
         required: true
         content:
           application/json:
@@ -1230,6 +1241,8 @@ paths:
               properties:
                 refresh_token:
                   type: string
+                  maxLength: 64
+                  description: "Не более 64 байт; сервер выдаёт 64 шестнадцатеричных символа."
       responses:
         "200":
           description: "Токены обновлены"
@@ -1245,6 +1258,12 @@ paths:
                 $ref: "#/components/schemas/ErrorResponse"
         "401":
           description: "Невалидный refresh token"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
+        "413":
+          description: "JSON-тело превышает 4096 байт"
           content:
             application/json:
               schema:
@@ -2001,6 +2020,8 @@ paths:
           schema:
             type: integer
             default: 50
+            minimum: 1
+            maximum: 100
         - in: query
           name: offset
           schema:
@@ -2031,7 +2052,7 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: "Для бесплатного тарифа limit ограничен пятью записями и offset всегда 0. Тариф берется из access token. Невалидные параметры заменяются значениями по умолчанию."
+      description: "По умолчанию limit=50, верхняя граница — 100, большие значения ограничиваются. Для бесплатного тарифа limit ограничен пятью записями и offset всегда 0. Актуальный тариф проверяется middleware по БД. Невалидные параметры заменяются значениями по умолчанию. Сериализованный protobuf-ответ activity-logger ограничен 4 МиБ; при превышении или ошибке чтения HTTP возвращает 500 без частичной истории."
   /health:
     get:
       tags:
@@ -2356,7 +2377,7 @@ paths:
         - Payments
       summary: "Уведомление YooKassa"
       security: []
-      description: "Принимается с разрешенных IP YooKassa и loopback (127.0.0.1, ::1). Обрабатываются payment.succeeded и payment.canceled; прочие события подтверждаются без изменений. Успешный ответ не содержит тела. При настроенном шлюзе succeeded дополнительно проверяется через API YooKassa."
+      description: "Принимается с разрешенных IP YooKassa и loopback (127.0.0.1, ::1). Обрабатываются payment.succeeded и payment.canceled; прочие события подтверждаются без изменений. Успешный ответ не содержит тела. Оба финальных события сверяются через API YooKassa по ID и статусу. Повтор того же финального события идемпотентен; противоречие уже сохранённому финальному статусу журналируется и подтверждается 200 без изменения данных. Отсутствующая локальная запись или временный сбой возвращает 5xx для повторной доставки."
       requestBody:
         required: true
         content:

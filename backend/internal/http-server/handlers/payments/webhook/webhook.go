@@ -3,6 +3,7 @@ package webhook
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -11,6 +12,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/clientip"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/internal/storage"
 	yoopayment "github.com/rvinnie/yookassa-sdk-go/yookassa/payment"
 	webhook "github.com/rvinnie/yookassa-sdk-go/yookassa/webhook"
 )
@@ -88,33 +90,48 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 
 		log.Info("received webhook", slog.String("event", string(event.Event)), slog.String("payment_id", event.Object.ID))
 
+		var expected yoopayment.Status
 		switch event.Event {
 		case webhook.EventPaymentSucceeded:
-			// Verify payment directly with YooKassa API if finder is configured
-			if finder != nil {
-				verifiedPayment, err := finder.FindPayment(r.Context(), event.Object.ID)
-				if err != nil {
-					log.Error("failed to verify payment with yookassa api", sl.Err(err), slog.String("payment_id", event.Object.ID))
-					http.Error(w, "payment verification failed", http.StatusBadGateway)
-					return
-				}
-				if verifiedPayment == nil {
-					log.Warn("payment verification failed: payment not found in yookassa",
-						slog.String("payment_id", event.Object.ID))
-					http.Error(w, "payment not found", http.StatusBadRequest)
-					return
-				}
-				if verifiedPayment.Status != yoopayment.Succeeded {
-					log.Warn("payment verification mismatch: status is not succeeded in yookassa",
-						slog.String("payment_id", event.Object.ID),
-						slog.Any("actual_status", verifiedPayment.Status))
-					http.Error(w, "invalid payment status", http.StatusBadRequest)
-					return
-				}
+			expected = yoopayment.Succeeded
+		case webhook.EventPaymentCanceled:
+			expected = yoopayment.Canceled
+		}
+		if expected != "" {
+			if event.Object.ID == "" {
+				http.Error(w, "missing payment id", http.StatusBadRequest)
+				return
 			}
+			verifiedPayment, err := finder.FindPayment(r.Context(), event.Object.ID)
+			if err != nil {
+				log.Error("failed to verify payment with yookassa api", sl.Err(err), slog.String("payment_id", event.Object.ID))
+				http.Error(w, "payment verification failed", http.StatusBadGateway)
+				return
+			}
+			if verifiedPayment == nil {
+				log.Warn("payment verification failed: payment not found in yookassa",
+					slog.String("payment_id", event.Object.ID))
+				http.Error(w, "payment not found", http.StatusBadRequest)
+				return
+			}
+			if verifiedPayment.ID != event.Object.ID || verifiedPayment.Status != expected {
+				log.Warn("payment verification mismatch",
+					slog.String("payment_id", event.Object.ID),
+					slog.Any("actual_status", verifiedPayment.Status))
+				http.Error(w, "invalid payment status", http.StatusBadRequest)
+				return
+			}
+		}
 
+		switch event.Event {
+		case webhook.EventPaymentSucceeded:
 			userID, err := updater.CompletePaymentAndGrantPremium(r.Context(), event.Object.ID)
 			if err != nil {
+				if errors.Is(err, storage.ErrPaymentStateConflict) {
+					log.Warn("ignored conflicting terminal payment event", slog.String("payment_id", event.Object.ID))
+					w.WriteHeader(http.StatusOK)
+					return
+				}
 				log.Error("failed to complete payment and grant premium", sl.Err(err), slog.String("payment_id", event.Object.ID))
 				w.WriteHeader(http.StatusInternalServerError)
 				return
@@ -122,6 +139,11 @@ func New(log *slog.Logger, updater PaymentUpdater, finder PaymentFinder) http.Ha
 			log.Info("payment succeeded and premium granted", slog.Int64("user_id", userID), slog.String("payment_id", event.Object.ID))
 		case webhook.EventPaymentCanceled:
 			if _, err := updater.UpdatePaymentStatus(r.Context(), event.Object.ID, domain.PaymentStatusCanceled); err != nil {
+				if errors.Is(err, storage.ErrPaymentStateConflict) {
+					log.Warn("ignored conflicting terminal payment event", slog.String("payment_id", event.Object.ID))
+					w.WriteHeader(http.StatusOK)
+					return
+				}
 				log.Error("failed to update payment status to canceled",
 					sl.Err(err),
 					slog.String("payment_id", event.Object.ID))
