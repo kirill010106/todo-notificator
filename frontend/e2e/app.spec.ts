@@ -126,7 +126,9 @@ test("search, sorting and bulk completion use the API", async ({ page }) => {
   );
   await page.getByRole("button", { name: "Искать", exact: true }).click();
   await searched;
+  await page.getByRole("button", { name: "Фильтры", exact: true }).click();
   await page.getByLabel("Сортировка").selectOption("deadline");
+  await page.getByRole("button", { name: "Выбрать", exact: true }).click();
   await page.getByLabel(`Выбрать: ${tasks[0].title}`, { exact: true }).check();
   const bulk = page.waitForRequest((request) =>
     request.url().endsWith("/tasks/bulk-complete"),
@@ -421,20 +423,14 @@ test("shop purchase requires confirmation and is restored from server", async ({
     "Не хватает монет",
   );
 });
-test("free plan and logout are reachable on mobile", async ({ page }) => {
+test("account plan and logout are reachable through More on mobile", async ({ page }) => {
   await page.setViewportSize({ width: 360, height: 800 });
   await fixture(page);
   await page.goto("/app/today");
-  await expect(
-    page.getByRole("link", { name: "Бесплатный · Попробовать Premium" }),
-  ).toBeVisible();
-  const chipBox = await page
-    .getByRole("link", { name: "Бесплатный · Попробовать Premium" })
-    .boundingBox();
-  expect(chipBox?.y).toBeGreaterThanOrEqual(0);
-  expect((chipBox?.y || 0) + (chipBox?.height || 0)).toBeLessThanOrEqual(120);
-  await page.getByRole("button", { name: "Меню аккаунта" }).click();
-  await page.getByRole("menuitem", { name: "Выйти из аккаунта" }).click();
+  await page.getByRole("link", { name: "Ещё", exact: true }).last().click();
+  await page.getByRole("link", { name: "Аккаунт и настройки", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Premium навсегда" })).toBeVisible();
+  await page.getByRole("button", { name: "Выйти из аккаунта", exact: true }).click();
   await page.getByRole("button", { name: "Выйти", exact: true }).click();
   await expect(page).toHaveURL(/login/);
 });
