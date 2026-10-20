@@ -11,7 +11,7 @@ import (
 	"github.com/kirill010106/todo-notificator/notifiers/shared/domain"
 )
 
-//go:embed templates/deadline.html templates/verification.html
+//go:embed templates/deadline.html templates/verification.html templates/password_reset.html
 var templatesFS embed.FS
 
 type deadlineTemplateData struct {
@@ -28,6 +28,7 @@ type verificationTemplateData struct {
 type Formatter struct {
 	deadlineTmpl     *template.Template
 	verificationTmpl *template.Template
+	resetTmpl        *template.Template
 	appURL           string
 }
 
@@ -42,9 +43,14 @@ func New(appURL string) (*Formatter, error) {
 		return nil, fmt.Errorf("formatter.New: failed to parse verification template: %w", err)
 	}
 
+	resetTmpl, err := template.ParseFS(templatesFS, "templates/password_reset.html")
+	if err != nil {
+		return nil, fmt.Errorf("formatter.New: failed to parse password reset template: %w", err)
+	}
 	return &Formatter{
 		deadlineTmpl:     deadlineTmpl,
 		verificationTmpl: verificationTmpl,
+		resetTmpl:        resetTmpl,
 		appURL:           appURL,
 	}, nil
 }
@@ -155,4 +161,13 @@ func pluralMinute(n int) string {
 	default:
 		return "minutes"
 	}
+}
+
+func (f *Formatter) PasswordReset(token string) (string, error) {
+	link := strings.TrimRight(f.appURL, "/") + "/reset-password?token=" + token
+	var buf bytes.Buffer
+	if err := f.resetTmpl.Execute(&buf, struct{ ResetLink string }{template.HTMLEscapeString(link)}); err != nil {
+		return "", fmt.Errorf("formatter.PasswordReset: %w", err)
+	}
+	return buf.String(), nil
 }

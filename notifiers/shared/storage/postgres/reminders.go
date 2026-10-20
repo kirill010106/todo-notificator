@@ -68,7 +68,7 @@ func (s *Storage) ClaimReminder(ctx context.Context) (*domain.ReminderDelivery, 
 
 func (s *Storage) ReminderReady(ctx context.Context, d domain.ReminderDelivery) (bool, error) {
 	var ready bool
-	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM task_reminders r JOIN tasks t ON t.id=r.task_id JOIN users u ON u.id=t.user_id WHERE r.id=$1 AND r.lease_token=$2 AND r.status='scheduled' AND r.lease_until>CURRENT_TIMESTAMP AND t.status='pending' AND u.is_verified=true)`, d.ID, d.LeaseToken).Scan(&ready)
+	err := s.DB.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM task_reminders r JOIN tasks t ON t.id=r.task_id JOIN users u ON u.id=t.user_id WHERE r.id=$1 AND r.lease_token=$2 AND r.status='scheduled' AND r.lease_until>CURRENT_TIMESTAMP AND t.status='pending' AND u.is_verified=true AND u.email=$3)`, d.ID, d.LeaseToken, d.User.Email).Scan(&ready)
 	return ready, err
 }
 

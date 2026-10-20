@@ -6,7 +6,7 @@
   position: relative;
 }
 .dateField legend {
-  font-size: 0.9rem;
+  font-size: var(--text-label);
   margin-bottom: 10px;
 }
 .dateRow {
@@ -46,14 +46,14 @@
   gap: 12px;
 }
 .reminder legend {
-  font-size: 0.85rem;
+  font-size: var(--text-label);
   padding: 0 5px;
 }
 .rowHeader {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  font-size: 0.85rem;
+  font-size: var(--text-label);
   gap: 8px;
 }
 .offsetRow {
@@ -75,6 +75,6 @@
 .dateField p,
 .reminder p {
   margin: 0;
-  font-size: 0.85rem;
+  font-size: var(--text-label);
   line-height: 1.5;
 }

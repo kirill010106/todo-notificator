@@ -1,4 +1,7 @@
-param([switch]$SkipDatabases)
+﻿param(
+    [switch]$SkipDatabases,
+    [switch]$SkipFrontend
+)
 
 [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 $OutputEncoding           = [System.Text.Encoding]::UTF8
@@ -29,6 +32,34 @@ if (-not (Get-Command air -ErrorAction SilentlyContinue)) {
     throw "Air не найден в PATH."
 }
 
+$frontendDir = Join-Path $PSScriptRoot 'frontend'
+$viteEntry = Join-Path $frontendDir 'node_modules\vite\bin\vite.js'
+if (-not $SkipFrontend) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
+        throw "Node.js не найден в PATH. Установите Node.js или используйте -SkipFrontend."
+    }
+    if (-not (Test-Path -LiteralPath $viteEntry -PathType Leaf)) {
+        throw "Не установлены зависимости frontend. Выполните npm ci в папке frontend или используйте -SkipFrontend."
+    }
+}
+
+# Windows PowerShell 5.1 turns native stderr into ErrorRecord objects even with
+# 2>&1. Capture them with a local preference and decide by the native exit code.
+function Invoke-Docker {
+    param(
+        [Parameter(Mandatory = $true)][string[]]$Arguments,
+        [switch]$AllowFailure
+    )
+    $ErrorActionPreference = 'Continue'
+    $output = @(& docker @Arguments 2>&1)
+    $exitCode = $LASTEXITCODE
+    $message = ($output | ForEach-Object { $_.ToString() }) -join [Environment]::NewLine
+    if ($exitCode -ne 0 -and -not $AllowFailure) {
+        throw "Ошибка Docker (код ${exitCode}): $message"
+    }
+    return [pscustomobject]@{ ExitCode = $exitCode; Output = $message }
+}
+
 # --- Универсальная функция запуска контейнеров ---
 function Ensure-Container {
     param(
@@ -38,16 +69,21 @@ function Ensure-Container {
         [string]$SuccessMessage
     )
 
-    $status = (docker inspect -f '{{.State.Running}}' $Name 2>$null)
-
-    if ($null -eq $status) {
+    # A failed daemon request is not evidence that the container is missing.
+    $containers = Invoke-Docker -Arguments @('container', 'ls', '--all', '--filter', "name=^/${Name}$", '--format', '{{.Names}}')
+    if ($Name -notin ($containers.Output -split '\r?\n')) {
         Write-Host "Creating container '$Name'..." -ForegroundColor Yellow
         & $RunCommand
-    } elseif ($status -ne "true") {
-        Write-Host "Starting existing container '$Name'..." -ForegroundColor Yellow
-        docker start $Name | Out-Null
     } else {
-        Write-Host "Container '$Name' is already running." -ForegroundColor DarkGray
+        $state = Invoke-Docker -Arguments @('inspect', '-f', '{{.State.Running}}', $Name)
+        if ($state.Output.Trim() -eq 'false') {
+            Write-Host "Starting existing container '$Name'..." -ForegroundColor Yellow
+            $null = Invoke-Docker -Arguments @('start', $Name)
+        } elseif ($state.Output.Trim() -eq 'true') {
+            Write-Host "Container '$Name' is already running." -ForegroundColor DarkGray
+        } else {
+            throw "Не удалось определить состояние контейнера '$Name': $($state.Output)"
+        }
     }
 
     # Ожидание готовности
@@ -70,33 +106,42 @@ if (-not $SkipDatabases -and -not (Get-Command docker -ErrorAction SilentlyConti
 
 if (-not $SkipDatabases) {
     Write-Host "=== Подготовка локальных баз данных ===" -ForegroundColor Cyan
+    Write-Host "Ожидаем готовности Docker Engine..." -ForegroundColor Gray
+    for ($attempt = 1; $attempt -le 30; $attempt++) {
+        $engine = Invoke-Docker -Arguments @('info', '--format', '{{.OSType}}') -AllowFailure
+        if ($engine.ExitCode -eq 0) { break }
+        if ($attempt -lt 30) { Start-Sleep -Seconds 1 }
+    }
+    if ($engine.ExitCode -ne 0) {
+        throw "Docker Engine недоступен. Дождитесь запуска Docker Desktop и повторите .\dev.ps1. Если ошибка 500 сохраняется, перезапустите Docker Desktop. Для уже работающих внешних баз используйте -SkipDatabases. Ошибка Docker: $($engine.Output)"
+    }
+    if ($engine.Output.Trim() -ne 'linux') {
+        throw "Для локальных баз нужны Linux-контейнеры. Переключите Docker Desktop в режим Linux containers."
+    }
 
     # --- 2. Запуск PostgreSQL ---
     Ensure-Container -Name $pgContainer `
         -RunCommand {
-            docker run --name $pgContainer `
-                -e "POSTGRES_USER=$pgUser" `
-                -e "POSTGRES_PASSWORD=$pgPass" `
-                -e "POSTGRES_DB=$pgDb" `
-                -p "127.0.0.1:${pgPort}:5432" `
-                -d postgres:16-alpine | Out-Null
+            $null = Invoke-Docker -Arguments @('run', '--name', $pgContainer,
+                '-e', "POSTGRES_USER=$pgUser", '-e', "POSTGRES_PASSWORD=$pgPass",
+                '-e', "POSTGRES_DB=$pgDb", '-p', "127.0.0.1:${pgPort}:5432",
+                '-d', 'postgres:16-alpine')
         } `
         -HealthCheck {
-            $null = docker exec $pgContainer pg_isready -U $pgUser -d $pgDb 2>$null
-            return ($LASTEXITCODE -eq 0)
+            $health = Invoke-Docker -Arguments @('exec', $pgContainer, 'pg_isready', '-U', $pgUser, '-d', $pgDb) -AllowFailure
+            return ($health.ExitCode -eq 0)
         } `
         -SuccessMessage "Postgres готов: 127.0.0.1:$pgPort"
 
     # --- 3. Запуск MongoDB ---
     Ensure-Container -Name $mongoContainer `
         -RunCommand {
-            docker run --name $mongoContainer `
-                -p "127.0.0.1:${mongoPort}:27017" `
-                -d mongo:7 | Out-Null
+            $null = Invoke-Docker -Arguments @('run', '--name', $mongoContainer,
+                '-p', "127.0.0.1:${mongoPort}:27017", '-d', 'mongo:7')
         } `
         -HealthCheck {
-            $null = docker exec $mongoContainer mongosh --eval "db.adminCommand('ping')" --quiet 2>$null
-            return ($LASTEXITCODE -eq 0)
+            $health = Invoke-Docker -Arguments @('exec', $mongoContainer, 'mongosh', '--eval', "db.adminCommand('ping')", '--quiet') -AllowFailure
+            return ($health.ExitCode -eq 0)
         } `
         -SuccessMessage "MongoDB готова: 127.0.0.1:$mongoPort"
 }
@@ -135,12 +180,39 @@ $activityProc = Start-Process powershell -ArgumentList "-NoExit", "-Command", $a
 Write-Host "Backend PID:         $($backendProc.Id)" -ForegroundColor Cyan
 Write-Host "Email notifier PID:  $($emailProc.Id)" -ForegroundColor Cyan
 Write-Host "Activity Logger PID: $($activityProc.Id)" -ForegroundColor Cyan
-Write-Host "`nНажмите Ctrl+C в этом окне для остановки всех сервисов..." -ForegroundColor Yellow
 
 # --- 6. Ожидание и Graceful остановка дочерних окон ---
+$frontendProc = $null
 try {
-    Wait-Process -Id $backendProc.Id
+    if (-not $SkipFrontend) {
+        $frontendLogDir = Join-Path $PSScriptRoot 'tmp\frontend'
+        New-Item -ItemType Directory -Path $frontendLogDir -Force | Out-Null
+        $frontendOutput = Join-Path $frontendLogDir 'vite.log'
+        $frontendError = Join-Path $frontendLogDir 'vite-error.log'
+
+        # Start Node directly so this process is Vite itself, without an npm/cmd
+        # parent leaving the dev server alive after Stop-Process.
+        $frontendProc = Start-Process node -WorkingDirectory $frontendDir `
+            -ArgumentList @("`"$viteEntry`"", '--host', '127.0.0.1', '--port', '3030', '--strictPort') `
+            -WindowStyle Hidden -RedirectStandardOutput $frontendOutput `
+            -RedirectStandardError $frontendError -PassThru
+
+        Write-Host "Frontend PID:        $($frontendProc.Id)" -ForegroundColor Cyan
+        Write-Host "Frontend: http://127.0.0.1:3030 (изменения обновляются автоматически)" -ForegroundColor Green
+        Write-Host "Журналы frontend: $frontendLogDir" -ForegroundColor Gray
+    }
+
+    Write-Host "`nНажмите Ctrl+C в этом окне для остановки всех сервисов..." -ForegroundColor Yellow
+    while (-not $backendProc.HasExited) {
+        if ($null -ne $frontendProc -and $frontendProc.HasExited) {
+            throw "Frontend завершился (код $($frontendProc.ExitCode)). Проверьте $frontendError. Если порт 3030 занят, остановите прежний frontend или используйте -SkipFrontend."
+        }
+        Start-Sleep -Milliseconds 500
+    }
 } finally {
+    if ($null -ne $frontendProc -and -not $frontendProc.HasExited) {
+        Stop-Process -Id $frontendProc.Id -Force -ErrorAction SilentlyContinue
+    }
     Stop-Process -Id $backendProc.Id, $emailProc.Id, $activityProc.Id -Force -ErrorAction SilentlyContinue
     Get-Process app -ErrorAction SilentlyContinue | 
         Where-Object { $_.Path -like "*toDoNotificator*" -or $_.Path -like "*tmp\activity-logger*" } | 

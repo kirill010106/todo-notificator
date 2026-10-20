@@ -34,7 +34,7 @@ func (s *Storage) ClaimVerificationDelivery(ctx context.Context) (*domain.Verifi
 	d.LeaseToken = hex.EncodeToString(buffer)
 	err = tx.QueryRowContext(ctx, `WITH candidate AS (
  SELECT o.id FROM verification_email_outbox o JOIN users u ON u.id=o.user_id
- WHERE o.status='scheduled' AND o.attempts<5 AND u.is_verified=false AND o.expires_at>CURRENT_TIMESTAMP AND o.next_attempt_at<=CURRENT_TIMESTAMP
+ WHERE o.status='scheduled' AND o.attempts<5 AND u.is_verified=false AND u.email=o.email AND EXISTS(SELECT 1 FROM email_verification_tokens t WHERE t.token=o.token AND t.email=o.email AND t.expires_at>CURRENT_TIMESTAMP) AND o.expires_at>CURRENT_TIMESTAMP AND o.next_attempt_at<=CURRENT_TIMESTAMP
  AND (o.lease_until IS NULL OR o.lease_until<CURRENT_TIMESTAMP)
  ORDER BY o.next_attempt_at,o.id LIMIT 1 FOR UPDATE OF o SKIP LOCKED)
  UPDATE verification_email_outbox o

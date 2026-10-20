@@ -44,6 +44,7 @@
   margin: 52px 13px 17px;
 }
 .sideNav {
+  margin-top: 32px;
   display: flex;
   flex-direction: column;
   gap: 7px;
@@ -166,6 +167,19 @@
   font-size: 11px;
   color: var(--muted);
 }
+.shellHeader {
+  display: none;
+}
+@media (max-width: 767px) {
+  .shellHeader {
+    display: flex;
+    align-items: center;
+    min-height: 64px;
+    padding: 16px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--line);
+  }
+}
 .breadcrumb span {
   margin: 0 13px;
   color: #b4bdb3;
@@ -222,6 +236,29 @@
 .dropdown a[data-highlighted] {
   background: var(--accent-soft);
   outline: none;
+}
+.taskMenuItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 0.875rem;
+  cursor: pointer;
+}
+.taskMenuItem[data-highlighted] {
+  background: var(--accent-soft);
+  outline: none;
+}
+.taskMenuItem[data-disabled] {
+  opacity: 0.5;
+  cursor: default;
+}
+.selectionToolbar {
+  display: flex;
+  justify-content: flex-end;
+  margin-bottom: 16px;
 }
 .content {
   padding: 43px 42px 55px;
@@ -298,6 +335,17 @@
 }
 .mainColumn {
   min-width: 0;
+}
+.tasksWorkspace {
+  width: 100%;
+  max-width: 960px;
+  margin-inline: auto;
+}
+.tasksWorkspace .sectionTitle {
+  margin: 24px 0 16px;
+}
+.tasksWorkspace .mainColumn > section:first-child .sectionTitle {
+  margin-top: 0;
 }
 .overview {
   display: grid;
@@ -669,6 +717,30 @@
   max-width: 180px;
   padding: 8px;
   min-height: 40px;
+}
+.filterPanel:not([hidden]) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  flex-basis: 100%;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.filterPanel label {
+  display: flex;
+  flex: 1 1 180px;
+  min-width: 0;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.875rem;
+}
+.filters .filterPanel select {
+  width: 100%;
+  max-width: none;
+  min-height: 44px;
+  font-size: 1rem;
 }
 .search {
   display: flex;
@@ -1425,7 +1497,7 @@
   .heading {
     align-items: flex-start;
   }
-  .heading > .button {
+  .heading > .button:not(.taskCreateButton) {
     font-size: 0;
     min-width: 42px;
     padding: 12px;
@@ -1927,5 +1999,233 @@
     justify-self: start;
     max-width: none;
     white-space: nowrap;
+  }
+}
+
+.identityFields {
+  width: 100%;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+}
+.verificationBanner {
+  padding: 16px 20px;
+  margin-bottom: 24px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: var(--surface);
+}
+.verificationBanner p {
+  margin: 0 0 8px;
+}
+
+/* Workspace typography. Public pages keep their existing scale.
+   Include portal surfaces because dialogs and menus live outside .app. */
+.app,
+.sheet,
+.modal,
+.dropdown,
+.toast {
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.5;
+}
+:is(.app, .sheet, .modal, .dropdown) :is(p, input, textarea, select) {
+  font-size: var(--text-body);
+  font-weight: 400;
+  line-height: 1.5;
+}
+:is(.app, .sheet, .modal, .dropdown) :is(
+  .button, .secondary, .field, .muted, .textLink, .error, .notice,
+  .pagination, .bulk, .quest, .log, .taskMenuItem, .focusActionLabel
+) {
+  font-size: var(--text-label);
+  line-height: 1.5;
+}
+:is(.app, .sheet, .modal) :is(.button, .secondary, .field, .textLink) {
+  font-weight: 500;
+}
+.app :is(.sideNav a, .tabs button, .moreLinks a, .heading p,
+  .achievement p, .wallet p, .rewardPlaceholder p, .state p) {
+  font-size: var(--text-label);
+  line-height: 1.5;
+}
+.app :is(.sideNav a, .tabs button, .moreLinks a) {
+  font-weight: 500;
+}
+:is(.app, .sheet, .modal) :is(small, .eyebrow, .count, .taskMeta,
+  .focusFoot, .appFooter, .bottomNav span, .brandLight) {
+  font-size: var(--text-small);
+  line-height: 1.5;
+}
+.app :is(.quest > span:last-child, .wallet strong span, .mobileTimer span) {
+  font-size: var(--text-small);
+}
+.app .eyebrow {
+  font-weight: 500;
+  letter-spacing: 0.04em;
+}
+.app .focusCard > .rowBetween .eyebrow,
+.app .overview .eyebrow {
+  font-size: var(--text-small);
+}
+:is(.app, .sheet, .modal) :is(h1, h2, h3) {
+  font-weight: 600;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  overflow-wrap: anywhere;
+}
+.app h1,
+.app .heading h1 {
+  font-size: var(--text-page);
+}
+:is(.app, .sheet, .modal) h2,
+.app .sectionTitle h2,
+:is(.sheet, .modal) .sheetHeader h2 {
+  font-size: var(--text-section);
+}
+:is(.app, .sheet, .modal) h3,
+.app :is(.focusCard h3, .dailyCard h3, .state h3) {
+  font-size: var(--text-body);
+}
+.app .taskBody strong {
+  font-size: var(--text-body);
+  font-weight: 600;
+  line-height: 1.5;
+}
+.app :is(.brand, .avatar, .statNumber, .wallet strong) {
+  font-weight: 600;
+}
+.app :is(.statNumber, .wallet strong) {
+  font-size: var(--text-page);
+}
+.app .timer {
+  font-size: var(--text-timer);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+.app .focusFull .timer {
+  font-size: var(--text-timer-full);
+}
+.app :is(.sidebarTimer strong, .mobileTimer strong) {
+  font-size: var(--text-section);
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+:is(.sheet, .modal) .sheetHeader p {
+  font-size: var(--text-label);
+}
+.app .taskMeta > span {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.app .mobileTimer {
+  flex-wrap: wrap;
+}
+.app .bulk {
+  flex-wrap: wrap;
+}
+
+/* Consistent spacing for the authenticated workspace. */
+.tasksPage {
+  width: 100%;
+  max-width: 960px;
+  min-width: 0;
+  margin-inline: auto;
+}
+.app .content {
+  padding: var(--space-8);
+}
+.app .heading {
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+  flex-wrap: wrap;
+}
+.app .heading h1 {
+  margin: var(--space-2) 0;
+}
+.app .sideNav {
+  gap: var(--space-2);
+  margin-top: var(--space-8);
+}
+.app .sideNav a {
+  padding: var(--space-3) var(--space-4);
+  gap: var(--space-3);
+}
+.app .taskRow {
+  gap: var(--space-2);
+  padding: var(--space-4);
+  min-height: 80px;
+}
+.app .taskBody > span {
+  margin-top: var(--space-2);
+}
+.app .taskMeta {
+  gap: var(--space-3);
+}
+.app .filters {
+  gap: var(--space-2);
+  margin-bottom: var(--space-4);
+}
+.app .tabs {
+  gap: var(--space-6);
+  margin-bottom: var(--space-4);
+}
+.app .tabs button {
+  padding-block: var(--space-3);
+}
+.app .search {
+  min-height: 44px;
+  gap: var(--space-2);
+  padding-inline: var(--space-3);
+}
+.app .search button,
+.app .complete,
+.app .taskRow > .iconButton {
+  min-width: 44px;
+  min-height: 44px;
+  padding: var(--space-2);
+}
+.app .bulk {
+  gap: var(--space-2);
+  padding-block: var(--space-3);
+}
+.app .pagination {
+  gap: var(--space-4);
+  margin-block: var(--space-6);
+}
+.app .card,
+.app .dailyCard,
+.app .focusCard {
+  padding: var(--space-6);
+}
+.app :is(.cardGrid, .statsGrid, .settingsGrid) {
+  gap: var(--space-4);
+}
+:is(.sheet, .modal) {
+  padding: var(--space-6);
+}
+:is(.sheet, .modal) .sheetHeader {
+  gap: var(--space-4);
+  margin-bottom: var(--space-6);
+}
+:is(.sheet, .modal) :is(.editor, .stack) {
+  gap: var(--space-4);
+}
+:is(.sheet, .modal) .field {
+  gap: var(--space-2);
+}
+@media (max-width: 767px) {
+  .app .content {
+    padding: var(--space-6) var(--space-4) 176px;
+  }
+  .app .taskRow {
+    padding: var(--space-3) var(--space-2);
+  }
+  .app .heading h1 {
+    max-width: none;
   }
 }

@@ -1,0 +1,6 @@
+Generated using built-in image_gen.
+
+Prompt:
+Use case: logo-brand. Create one square production favicon for ToDo Notificator, a calm task and reminder app. A bold simple warm-white bell silhouette with a clearly readable dark forest-green checkmark cut into its center, on a solid muted forest-green #34745B rounded-square tile. Tile fills almost entire square with tiny transparent corner areas. Flat crisp graphic, balanced large centered symbol, strong silhouette readable at 16x16, generous thick forms, no thin lines, no letters, no text, no shadows, no mockup, no extra objects. Output a single square icon.
+
+Files: frontend/public/favicon-v2.png (512 px), favicon-v2-32.png (32 px), favicon-v2.ico (16/32/48 px).

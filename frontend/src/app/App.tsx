@@ -20,7 +20,7 @@ import {
   QueryClientProvider,
   useQueryClient,
 } from "@tanstack/react-query";
-import * as Menu from "@radix-ui/react-dropdown-menu";
+
 import {
   CalendarDays,
   ListTodo,
@@ -28,9 +28,7 @@ import {
   ChartNoAxesCombined,
   Folder,
   Settings2,
-  Plus,
   ArrowUpRight,
-  ChevronDown,
   MoreHorizontal,
   Gift,
 } from "lucide-react";
@@ -40,11 +38,9 @@ import {
   errorText,
   hasSession,
   refreshAccess,
-  endSession,
   sessionStorageChanged,
-  json,
 } from "../lib/api";
-import { Brand, State, Button, Sheet } from "../components/ui";
+import { Brand, State } from "../components/ui";
 import { AppProvider, useApp, useBootstrap } from "./context";
 import { FocusProvider, FocusPage, useFocus } from "../features/focus/Focus";
 import { TasksPage } from "../features/tasks/Tasks";
@@ -52,6 +48,8 @@ import { CategoriesPage } from "../features/categories/Categories";
 import { ProgressPage } from "../features/progress/Progress";
 import { RewardsPage } from "../features/rewards/Rewards";
 import { AccountPage, setTheme } from "../features/account/Account";
+import { PasswordRecovery } from "../features/public/PasswordRecovery";
+import { VerificationNotice } from "../features/account/VerificationNotice";
 import { Landing, AuthPage, Verification } from "../features/public/Public";
 import { useShop } from "../lib/shop";
 import s from "../styles/App.module.css";
@@ -72,10 +70,8 @@ const client = new QueryClient({
 const links = [
   ["today", CalendarDays, "Сегодня"],
   ["tasks", ListTodo, "Задачи"],
-  ["categories", Folder, "Категории"],
   ["focus", Timer, "Фокус"],
-  ["progress", ChartNoAxesCombined, "Прогресс"],
-  ["rewards", Gift, "Магазин"],
+  ["more", MoreHorizontal, "Ещё"],
 ] as const;
 function Protected() {
   const navigate = useNavigate();
@@ -135,8 +131,6 @@ function Shell() {
   const { data, notify, refresh } = useApp();
   const focus = useFocus();
   const wallet = useShop(data.user.id);
-  const [logout, setLogout] = useState(false);
-  const [loggingOut, setLoggingOut] = useState(false);
   const [paymentHandled, setPaymentHandled] = useState(false);
   useEffect(() => {
     document.documentElement.dataset.accent =
@@ -174,7 +168,6 @@ function Shell() {
       </a>
       <aside className={s.sidebar}>
         <Brand />
-        <div className={s.spaceLabel}>ЛИЧНОЕ ПРОСТРАНСТВО</div>
         <nav className={s.sideNav}>
           {links.map(([path, Icon, title]) => (
             <NavLink
@@ -184,7 +177,6 @@ function Shell() {
             >
               <Icon size={19} />
               {title}
-              {path === "today" && <span className={s.navDot} />}
             </NavLink>
           ))}
         </nav>
@@ -204,89 +196,17 @@ function Shell() {
               <ArrowUpRight size={16} />
             </Link>
           )}
-          <div className={s.levelMini}>
-            <div className={s.rowBetween}>
-              <span>Твой маленький прогресс</span>
-              <span>Ур. {data.gamification?.level ?? "—"}</span>
-            </div>
-            <div className={s.progressTrack}>
-              <span
-                style={{
-                  width: `${data.gamification?.progress_percent || 0}%`,
-                }}
-              />
-            </div>
-            <small>
-              {data.gamification?.rank_title || "Каждый шаг считается"}
-            </small>
-          </div>
-          <NavLink className={s.profileLink} to="/app/account">
-            <span className={s.avatar}>
-              {data.user.email.slice(0, 1).toUpperCase()}
-            </span>
-            <span>
-              <strong>{data.user.email.split("@")[0]}</strong>
-              <small>
-                {data.user.is_premium ? "Premium" : "Бесплатный тариф"}
-              </small>
-            </span>
-            <Settings2 size={17} />
-          </NavLink>
         </div>
       </aside>
       <div className={s.appBody}>
-        <header className={s.topbar}>
-          <span className={s.breadcrumb}>
-            Твоё пространство <span>/</span> В своём темпе
-          </span>
-          <div className={s.mobileBrand}>
-            <Brand />
-          </div>
-          <div className={s.row}>
-            <Link to="/app/account" className={s.planChip}>
-              {data.user.is_premium
-                ? "Premium"
-                : "Бесплатный · Попробовать Premium"}
-            </Link>
-            <span className={s.online}>
-              <span className={s.dot} />
-              Место для важного
-            </span>
-            <Menu.Root>
-              <Menu.Trigger
-                className={s.accountButton}
-                aria-label="Меню аккаунта"
-              >
-                <span className={s.avatar}>
-                  {data.user.email.slice(0, 1).toUpperCase()}
-                </span>
-                <ChevronDown size={14} />
-              </Menu.Trigger>
-              <Menu.Portal>
-                <Menu.Content className={s.dropdown} align="end" sideOffset={8}>
-                  <Menu.Item asChild>
-                    <Link to="/app/account">Аккаунт и настройки</Link>
-                  </Menu.Item>
-                  <Menu.Item asChild>
-                    <Link to="/app/categories">Категории</Link>
-                  </Menu.Item>
-                  <Menu.Item asChild>
-                    <Link to="/app/rewards">Магазин и награды</Link>
-                  </Menu.Item>
-                  <Menu.Separator className={s.menuSeparator} />
-                  <Menu.Item onSelect={() => setLogout(true)}>
-                    Выйти из аккаунта
-                  </Menu.Item>
-                </Menu.Content>
-              </Menu.Portal>
-            </Menu.Root>
-          </div>
+        <header className={s.shellHeader}>
+          <Brand />
         </header>
         <main id="main" className={s.content}>
+          <VerificationNotice />
           <Outlet />
         </main>
         <footer className={s.appFooter}>
-          <span>Маленькие шаги. Настоящий прогресс.</span>
           <a href="/policy.html">
             Конфиденциальность <ArrowUpRight size={12} />
           </a>
@@ -303,47 +223,8 @@ function Shell() {
           <ArrowUpRight size={16} />
         </Link>
       )}
-      <Link className={s.fab} aria-label="Создать задачу" to="/app/tasks?new=1">
-        <Plus size={26} />
-      </Link>
-      <Sheet
-        open={logout}
-        onClose={() => {
-          if (!loggingOut) setLogout(false);
-        }}
-        title="Выйти из аккаунта?"
-        description="Задачи и покупки сохранятся на сервере."
-        wide
-      >
-        <Button
-          disabled={loggingOut}
-          onClick={async () => {
-            setLoggingOut(true);
-            try {
-              await api("/logout", {
-                method: "POST",
-                body: json({
-                  refresh_token: localStorage.getItem("refresh_token"),
-                }),
-              });
-            } catch {
-              notify("Вышли на этом устройстве, но сервер не подтвердил отзыв сессии.");
-            } finally {
-              endSession();
-              setLoggingOut(false);
-            }
-          }}
-        >
-          Выйти
-        </Button>
-        <Button quiet disabled={loggingOut} onClick={() => setLogout(false)}>
-          Остаться
-        </Button>
-      </Sheet>
       <nav className={s.bottomNav}>
-        {links
-          .filter(([path]) => ["today", "tasks", "focus"].includes(path))
-          .map(([path, Icon, label]) => (
+        {links.map(([path, Icon, label]) => (
             <NavLink
               key={path}
               to={`/app/${path}`}
@@ -353,13 +234,6 @@ function Shell() {
               <span>{label}</span>
             </NavLink>
           ))}
-        <NavLink
-          to="/app/more"
-          className={({ isActive }) => (isActive ? s.bottomActive : "")}
-        >
-          <MoreHorizontal size={22} />
-          <span>Ещё</span>
-        </NavLink>
       </nav>
     </div>
   );
@@ -367,7 +241,7 @@ function Shell() {
 function More() {
   return (
     <>
-      <h1>Твоё пространство</h1>
+      <h1>Ещё</h1>
       <div className={s.moreLinks}>
         {[
           [ChartNoAxesCombined, "Прогресс", "progress"],
@@ -439,6 +313,14 @@ export function App() {
         <BrowserRouter>
           <Routes>
             <Route path="/" element={<Entry />} />
+            <Route
+              path="/forgot-password"
+              element={<PasswordRecovery key="forgot" />}
+            />
+            <Route
+              path="/reset-password"
+              element={<PasswordRecovery key="reset" reset />}
+            />
             <Route path="/login" element={<AuthPage />} />
             <Route path="/register" element={<AuthPage register />} />
             <Route path="/frontend" element={<Navigate to="/" replace />} />

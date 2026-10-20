@@ -224,4 +224,88 @@ func TestAPIContracts(t *testing.T) {
 		request("POST", "/pomodoros/nope/cancel", `{}`, "cancel-invalid", 400)
 	})
 
+	t.Run("account HTTP sessions profile changes and password recovery", func(t *testing.T) {
+		accounts := router.New(router.Config{Log: slog.New(slog.DiscardHandler), Storage: store, AppConfig: &config.Config{
+			AppSecret: "account-test-secret", AccessTokenTTL: time.Hour, RefreshTokenTTL: 24 * time.Hour,
+		}})
+		call := func(method, path, body, access string, status int) map[string]any {
+			t.Helper()
+			req := httptest.NewRequest(method, "/api/v1"+path, strings.NewReader(body)).WithContext(ctx)
+			req.Header.Set("Content-Type", "application/json")
+			if access != "" {
+				req.Header.Set("Authorization", "Bearer "+access)
+			}
+			res := httptest.NewRecorder()
+			accounts.ServeHTTP(res, req)
+			require.Equal(t, status, res.Code, "%s %s: %s", method, path, res.Body.String())
+			var result map[string]any
+			require.NoError(t, json.Unmarshal(res.Body.Bytes(), &result))
+			return result
+		}
+		registration := `{"email":"account-http@test.local","password":"password123","display_name":"Initial name"}`
+		session := call("POST", "/register", registration, "", 200)
+		id := int64(session["user_id"].(float64))
+		access, refresh := session["access_token"].(string), session["refresh_token"].(string)
+		require.NotEmpty(t, access)
+		require.NotEmpty(t, refresh)
+		require.Equal(t, float64(3600), session["expires_in"])
+		require.Equal(t, "EMAIL_EXISTS", call("POST", "/register", registration, "", 409)["code"])
+
+		call("PATCH", "/me/profile", `{"display_name":" Updated name "}`, access, 200)
+		call("PATCH", "/me/profile", `{"timezone":"Europe/Moscow"}`, access, 200)
+		profile := call("GET", "/me/profile", "", access, 200)["profile"].(map[string]any)
+		require.Equal(t, "Updated name", profile["display_name"])
+		require.Equal(t, "Europe/Moscow", profile["timezone"])
+		call("PATCH", "/me/profile", `{"display_name":""}`, access, 200)
+		profile = call("GET", "/me/profile", "", access, 200)["profile"].(map[string]any)
+		require.Empty(t, profile["display_name"])
+		require.Equal(t, "Europe/Moscow", profile["timezone"])
+
+		var verification string
+		require.NoError(t, store.DB.QueryRowContext(ctx, `SELECT token FROM email_verification_tokens WHERE user_id=$1`, id).Scan(&verification))
+		call("GET", "/verify?token="+verification, "", "", 200)
+		call("GET", "/verify?token="+verification, "", "", 400)
+		profile = call("GET", "/me/profile", "", access, 200)["profile"].(map[string]any)
+		require.Equal(t, true, profile["is_verified"])
+
+		call("POST", "/me/email", `{"current_password":"password123"}`, access, 400)
+		call("POST", "/me/email", `{"email":"invalid","current_password":"password123"}`, access, 400)
+		call("POST", "/me/email", `{"email":"changed-http@test.local","current_password":"wrong-password"}`, access, 400)
+		changed := call("POST", "/me/email", `{"email":"changed-http@test.local","current_password":"password123"}`, access, 200)
+		require.Equal(t, true, changed["changed"])
+		call("GET", "/me/profile", "", access, 401)
+		call("POST", "/refresh", fmt.Sprintf(`{"refresh_token":%q}`, refresh), "", 401)
+		access, refresh = changed["access_token"].(string), changed["refresh_token"].(string)
+		unchanged := call("POST", "/me/email", `{"email":"changed-http@test.local","current_password":"password123"}`, access, 200)
+		require.Equal(t, false, unchanged["changed"])
+		require.NotContains(t, unchanged, "access_token")
+		call("POST", "/me/password", `{"current_password":"password123","new_password":"short"}`, access, 400)
+		changed = call("POST", "/me/password", `{"current_password":"password123","new_password":"password456"}`, access, 200)
+		call("GET", "/me/profile", "", access, 401)
+		call("POST", "/refresh", fmt.Sprintf(`{"refresh_token":%q}`, refresh), "", 401)
+		access, refresh = changed["access_token"].(string), changed["refresh_token"].(string)
+		profile = call("GET", "/me/profile", "", access, 200)["profile"].(map[string]any)
+		require.Equal(t, "changed-http@test.local", profile["email"])
+		require.Equal(t, false, profile["is_verified"])
+
+		unknown := call("POST", "/password/forgot", `{"email":"missing-http@test.local"}`, "", 202)
+		known := call("POST", "/password/forgot", `{"email":"changed-http@test.local"}`, "", 202)
+		require.Equal(t, unknown, known)
+		var reset string
+		require.NoError(t, store.DB.QueryRowContext(ctx, `SELECT token FROM password_reset_outbox WHERE user_id=$1 AND status='scheduled'`, id).Scan(&reset))
+		call("POST", "/password/reset", `{"token":"invalid-reset","new_password":"password789"}`, "", 400)
+		body := fmt.Sprintf(`{"token":%q,"new_password":"password789"}`, reset)
+		call("POST", "/password/reset", body, "", 200)
+		call("POST", "/password/reset", body, "", 400)
+		call("GET", "/me/profile", "", access, 401)
+		call("POST", "/refresh", fmt.Sprintf(`{"refresh_token":%q}`, refresh), "", 401)
+		call("POST", "/login", `{"email":"changed-http@test.local","password":"password456"}`, "", 401)
+		login := call("POST", "/login", `{"email":"changed-http@test.local","password":"password789"}`, "", 200)
+		profile = call("GET", "/me/profile", "", login["access_token"].(string), 200)["profile"].(map[string]any)
+		require.Equal(t, false, profile["is_verified"])
+		var pendingSecrets int
+		require.NoError(t, store.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM password_reset_outbox WHERE user_id=$1 AND token IS NOT NULL`, id).Scan(&pendingSecrets))
+		require.Zero(t, pendingSecrets)
+	})
+
 }

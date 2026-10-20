@@ -384,10 +384,10 @@ func updateTaskSQL(ctx context.Context, db sqlExecutor, userID int64, taskID int
 func (s *Storage) User(ctx context.Context, email string) (domain.User, error) {
 	const op = "storage.postgres.User"
 
-	query := `SELECT id, email, password_hash, is_verified, is_premium FROM users WHERE email = $1`
+	query := `SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users WHERE email = $1`
 
 	var user domain.User
-	err := s.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash, &user.IsVerified, &user.IsPremium)
+	err := s.DB.QueryRowContext(ctx, query, email).Scan(&user.ID, &user.Email, &user.PassHash, &user.IsVerified, &user.IsPremium, &user.DisplayName, &user.AuthVersion)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return domain.User{}, storage.ErrUserNotFound
@@ -487,31 +487,36 @@ func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newToken string, expiresAt time.Time) (*domain.User, error) {
 	const op = "storage.postgres.RotateRefreshToken"
 
-	query := `
-		WITH rotated AS (
-			UPDATE refresh_tokens
-			SET token = $2, expires_at = $3
-			WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
-			RETURNING user_id
-		)
-		SELECT u.id, u.email, u.password_hash, u.is_verified, u.is_premium
-		FROM rotated r
-		JOIN users u ON u.id = r.user_id
-	`
-
-	var user domain.User
-	err := s.DB.QueryRowContext(ctx, query, oldToken, newToken, expiresAt.UTC()).Scan(
-		&user.ID,
-		&user.Email,
-		&user.PassHash,
-		&user.IsVerified,
-		&user.IsPremium,
-	)
+	tx, err := s.DB.BeginTx(ctx, nil)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("%s: %w", op, storage.ErrRefreshTokenInvalid)
-		}
+		return nil, err
+	}
+	defer tx.Rollback()
+	var id int64
+	err = tx.QueryRowContext(ctx, `SELECT user_id FROM refresh_tokens WHERE token=$1`, oldToken).Scan(&id)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, storage.ErrRefreshTokenInvalid
+	}
+	if err != nil {
+		return nil, err
+	}
+	user, err := lockAccount(ctx, tx, id)
+	if err != nil {
+		return nil, err
+	}
+	result, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET token=$2,expires_at=$3 WHERE token=$1 AND user_id=$4 AND expires_at>(NOW() AT TIME ZONE 'UTC')`, oldToken, newToken, expiresAt.UTC(), id)
+	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
+	}
+	count, err := result.RowsAffected()
+	if err != nil {
+		return nil, err
+	}
+	if count != 1 {
+		return nil, storage.ErrRefreshTokenInvalid
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, err
 	}
 
 	return &user, nil
@@ -561,7 +566,7 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 
 	var user domain.User
 	query := `
-	SELECT id, email, password_hash, is_verified, is_premium FROM users
+	SELECT id, email, password_hash, is_verified, is_premium, display_name, auth_version FROM users
 	WHERE id = $1
 	`
 
@@ -571,6 +576,8 @@ func (s *Storage) GetUserByID(ctx context.Context, userID int64) (*domain.User, 
 		&user.PassHash,
 		&user.IsVerified,
 		&user.IsPremium,
+		&user.DisplayName,
+		&user.AuthVersion,
 	)
 
 	if err != nil {
@@ -825,10 +832,17 @@ func (s *Storage) SaveEmailVerificationToken(ctx context.Context, userID int64, 
 		return fmt.Errorf("%s: begin transaction: %w", op, err)
 	}
 	defer tx.Rollback() //nolint:errcheck
+	var locked int64
+	if err := tx.QueryRowContext(ctx, `SELECT id FROM users WHERE id=$1 FOR UPDATE`, userID).Scan(&locked); err != nil {
+		return err
+	}
+	if _, err := tx.ExecContext(ctx, `DELETE FROM email_verification_tokens WHERE user_id=$1`, userID); err != nil {
+		return err
+	}
 	if _, err := tx.ExecContext(ctx, `UPDATE verification_email_outbox SET status='failed',last_error='Replaced by a newer verification link',lease_token=NULL,lease_until=NULL WHERE user_id=$1 AND status='scheduled'`, userID); err != nil {
 		return fmt.Errorf("%s: retire old delivery: %w", op, err)
 	}
-	if _, err := tx.ExecContext(ctx, `INSERT INTO email_verification_tokens (user_id, token, expires_at) VALUES ($1,$2,$3)`, userID, token, expiresAt); err != nil {
+	if _, err := tx.ExecContext(ctx, `INSERT INTO email_verification_tokens (user_id, token, expires_at, email) SELECT $1,$2,$3,email FROM users WHERE id=$1`, userID, token, expiresAt); err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation {
 			return fmt.Errorf("%s: %w", op, storage.ErrTokenExists)

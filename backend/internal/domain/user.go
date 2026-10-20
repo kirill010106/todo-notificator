@@ -3,11 +3,13 @@ package domain
 import "time"
 
 type User struct {
-	ID         int64  `json:"id"`
-	Email      string `json:"email"`
-	PassHash   []byte `json:"-"`
-	IsVerified bool   `json:"is_verified"`
-	IsPremium bool `json:"is_premium"`
+	DisplayName string `json:"display_name"`
+	AuthVersion int64  `json:"-"`
+	ID          int64  `json:"id"`
+	Email       string `json:"email"`
+	PassHash    []byte `json:"-"`
+	IsVerified  bool   `json:"is_verified"`
+	IsPremium   bool   `json:"is_premium"`
 }
 
 type EmailVerificationToken struct {

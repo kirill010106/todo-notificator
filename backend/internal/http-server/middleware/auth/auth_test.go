@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -95,3 +96,26 @@ func TestAuthMiddleware_SetsPremiumAndVerifiedTrue(t *testing.T) {
 	require.Equal(t, http.StatusOK, w.Code)
 }
 
+type accountProvider struct{ version int64 }
+
+func (p accountProvider) GetUserByID(context.Context, int64) (*domain.User, error) {
+	return &domain.User{ID: 1, AuthVersion: p.version}, nil
+}
+func TestVersionRevokesAccessToken(t *testing.T) {
+	token, err := jwt.NewAccessToken(domain.User{ID: 1, AuthVersion: 0}, "secret", time.Hour)
+	require.NoError(t, err)
+	for _, version := range []int64{0, 1} {
+		req := httptest.NewRequest("GET", "/", nil)
+		req.Header.Set("Authorization", "Bearer "+token)
+		w := httptest.NewRecorder()
+		New("secret", accountProvider{version})(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			require.Equal(t, version, GetAuthVersion(r.Context()))
+			w.WriteHeader(200)
+		})).ServeHTTP(w, req)
+		if version == 0 {
+			require.Equal(t, 200, w.Code)
+		} else {
+			require.Equal(t, 401, w.Code)
+		}
+	}
+}

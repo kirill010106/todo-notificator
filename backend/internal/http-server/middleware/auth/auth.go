@@ -61,10 +61,16 @@ func New(secret string, providers ...UserProvider) func(next http.Handler) http.
 					render.JSON(w, r, resp.ErrorCode("cannot load current account", "ACCOUNT_UNAVAILABLE"))
 					return
 				}
+				if claims.AuthVersion != user.AuthVersion {
+					render.Status(r, 401)
+					render.JSON(w, r, resp.ErrorCode("Войдите в аккаунт заново", "UNAUTHORIZED"))
+					return
+				}
 				claims.IsPremium = user.IsPremium
 				claims.IsVerified = user.IsVerified
 			}
-			ctx := context.WithValue(r.Context(), userIDKey, claims.UserID)
+			ctx := context.WithValue(r.Context(), contextKey("auth_version"), claims.AuthVersion)
+			ctx = context.WithValue(ctx, userIDKey, claims.UserID)
 			ctx = context.WithValue(ctx, isPremiumKey, claims.IsPremium)
 			ctx = context.WithValue(ctx, isVerifiedKey, claims.IsVerified)
 
@@ -86,4 +92,9 @@ func GetPremiumStatus(ctx context.Context) (bool, bool) {
 func GetVerificationStatus(ctx context.Context) (bool, bool) {
 	isVerified, ok := ctx.Value(isVerifiedKey).(bool)
 	return isVerified, ok
+}
+
+func GetAuthVersion(ctx context.Context) int64 {
+	v, _ := ctx.Value(contextKey("auth_version")).(int64)
+	return v
 }

@@ -119,7 +119,13 @@ func New(log *slog.Logger, userProvider UserProvider, cfg *config.Config, eventL
 		}
 
 		expiresAt := time.Now().Add(cfg.RefreshTokenTTL)
-		err = userProvider.SaveRefreshToken(r.Context(), user.ID, refreshToken, expiresAt)
+		if versioned, ok := userProvider.(interface {
+			SaveRefreshTokenVersion(context.Context, int64, int64, string, time.Time) error
+		}); ok {
+			err = versioned.SaveRefreshTokenVersion(r.Context(), user.ID, user.AuthVersion, refreshToken, expiresAt)
+		} else {
+			err = userProvider.SaveRefreshToken(r.Context(), user.ID, refreshToken, expiresAt)
+		}
 		if err != nil {
 			log.Error("failed to save refresh token", sl.Err(err))
 			render.Status(r, http.StatusInternalServerError)

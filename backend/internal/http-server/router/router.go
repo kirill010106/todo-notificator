@@ -12,12 +12,11 @@ import (
 
 	"github.com/kirill010106/todo-notificator/clients/activitylogger"
 	"github.com/kirill010106/todo-notificator/internal/config"
+	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/account"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/login"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/refresh"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/register"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/resend"
-	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/verify"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/create"
 	categoriesdelete "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/delete"
 	categoriesget "github.com/kirill010106/todo-notificator/internal/http-server/handlers/categories/get"
@@ -136,12 +135,18 @@ func New(cfg Config) *chi.Mux {
 			})
 		})
 
+		accounts := account.Handler{Store: cfg.Storage, Config: cfg.AppConfig}
+		if cfg.LoggerClient != nil {
+			accounts.Events = cfg.LoggerClient
+		}
 		// Public endpoints
-		r.With(loginLimit).Post("/register", register.New(cfg.Log, cfg.Storage, cfg.AppConfig.Webhook.URL, cfg.AppConfig.Webhook.Secret, cfg.LoggerClient))
+		r.With(loginLimit).Post("/register", accounts.Register)
+		r.With(loginLimit).Post("/password/forgot", accounts.Forgot)
+		r.With(loginLimit).Post("/password/reset", accounts.Reset)
 		r.With(loginLimit).Post("/login", login.New(cfg.Log, cfg.Storage, cfg.AppConfig, cfg.LoggerClient))
 		r.Get("/health", health.New(cfg.Log, cfg.Storage.DB))
 		r.With(publicLimit).Post("/refresh", refresh.New(cfg.Log, cfg.Storage, cfg.AppConfig))
-		r.With(publicLimit).Get("/verify", verify.New(cfg.Log, cfg.Storage))
+		r.With(publicLimit).Get("/verify", accounts.Verify)
 		r.With(callbackLimit).Post("/webhooks/yookassa", webhook.New(cfg.Log, cfg.Storage, paymentFinder))
 
 		// Protected endpoints
@@ -157,7 +162,9 @@ func New(cfg Config) *chi.Mux {
 			r.Post("/me/focus/resume", contractsMiddleware.Operation(cfg.Storage, extended.Resume))
 			r.Post("/me/focus/rest/finish", contractsMiddleware.Operation(cfg.Storage, extended.FinishRest))
 			r.Get("/me/today", extended.Today)
-			r.Patch("/me/profile", extended.Settings)
+			r.Patch("/me/profile", accounts.Profile)
+			r.Post("/me/email", accounts.Change)
+			r.Post("/me/password", accounts.Change)
 			r.Post("/me/quests/{code}/claim", contractsMiddleware.Operation(cfg.Storage, extended.Claim))
 			r.Post("/me/rewards/daily-chest/claim", contractsMiddleware.Operation(cfg.Storage, extended.Claim))
 
