@@ -5,6 +5,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 	"github.com/stretchr/testify/require"
 )
 
@@ -19,5 +20,17 @@ func TestMalformedAccountRequestsNeverReachStorage(t *testing.T) {
 		w := httptest.NewRecorder()
 		h.Register(w, httptest.NewRequest("POST", "/register", strings.NewReader(body)))
 		require.Equal(t, 400, w.Code)
+	}
+}
+
+func TestEmptyProfileChangesNeverReachDatabase(t *testing.T) {
+	h := Handler{Store: &postgres.Storage{}}
+	for _, body := range []string{`{}`, `{"display_name":null}`, `{"timezone":null}`, `{"display_name":null,"timezone":null}`} {
+		t.Run(body, func(t *testing.T) {
+			w := httptest.NewRecorder()
+			h.Profile(w, httptest.NewRequest("PATCH", "/me/profile", strings.NewReader(body)))
+			require.Equal(t, 400, w.Code)
+			require.Contains(t, w.Body.String(), `"code":"VALIDATION_ERROR"`)
+		})
 	}
 }

@@ -29,6 +29,34 @@ class DeploymentHostPinTests(unittest.TestCase):
                 if os.name != "nt":
                     self.assertEqual(target.stat().st_mode & 0o777, 0o600)
 
+    def test_nonstandard_port_is_bound_to_exact_host_and_port(self):
+        for host in ["192.0.2.10", "2001:db8::10", "deploy.example.test"]:
+            with self.subTest(host=host), tempfile.TemporaryDirectory() as directory:
+                target = Path(directory) / "known_hosts"
+                env = dict(os.environ, SERVER_IP=host, SSH_HOST_PUBLIC_KEY=self.public_key, SERVER_SSH_PORT="2222")
+                result = subprocess.run(
+                    [sys.executable, str(Path(__file__).with_name("configure_deploy_ssh.py")),
+                     "--known-hosts", str(target)], env=env, capture_output=True, text=True,
+                )
+                self.assertEqual(result.returncode, 0, result.stderr)
+                lookup = f"[{host}]:2222"
+                self.assertEqual(target.read_text(), f"{lookup} {' '.join(self.public_key.split()[:2])}\n")
+                result = subprocess.run(["ssh-keygen", "-F", lookup, "-f", str(target)], capture_output=True)
+                self.assertEqual(result.returncode, 0)
+                result = subprocess.run(["ssh-keygen", "-F", f"[{host}]:2223", "-f", str(target)], capture_output=True)
+                self.assertNotEqual(result.returncode, 0)
+
+    def test_invalid_port_preserves_existing_pin(self):
+        with tempfile.TemporaryDirectory() as directory:
+            target = Path(directory) / "known_hosts"
+            target.write_text("existing verified pin\n")
+            for port in ["", "0", "65536", "-1", "22 ", "2.2", "22\n", "٢٢"]:
+                with self.subTest(port=port):
+                    with self.assertRaises(ValueError):
+                        configure_known_hosts("deploy.example.test", self.public_key, target, port)
+                    self.assertEqual(target.read_text(), "existing verified pin\n")
+                    self.assertEqual(list(Path(directory).iterdir()), [target])
+
     def test_invalid_configuration_preserves_existing_pin(self):
         cases = [(host, self.public_key) for host in [
             "", " host", "host\nother", "*.example.test", "host,other", "-oProxyCommand=bad",

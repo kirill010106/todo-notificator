@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import * as Menu from "@radix-ui/react-dropdown-menu";
 import { useNavigate, useSearchParams, Link } from "react-router-dom";
 import {
   Plus,
@@ -12,6 +13,7 @@ import {
   Circle,
   Bell,
   Play,
+  MoreHorizontal,
 } from "lucide-react";
 import { api, errorText, json } from "../../lib/api";
 import { command, rewardLabel } from "../../lib/commands";
@@ -24,7 +26,7 @@ import type {
   ActionResponse,
 } from "../../lib/types";
 import { useApp } from "../../app/context";
-import { useFocus, FocusPanel } from "../focus/Focus";
+import { useFocus } from "../focus/Focus";
 import { Button, Sheet, Heading, State } from "../../components/ui";
 import s from "../../styles/App.module.css";
 
@@ -44,11 +46,13 @@ export function TasksPage({ today = false }: { today?: boolean }) {
   const [editor, setEditor] = useState(false);
   const [editing, setEditing] = useState<Task | null>(null);
   const [selected, setSelected] = useState<number[]>([]);
+  const [selecting, setSelecting] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [deleteIds, setDeleteIds] = useState<number[]>([]);
   const [clock, setClock] = useState(new Date());
   const [search, setSearch] = useState(params.get("search") || "");
+  const [filtersOpen, setFiltersOpen] = useState(false);
   useEffect(() => {
     const timer = setInterval(() => setClock(new Date()), 30_000);
     return () => clearInterval(timer);
@@ -64,6 +68,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
   }, [params, setParams]);
   useEffect(() => {
     setSelected([]);
+    setSelecting(false);
   }, [params.toString(), today]);
   useEffect(() => {
     setSearch(params.get("search") || "");
@@ -71,6 +76,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
   const status = picking ? "pending" : params.get("status") || "pending";
   const category = params.get("category") || "";
   const sort = params.get("sort") || "created_at";
+  const filterCount = Number(Boolean(category)) + Number(sort !== "created_at");
   const offset = Math.max(0, Number(params.get("offset")) || 0);
   const queryParams = new URLSearchParams({
     status,
@@ -197,12 +203,13 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           className={`${s.taskRow} ${task.status === "done" ? s.taskDone : ""}`}
           key={task.id}
         >
-          {!today && !picking && (
+          {!today && !picking && selecting && (
             <input
               type="checkbox"
               className={s.selectCheck}
               aria-label={`Выбрать: ${task.title}`}
               checked={selected.includes(task.id)}
+              disabled={busy}
               onChange={(e) =>
                 setSelected((ids) =>
                   e.target.checked
@@ -237,9 +244,6 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           >
             <strong>{task.title}</strong>
             <span>
-              {task.description && (
-                <span className={s.taskDescription}>{task.description}</span>
-              )}
               <span className={s.taskMeta}>
                 {task.category_id && (
                   <span className={s.categoryDot}>
@@ -259,36 +263,41 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               </span>
             </span>
           </button>
-          <button
-            className={s.iconButton}
-            disabled={
-              focus.busy || !!focus.session || task.status !== "pending"
-            }
-            onClick={() => (picking ? pick(task) : focus.requestStart(task))}
-            aria-label={`${picking ? "Выбрать для фокуса" : "Начать фокус"}: ${task.title}`}
-            title="Начать фокус"
-          >
-            <Play size={18} />
-            <span className={s.focusActionLabel}>
-              {picking ? "Выбрать" : "Фокус"}
-            </span>
-          </button>
-          {!picking && (
-            <button
-              className={s.iconButton}
-              disabled={busy}
-              onClick={() => setDeleteIds([task.id])}
-              aria-label={`Удалить: ${task.title}`}
+          {picking ? (
+            <Button quiet
+              disabled={focus.busy || !!focus.session || task.status !== "pending"}
+              onClick={() => pick(task)}
+              aria-label={`Выбрать для фокуса: ${task.title}`}
             >
-              <Trash2 size={16} />
-            </button>
+              Выбрать
+            </Button>
+          ) : (
+            <Menu.Root>
+              <Menu.Trigger className={s.iconButton} disabled={busy}
+                aria-label={`Действия: ${task.title}`}>
+                <MoreHorizontal size={20} />
+              </Menu.Trigger>
+              <Menu.Portal>
+                <Menu.Content className={s.dropdown} align="end" sideOffset={8}>
+                  <Menu.Item className={s.taskMenuItem}
+                    disabled={focus.busy || !!focus.session || task.status !== "pending"}
+                    onSelect={() => focus.requestStart(task)}>
+                    <Play size={16} /> Начать фокус
+                  </Menu.Item>
+                  <Menu.Item className={s.taskMenuItem} disabled={busy}
+                    onSelect={() => setDeleteIds([task.id])}>
+                    <Trash2 size={16} /> Удалить
+                  </Menu.Item>
+                </Menu.Content>
+              </Menu.Portal>
+            </Menu.Root>
           )}
         </article>
       ))}
     </div>
   );
   return (
-    <>
+    <div className={s.tasksPage}>
       <Heading
         eyebrow={
           today
@@ -298,58 +307,30 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                 day: "numeric",
                 month: "long",
               })
-            : "ВСЁ ПОД КОНТРОЛЕМ"
+            : undefined
         }
         title={
           picking
             ? "Выбери задачу для фокуса"
             : today
-              ? "Хороший день, чтобы начать."
+              ? "Сегодня"
               : "Мои задачи"
         }
         action={
-          <Button onClick={create}>
+          <Button className={s.taskCreateButton} onClick={create}>
             <Plus size={18} /> Новая задача
           </Button>
         }
-      >
-        {today
-          ? "Не нужно успеть всё. Начни с того, что важно сегодня."
-          : "Большие планы складываются из маленьких шагов."}
-      </Heading>
+      />
       {picking && (
         <p className={s.notice}>
           Выбор задачи ещё не запускает таймер.{" "}
           <Link to="/app/focus">Вернуться к фокусу</Link>
         </p>
       )}
-      <div className={s.workspace}>
+      <div className={s.tasksWorkspace}>
         <div className={s.mainColumn}>
-          {today && (
-            <div className={s.overview}>
-              <div>
-                <span className={s.eyebrow}>НА СЕГОДНЯ</span>
-                <strong>
-                  {query.isSuccess ? todayTotal : "—"}
-                  <small> задач</small>
-                </strong>
-              </div>
-              <div>
-                <span className={s.eyebrow}>ТРЕБУЮТ ВНИМАНИЯ</span>
-                <strong>
-                  {query.isSuccess ? overdueTotal : "—"}
-                  <small> просрочено</small>
-                </strong>
-              </div>
-              <div>
-                <span className={s.eyebrow}>ТВОЯ СЕРИЯ</span>
-                <strong>
-                  {data.gamification?.streak ?? "—"}
-                  <small> дней</small>
-                </strong>
-              </div>
-            </div>
-          )}
+
           {!today && (
             <div className={s.filters}>
               <form
@@ -370,6 +351,29 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                   <ArrowUpRight size={17} />
                 </button>
               </form>
+              <Button
+                quiet
+                aria-expanded={filtersOpen}
+                aria-controls="task-filters"
+                onClick={() => setFiltersOpen((open) => !open)}
+              >
+                <SlidersHorizontal size={16} />
+                Фильтры{filterCount > 0 ? ` (${filterCount})` : ""}
+              </Button>
+              {filterCount > 0 && (
+                <Button quiet onClick={() => {
+                  const next = new URLSearchParams(params);
+                  next.delete("category");
+                  next.delete("sort");
+                  next.delete("offset");
+                  setParams(next);
+                }}>
+                  Сбросить фильтры
+                </Button>
+              )}
+              <div id="task-filters" className={s.filterPanel} hidden={!filtersOpen}>
+              <label>
+                Категория
               <select
                 aria-label="Категория задач"
                 value={category}
@@ -382,6 +386,9 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                   </option>
                 ))}
               </select>
+              </label>
+              <label>
+                Сортировка
               <select
                 aria-label="Сортировка"
                 value={sort}
@@ -390,6 +397,8 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                 <option value="created_at">Сначала новые</option>
                 <option value="deadline">По сроку</option>
               </select>
+              </label>
+              </div>
             </div>
           )}
           {!today && !picking && (
@@ -408,7 +417,6 @@ export function TasksPage({ today = false }: { today?: boolean }) {
                   {title}
                 </button>
               ))}
-              <SlidersHorizontal size={16} />
             </div>
           )}
           {error && (
@@ -416,7 +424,18 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               {error}
             </p>
           )}
-          {selected.length > 0 && (
+          {!today && !picking && (
+            <div className={s.selectionToolbar}>
+              <Button quiet disabled={busy} aria-pressed={selecting}
+                onClick={() => {
+                  setSelecting((value) => !value);
+                  setSelected([]);
+                }}>
+                {selecting ? "Отменить выбор" : "Выбрать"}
+              </Button>
+            </div>
+          )}
+          {selecting && selected.length > 0 && (
             <div className={s.bulk}>
               <span>Выбрано: {selected.length}</span>
               <Button
@@ -457,7 +476,7 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               {overdueTotal > 0 && (
                 <section>
                   <div className={s.sectionTitle}>
-                    <h2>Требуют внимания</h2>
+                    <h2>Просроченные</h2>
                     <span className={s.count}>{overdueTotal}</span>
                   </div>
                   {renderTasks(groups.overdue)}
@@ -466,14 +485,13 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               )}
               <section>
                 <div className={s.sectionTitle}>
-                  <h2>План на сегодня</h2>
+                  <h2>На сегодня</h2>
                   <span className={s.count}>{todayTotal}</span>
-                  <span className={s.muted}>В своём темпе</span>
                 </div>
                 {groups.today.length ? (
                   renderTasks(groups.today)
                 ) : (
-                  <State title="Сегодня есть место для нового">
+                  <State title="На сегодня задач нет">
                     Здесь появятся задачи со сроком на сегодня. Все остальные —
                     в разделе «Задачи».
                   </State>
@@ -488,10 +506,6 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               Добавь задачу или попробуй другие фильтры.
             </State>
           )}
-          <button className={s.addRow} onClick={create}>
-            <Plus size={18} /> Добавить задачу{" "}
-            <span>Освободи место для мыслей</span>
-          </button>
           {!today && query.data && query.data.pagination.total > 20 && (
             <div className={s.pagination}>
               <Button
@@ -522,51 +536,12 @@ export function TasksPage({ today = false }: { today?: boolean }) {
               </Button>
             </div>
           )}
-          {today && (
-            <div className={s.quietNote}>
-              <LeafMark />
-              <div>
-                <strong>Прогресс — это движение, а не скорость.</strong>
-                <p>
-                  Один маленький шаг сегодня — уже больше, чем идеальный план на
-                  завтра.
-                </p>
-              </div>
-            </div>
-          )}
+
         </div>
-        <aside className={s.rightColumn}>
-          <FocusPanel />
-          <div className={s.dailyCard}>
-            <span className={s.eyebrow}>МАЛЕНЬКИЕ ПОБЕДЫ</span>
-            <h3>Твой ежедневный ритм</h3>
-            {data.gamification?.daily_quests?.length ? (
-              data.gamification.daily_quests.map((quest) => (
-                <div className={s.quest} key={quest.code}>
-                  <span>
-                    {quest.completed ? (
-                      <Check size={16} />
-                    ) : (
-                      <Circle size={16} />
-                    )}
-                  </span>
-                  <div>
-                    {quest.title}
-                    <small>
-                      {quest.current} / {quest.target}
-                    </small>
-                  </div>
-                  <span>+{quest.reward_xp} XP</span>
-                </div>
-              ))
-            ) : (
-              <p className={s.muted}>
-                Задания появятся, когда сервер обновит профиль.
-              </p>
-            )}
-          </div>
-        </aside>
       </div>
+      <button className={s.fab} aria-label="Создать задачу" onClick={create}>
+        <Plus size={26} />
+      </button>
       <TaskEditor open={editor} task={editing} close={() => setEditor(false)} />
       <Sheet
         open={deleteIds.length > 0}
@@ -606,9 +581,6 @@ export function TasksPage({ today = false }: { today?: boolean }) {
           </Button>
         </div>
       </Sheet>
-    </>
+    </div>
   );
-}
-function LeafMark() {
-  return <span className={s.noteMark}>✳</span>;
 }

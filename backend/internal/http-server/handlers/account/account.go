@@ -133,6 +133,10 @@ func (h Handler) Profile(w http.ResponseWriter, r *http.Request) {
 	if !decode(w, r, &req) {
 		return
 	}
+	if req.DisplayName == nil && req.Timezone == nil {
+		fail(w, &domain.ContractError{Status: 400, Code: "VALIDATION_ERROR", Message: "Укажите имя или часовой пояс"})
+		return
+	}
 	id, _ := auth.GetUserID(r.Context())
 	if err := h.Store.UpdateAccountProfile(r.Context(), id, req.DisplayName, req.Timezone); err != nil {
 		fail(w, err)

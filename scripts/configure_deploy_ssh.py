@@ -10,7 +10,9 @@ import subprocess
 import tempfile
 
 
-def configure_known_hosts(host: str, public_key: str, destination: Path) -> None:
+def configure_known_hosts(host: str, public_key: str, destination: Path, port: str = "22") -> None:
+    if re.fullmatch(r"[0-9]+", port) is None or not 1 <= int(port) <= 65535:
+        raise ValueError("SERVER_SSH_PORT must be a TCP port number")
     if not host or host != host.strip() or "%" in host or any(c.isspace() for c in host):
         raise ValueError("SERVER_IP must contain one host without surrounding whitespace")
     try:
@@ -43,7 +45,8 @@ def configure_known_hosts(host: str, public_key: str, destination: Path) -> None
     temporary = Path(name)
     try:
         with os.fdopen(fd, "w", encoding="ascii", newline="\n") as stream:
-            stream.write(f"{host} {fields[0]} {fields[1]}\n")
+            known_host = host if int(port) == 22 else f"[{host}]:{int(port)}"
+            stream.write(f"{known_host} {fields[0]} {fields[1]}\n")
         result = subprocess.run(
             ["ssh-keygen", "-l", "-f", str(temporary)],
             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10, check=False,
@@ -61,10 +64,13 @@ def main() -> None:
     parser.add_argument("--known-hosts", type=Path, required=True)
     args = parser.parse_args()
     try:
-        configure_known_hosts(os.environ.get("SERVER_IP", ""), os.environ.get("SSH_HOST_PUBLIC_KEY", ""), args.known_hosts)
+        configure_known_hosts(
+            os.environ.get("SERVER_IP", ""), os.environ.get("SSH_HOST_PUBLIC_KEY", ""),
+            args.known_hosts, os.environ.get("SERVER_SSH_PORT", "22"),
+        )
     except (ValueError, OSError, subprocess.SubprocessError):
         # Do not echo environment values or parser/ssh-keygen diagnostics.
-        parser.exit(1, "Deployment SSH pin is missing or invalid; configure a verified SERVER_IP and SSH_HOST_PUBLIC_KEY.\n")
+        parser.exit(1, "Deployment SSH pin is missing or invalid; configure a verified SERVER_IP, SSH_HOST_PUBLIC_KEY and valid SERVER_SSH_PORT.\n")
 
 
 if __name__ == "__main__":
