@@ -822,11 +822,11 @@ func TestSaveRefreshToken_Success(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
-		INSERT INTO refresh_tokens (user_id, token, expires_at)
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
 	`)
 	mock.ExpectExec(query).
-		WithArgs(userID, token, expiresAt).
+		WithArgs(userID, refreshTokenHash(token), expiresAt).
 		WillReturnResult(sqlmock.NewResult(1, 1))
 
 	err = s.SaveRefreshToken(context.Background(), userID, token, expiresAt)
@@ -845,20 +845,20 @@ func TestGetRefreshToken_Success(t *testing.T) {
 	expiresAt := time.Now().UTC().Add(24 * time.Hour)
 
 	query := regexp.QuoteMeta(`
-	SELECT id, user_id, token, expires_at, created_at
+	SELECT id, user_id, token_hash, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
+	 WHERE token_hash = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `)
 	mock.ExpectQuery(query).
-		WithArgs(token).
-		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "token", "expires_at", "created_at"}).
-			AddRow(int64(1), userID, token, expiresAt, time.Now()))
+		WithArgs(refreshTokenHash(token)).
+		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "token_hash", "expires_at", "created_at"}).
+			AddRow(int64(1), userID, refreshTokenHash(token), expiresAt, time.Now()))
 
 	rt, err := s.GetRefreshToken(context.Background(), token)
 	require.NoError(t, err)
 	require.NotNil(t, rt)
 	require.Equal(t, userID, rt.UserID)
-	require.Equal(t, token, rt.Token)
+	require.Equal(t, refreshTokenHash(token), rt.TokenHash)
 	require.NoError(t, mock.ExpectationsWereMet())
 }
 
@@ -871,12 +871,12 @@ func TestGetRefreshToken_Invalid(t *testing.T) {
 	token := "invalid_token"
 
 	query := regexp.QuoteMeta(`
-	SELECT id, user_id, token, expires_at, created_at
+	SELECT id, user_id, token_hash, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
+	 WHERE token_hash = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `)
 	mock.ExpectQuery(query).
-		WithArgs(token).
+		WithArgs(refreshTokenHash(token)).
 		WillReturnError(sql.ErrNoRows)
 
 	rt, err := s.GetRefreshToken(context.Background(), token)
@@ -896,10 +896,10 @@ func TestDeleteRefreshToken_Success(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 	DELETE FROM refresh_tokens
-	WHERE token = $1
+	WHERE token_hash = $1
 `)
 	mock.ExpectExec(query).
-		WithArgs(token).
+		WithArgs(refreshTokenHash(token)).
 		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	err = s.DeleteRefreshToken(context.Background(), token)
@@ -917,10 +917,10 @@ func TestDeleteRefreshToken_NotFound(t *testing.T) {
 
 	query := regexp.QuoteMeta(`
 	DELETE FROM refresh_tokens
-	WHERE token = $1
+	WHERE token_hash = $1
 `)
 	mock.ExpectExec(query).
-		WithArgs(token).
+		WithArgs(refreshTokenHash(token)).
 		WillReturnResult(sqlmock.NewResult(0, 0))
 
 	err = s.DeleteRefreshToken(context.Background(), token)
@@ -936,9 +936,9 @@ func TestRotateRefreshToken_Success(t *testing.T) {
 	s := &Storage{DB: db}
 	expires := time.Now().UTC().Add(time.Hour)
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs("old").WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(42))
+	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs(refreshTokenHash("old")).WillReturnRows(sqlmock.NewRows([]string{"user_id"}).AddRow(42))
 	mock.ExpectQuery("SELECT id,email,password_hash,is_verified,is_premium,display_name,auth_version FROM users").WithArgs(42).WillReturnRows(sqlmock.NewRows([]string{"id", "email", "password_hash", "is_verified", "is_premium", "display_name", "auth_version"}).AddRow(42, "user@example.com", []byte("hash"), true, true, "Name", 3))
-	mock.ExpectExec("UPDATE refresh_tokens SET").WithArgs("old", "new", expires, 42).WillReturnResult(sqlmock.NewResult(0, 1))
+	mock.ExpectExec("UPDATE refresh_tokens SET").WithArgs(refreshTokenHash("old"), refreshTokenHash("new"), expires, 42).WillReturnResult(sqlmock.NewResult(0, 1))
 	mock.ExpectCommit()
 	u, err := s.RotateRefreshToken(context.Background(), "old", "new", expires)
 	require.NoError(t, err)
@@ -952,7 +952,7 @@ func TestRotateRefreshToken_Invalid(t *testing.T) {
 	defer db.Close()
 	s := &Storage{DB: db}
 	mock.ExpectBegin()
-	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs("old").WillReturnError(sql.ErrNoRows)
+	mock.ExpectQuery("SELECT user_id FROM refresh_tokens").WithArgs(refreshTokenHash("old")).WillReturnError(sql.ErrNoRows)
 	mock.ExpectRollback()
 	_, err = s.RotateRefreshToken(context.Background(), "old", "new", time.Now())
 	require.ErrorIs(t, err, storage.ErrRefreshTokenInvalid)

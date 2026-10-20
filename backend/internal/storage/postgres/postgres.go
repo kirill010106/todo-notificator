@@ -419,13 +419,13 @@ func (s *Storage) SaveRefreshToken(ctx context.Context, userID int64, token stri
 	const op = "storage.postgres.SaveRefreshToken"
 
 	query := `
-		INSERT INTO refresh_tokens (user_id, token, expires_at)
+		INSERT INTO refresh_tokens (user_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
 	`
 
 	// refresh_tokens.expires_at is a legacy timestamp without time zone.
 	// Persist UTC wall time and compare it with an explicitly UTC database clock.
-	_, err := s.DB.ExecContext(ctx, query, userID, token, expiresAt.UTC())
+	_, err := s.DB.ExecContext(ctx, query, userID, refreshTokenHash(token), expiresAt.UTC())
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -437,15 +437,15 @@ func (s *Storage) GetRefreshToken(ctx context.Context, token string) (*domain.Re
 	const op = "storage.postgres.GetRefreshToken"
 
 	query := `
-	SELECT id, user_id, token, expires_at, created_at
+	SELECT id, user_id, token_hash, expires_at, created_at
 	 FROM refresh_tokens
-	 WHERE token = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
+	 WHERE token_hash = $1 AND expires_at > (NOW() AT TIME ZONE 'UTC')
 	 `
 	var rt domain.RefreshToken
-	err := s.DB.QueryRowContext(ctx, query, token).Scan(
+	err := s.DB.QueryRowContext(ctx, query, refreshTokenHash(token)).Scan(
 		&rt.ID,
 		&rt.UserID,
-		&rt.Token,
+		&rt.TokenHash,
 		&rt.ExpiresAt,
 		&rt.CreatedAt,
 	)
@@ -465,9 +465,9 @@ func (s *Storage) DeleteRefreshToken(ctx context.Context, token string) error {
 
 	query := `
 	DELETE FROM refresh_tokens
-	WHERE token = $1
+	WHERE token_hash = $1
 `
-	res, err := s.DB.ExecContext(ctx, query, token)
+	res, err := s.DB.ExecContext(ctx, query, refreshTokenHash(token))
 	if err != nil {
 		return fmt.Errorf("%s: %w", op, err)
 	}
@@ -493,7 +493,8 @@ func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newTo
 	}
 	defer tx.Rollback()
 	var id int64
-	err = tx.QueryRowContext(ctx, `SELECT user_id FROM refresh_tokens WHERE token=$1`, oldToken).Scan(&id)
+	oldHash, newHash := refreshTokenHash(oldToken), refreshTokenHash(newToken)
+	err = tx.QueryRowContext(ctx, `SELECT user_id FROM refresh_tokens WHERE token_hash=$1`, oldHash).Scan(&id)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, storage.ErrRefreshTokenInvalid
 	}
@@ -504,7 +505,7 @@ func (s *Storage) RotateRefreshToken(ctx context.Context, oldToken string, newTo
 	if err != nil {
 		return nil, err
 	}
-	result, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET token=$2,expires_at=$3 WHERE token=$1 AND user_id=$4 AND expires_at>(NOW() AT TIME ZONE 'UTC')`, oldToken, newToken, expiresAt.UTC(), id)
+	result, err := tx.ExecContext(ctx, `UPDATE refresh_tokens SET token_hash=$2,expires_at=$3 WHERE token_hash=$1 AND user_id=$4 AND expires_at>(NOW() AT TIME ZONE 'UTC')`, oldHash, newHash, expiresAt.UTC(), id)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", op, err)
 	}

@@ -19,6 +19,7 @@ jobs:
         env:
           RUN_RELEASE_INTEGRATION: '1'
       - run: python -m unittest discover -s scripts -p 'test_release_config.py' -v
+      - run: python -m unittest discover -s scripts -p 'test_configure_deploy_ssh.py' -v
       - uses: actions/setup-go@v5
         with:
           go-version: '1.27.2'
