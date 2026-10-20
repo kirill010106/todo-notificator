@@ -125,7 +125,9 @@ test("profile name, email and password can be changed independently", async ({
     .locator("..");
   await name.getByLabel("Имя", { exact: true }).fill("Новое имя");
   await name.getByRole("button", { name: "Сохранить", exact: true }).click();
-  await expect(page.locator("aside").first()).toContainText("Новое имя");
+  await expect(page.getByRole("status")).toContainText("Имя сохранено.");
+  await page.reload();
+  await expect(name.getByLabel("Имя", { exact: true })).toHaveValue("Новое имя");
   expect(account.getUser().timezone).toBe("Europe/Moscow");
   const email = page
     .getByRole("heading", { name: "Сменить почту" })
@@ -193,6 +195,9 @@ test("forgotten password request and reset lead back to login", async ({
   });
   await page.goto("/login");
   await page.getByRole("link", { name: "Забыли пароль?" }).click();
+  await expect(
+    page.getByRole("heading", { name: "Восстановление пароля", exact: true }),
+  ).toBeVisible();
   await page.getByLabel("Email").fill("user@example.com");
   await page.getByRole("button", { name: "Отправить ссылку" }).click();
   await expect(

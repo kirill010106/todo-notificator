@@ -2078,7 +2078,7 @@ paths:
     patch:
       tags:
         - Profile
-      summary: "Изменить часовой пояс аккаунта"
+      summary: "Изменить имя или часовой пояс аккаунта"
       security:
         - bearerAuth: []
       responses:
@@ -2118,6 +2118,9 @@ paths:
           application/json:
             schema:
               type: object
+              anyOf:
+                - required: [display_name]
+                - required: [timezone]
               properties:
                 display_name:
                   type: string
