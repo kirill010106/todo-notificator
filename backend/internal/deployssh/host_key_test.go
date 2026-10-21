@@ -85,6 +85,9 @@ func TestDeploymentRejectsSubstitutedHostKey(t *testing.T) {
 							_ = request.Reply(true, nil)
 							_, _ = channel.SendRequest("exit-status", false, ssh.Marshal(struct{ Status uint32 }{0}))
 							_ = channel.Close()
+							// Let the client finish its disconnect before closing the transport.
+							// The connection deadline bounds this wait if the client stalls.
+							_ = sshConnection.Wait()
 							return
 						}
 						_ = request.Reply(false, nil)
