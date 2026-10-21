@@ -39,7 +39,12 @@ func TestLogEventSerializesContextAndToleratesFailures(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			received := make(chan *pb.LogRequest, 1)
-			client := &Client{api: eventAPI{received: received, err: tc.err, success: tc.success}, log: slog.New(slog.DiscardHandler), timeout: time.Second}
+			client := newClient(context.Background(), slog.New(slog.DiscardHandler), eventAPI{received: received, err: tc.err, success: tc.success}, time.Second, nil)
+			t.Cleanup(func() {
+				ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+				defer cancel()
+				require.NoError(t, client.Close(ctx))
+			})
 			client.LogEvent(42, "TASK_CREATED", 7, tc.details)
 			select {
 			case event := <-received:

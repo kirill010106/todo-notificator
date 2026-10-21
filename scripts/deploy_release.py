@@ -68,7 +68,8 @@ class Release:
             self.call(["docker", "update", "--restart=no", *ids], stdout=subprocess.DEVNULL)
 
     def stop(self):
-        self.compose_call(["stop", "--timeout", "60", *self.services])
+        # Keep this above the email service's 65-second shutdown budget.
+        self.compose_call(["stop", "--timeout", "75", *self.services])
 
     def save_backup(self):
         self.backups.mkdir(parents=True, exist_ok=True, mode=0o700)

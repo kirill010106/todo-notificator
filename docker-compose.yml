@@ -92,6 +92,7 @@ services:
       - "traefik.docker.network=traefik"
 
   email-notifier:
+    stop_grace_period: 75s
     healthcheck:
       test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:8084/health"]
       interval: 5s

@@ -1,5 +1,6 @@
 import subprocess
 import json
+import re
 import tempfile
 from pathlib import Path
 import unittest
@@ -35,6 +36,19 @@ class ReleaseTests(unittest.TestCase):
 
     def index(self, calls, predicate):
         return next(i for i, args in enumerate(calls) if predicate(args))
+
+    def test_stop_budget_allows_email_workers_to_finish(self):
+        fake = FakeDocker()
+        self.run_release(fake).stop()
+        command = fake.calls[-1]
+        timeout = int(command[command.index("--timeout") + 1])
+        root = Path(__file__).resolve().parents[1]
+        server = (root / "notifiers/email/cmd/server.go").read_text(encoding="utf-8")
+        budget = int(re.search(r"serviceShutdownTimeout = (\d+) \* time.Second", server)[1])
+        compose = (root / "docker-compose.yml").read_text(encoding="utf-8")
+        compose_budget = int(re.search(r"email-notifier:\s+stop_grace_period:\s*(\d+)s", compose)[1])
+        self.assertGreaterEqual(timeout, budget + 5)
+        self.assertGreaterEqual(compose_budget, budget + 5)
 
     def test_stop_backup_verify_migrate_ready_then_sender(self):
         fake = FakeDocker()
