@@ -1,4 +1,16 @@
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+beforeEach(() => {
+  let tail: Promise<unknown> = Promise.resolve();
+  vi.stubGlobal("navigator", {
+    locks: {
+      request: vi.fn((_name, _options, callback) => {
+        const result = tail.then(() => callback({}));
+        tail = result.catch(() => {});
+        return result;
+      }),
+    },
+  });
+});
 describe("API session handling", () => {
   it("does not let a refresh overwrite credentials from another account", async () => {
     const { refreshAccess, saveTokens } = await import("./api");
@@ -14,6 +26,7 @@ describe("API session handling", () => {
       ),
     );
     const pending = refreshAccess();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
     saveTokens({
       access_token: "account-b-access",
       refresh_token: "account-b-refresh",
@@ -30,7 +43,10 @@ describe("API session handling", () => {
     localStorage.setItem("refresh_token", "refresh");
     const fetcher = vi.fn(async (input: string, init?: RequestInit) => {
       if (input.endsWith("/refresh"))
-        return Response.json({ access_token: token(2), refresh_token: "rotated" });
+        return Response.json({
+          access_token: token(2),
+          refresh_token: "rotated",
+        });
       return (init?.headers as Record<string, string>).Authorization ===
         `Bearer ${token(1)}`
         ? Response.json({ error: "expired" }, { status: 401 })
@@ -68,6 +84,7 @@ describe("API session handling", () => {
       ),
     );
     const pending = refreshAccess();
+    await vi.waitFor(() => expect(resolve).toBeTypeOf("function"));
     endSession();
     resolve(Response.json({ access_token: "stale" }));
     await expect(pending).rejects.toThrow("Сессия завершена");
@@ -83,7 +100,10 @@ describe("API session handling", () => {
       () => new Promise<Response>((resolve) => (rejectFirst = resolve)),
     );
     vi.stubGlobal("fetch", fetcher);
-    const pending = api("/tasks", { method: "POST", body: '{"title":"A private task"}' });
+    const pending = api("/tasks", {
+      method: "POST",
+      body: '{"title":"A private task"}',
+    });
     localStorage.setItem("access_token", token(2));
     localStorage.setItem("refresh_token", "account-b-refresh");
     sessionStorageChanged();
@@ -99,15 +119,28 @@ describe("API session handling", () => {
     localStorage.setItem("refresh_token", "old-refresh");
     const fetcher = vi.fn(async (input: string, init?: RequestInit) => {
       if (input.endsWith("/refresh"))
-        return Response.json({ access_token: token(1, 2), refresh_token: "new-refresh" });
-      if ((init?.headers as Record<string, string>).Authorization === `Bearer ${token(1, 1)}`)
+        return Response.json({
+          access_token: token(1, 2),
+          refresh_token: "new-refresh",
+        });
+      if (
+        (init?.headers as Record<string, string>).Authorization ===
+        `Bearer ${token(1, 1)}`
+      )
         return Response.json({}, { status: 401 });
-      expect(JSON.parse(String(init?.body))).toEqual({ refresh_token: "new-refresh" });
+      expect(JSON.parse(String(init?.body))).toEqual({
+        refresh_token: "new-refresh",
+      });
       return new Response(null, { status: 204 });
     });
     vi.stubGlobal("fetch", fetcher);
-    await api("/logout", { method: "POST", body: JSON.stringify({ refresh_token: "old-refresh" }) });
-    expect(fetcher.mock.calls.filter(([url]) => url.endsWith("/logout"))).toHaveLength(2);
+    await api("/logout", {
+      method: "POST",
+      body: JSON.stringify({ refresh_token: "old-refresh" }),
+    });
+    expect(
+      fetcher.mock.calls.filter(([url]) => url.endsWith("/logout")),
+    ).toHaveLength(2);
   });
   it("keeps credentials on a transient refresh failure", async () => {
     const { refreshAccess } = await import("./api");
@@ -118,5 +151,63 @@ describe("API session handling", () => {
     );
     await expect(refreshAccess()).rejects.toThrow();
     expect(localStorage.getItem("refresh_token")).toBe("good");
+  });
+  it("does not refresh without a cross-tab lock", async () => {
+    const { refreshAccess } = await import("./api");
+    localStorage.setItem("access_token", "old");
+    localStorage.setItem("refresh_token", "old-refresh");
+    vi.stubGlobal("navigator", {});
+    const fetcher = vi.fn();
+    vi.stubGlobal("fetch", fetcher);
+    await expect(refreshAccess()).rejects.toThrow();
+    expect(fetcher).not.toHaveBeenCalled();
+    expect(localStorage.getItem("refresh_token")).toBeNull();
+  });
+  it("does not clear a newer rotation after a delayed API 401", async () => {
+    const { api, saveTokens } = await import("./api");
+    const token = (n: number) => `x.${btoa(JSON.stringify({ uid: 7, n }))}.x`;
+    saveTokens({ access_token: token(1), refresh_token: "r1" });
+    let rejectRetry!: (response: Response) => void;
+    let attempts = 0;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (path: string) => {
+        if (path.endsWith("/refresh"))
+          return Response.json({ access_token: token(2), refresh_token: "r2" });
+        if (++attempts === 1) return Response.json({}, { status: 401 });
+        return new Promise<Response>((resolve) => {
+          rejectRetry = resolve;
+        });
+      }),
+    );
+    const pending = api("/tasks");
+    await vi.waitFor(() => expect(rejectRetry).toBeTypeOf("function"));
+    saveTokens({ access_token: token(3), refresh_token: "r3" });
+    rejectRetry(Response.json({}, { status: 401 }));
+    await expect(pending).rejects.toThrow();
+    expect(localStorage.getItem("refresh_token")).toBe("r3");
+  });
+  it("rejects a response decoded after another account signs in", async () => {
+    const { api, saveTokens } = await import("./api");
+    const token = (uid: number) => `x.${btoa(JSON.stringify({ uid }))}.x`;
+    saveTokens({ access_token: token(7), refresh_token: "r7" });
+    let completeBody!: (body: unknown) => void;
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({
+        ok: true,
+        status: 200,
+        json: () =>
+          new Promise((resolve) => {
+            completeBody = resolve;
+          }),
+      })),
+    );
+    const pending = api("/tasks");
+    await vi.waitFor(() => expect(completeBody).toBeTypeOf("function"));
+    saveTokens({ access_token: token(8), refresh_token: "r8" });
+    completeBody({ private: "account 7" });
+    await expect(pending).rejects.toThrow("Сессия завершена");
+    expect(localStorage.getItem("refresh_token")).toBe("r8");
   });
 });

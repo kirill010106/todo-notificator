@@ -33,21 +33,44 @@ func (s *Storage) CreatePayment(ctx context.Context, yookassaID string, userID i
 
 func (s *Storage) UpdatePaymentStatus(ctx context.Context, yookassaID string, status string) (int64, error) {
 	const op = "storage.postgres.UpdatePaymentStatus"
+	// Success must always go through the atomic Premium-granting operation.
+	if status != domain.PaymentStatusCanceled {
+		return 0, fmt.Errorf("%s: %w", op, storage.ErrPaymentStateConflict)
+	}
 
 	query := `
         UPDATE payments
-		SET status = $1, updated_at = CURRENT_TIMESTAMP
-		WHERE yookassa_payment_id = $2
+		SET status = $1::varchar, updated_at = CASE WHEN status=$1::varchar THEN updated_at ELSE CURRENT_TIMESTAMP END
+		WHERE yookassa_payment_id = $2 AND status IN ('pending','waiting_for_capture','canceled')
 		RETURNING user_id
     `
 
 	var userID int64
 	err := s.DB.QueryRowContext(ctx, query, status, yookassaID).Scan(&userID)
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", op, err)
+		return 0, fmt.Errorf("%s: %w", op, paymentTransitionError(ctx, s.DB, yookassaID, status, err))
 	}
 
 	return userID, nil
+}
+
+func paymentTransitionError(ctx context.Context, query interface {
+	QueryRowContext(context.Context, string, ...any) *sql.Row
+}, paymentID, target string, err error) error {
+	if !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	var current string
+	err = query.QueryRowContext(ctx, `SELECT status FROM payments WHERE yookassa_payment_id=$1`, paymentID).Scan(&current)
+	if err != nil && !errors.Is(err, sql.ErrNoRows) {
+		return err
+	}
+	if err == nil && current != target && (current == domain.PaymentStatusSucceeded || current == domain.PaymentStatusCanceled) {
+		return storage.ErrPaymentStateConflict
+	}
+	// A row created after the conditional UPDATE still needs processing. Treat
+	// it as retryable, rather than acknowledging an event without applying it.
+	return storage.ErrPaymentNotFound
 }
 
 func (s *Storage) GrantPremium(ctx context.Context, userID int64) error {
@@ -120,17 +143,14 @@ func (s *Storage) CompletePaymentAndGrantPremium(ctx context.Context, yookassaID
 	// 1. Обновляем статус платежа и получаем user_id
 	queryPayment := `
 		UPDATE payments
-		SET status = $1, updated_at = CURRENT_TIMESTAMP
-		WHERE yookassa_payment_id = $2
+		SET status = $1::varchar, updated_at = CASE WHEN status=$1::varchar THEN updated_at ELSE CURRENT_TIMESTAMP END
+		WHERE yookassa_payment_id = $2 AND status IN ('pending','waiting_for_capture','succeeded')
 		RETURNING user_id
 	`
 	var userID int64
 	err = tx.QueryRowContext(ctx, queryPayment, domain.PaymentStatusSucceeded, yookassaID).Scan(&userID)
 	if err != nil {
-		if errors.Is(err, sql.ErrNoRows) {
-			return 0, fmt.Errorf("%s: payment not found: %w", op, storage.ErrPaymentNotFound)
-		}
-		return 0, fmt.Errorf("%s: update payment status: %w", op, err)
+		return 0, fmt.Errorf("%s: update payment status: %w", op, paymentTransitionError(ctx, tx, yookassaID, domain.PaymentStatusSucceeded, err))
 	}
 
 	// 2. Выдаем премиум пользователю

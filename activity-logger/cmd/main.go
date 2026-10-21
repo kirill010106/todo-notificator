@@ -3,11 +3,16 @@ package main
 import (
 	"context"
 	pb "github.com/kirill010106/todo-notificator/root/pkg/activity_logger/v1"
+	"github.com/kirill010106/todo-notificator/root/pkg/activitylog"
 	"github.com/kirill010106/todo-notificator/root/pkg/envconfig"
 	"go.mongodb.org/mongo-driver/v2/bson"
 	"go.mongodb.org/mongo-driver/v2/mongo"
 	"go.mongodb.org/mongo-driver/v2/mongo/options"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protowire"
+	"google.golang.org/protobuf/proto"
 	"log"
 	"net"
 	"os"
@@ -71,11 +76,7 @@ func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLo
 
 	findOptions := options.Find().SetSort(bson.D{{"created_at", -1}})
 
-	if req.GetLimit() > 0 {
-		findOptions.SetLimit(int64(req.GetLimit()))
-	} else {
-		findOptions.SetLimit(50)
-	}
+	findOptions.SetLimit(int64(activitylog.PageSize(req.GetLimit())))
 
 	if req.GetOffset() > 0 {
 		findOptions.SetSkip(int64(req.GetOffset()))
@@ -87,26 +88,36 @@ func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLo
 	cursor, err := s.collection.Find(ctxTimeout, filter, findOptions)
 	if err != nil {
 		log.Printf("failed to find logs in MongoDB: %v\n", err)
-		return nil, err
+		return nil, status.Error(codes.Internal, "failed to read activity logs")
 	}
 	defer cursor.Close(ctxTimeout)
 
 	var results []*pb.ActivityLog
+	responseBytes := 0
 	for cursor.Next(ctxTimeout) {
 		var doc activityDoc
 		if err := cursor.Decode(&doc); err != nil {
 			log.Printf("failed to decode mongodb doc: %v\n", err)
-			continue
+			return nil, status.Error(codes.Internal, "failed to decode activity log")
 		}
 
-		results = append(results, &pb.ActivityLog{
+		entry := &pb.ActivityLog{
 			Id:          doc.ID.Hex(),
 			UserId:      doc.UserID,
 			Action:      doc.Action,
 			EntityId:    doc.EntityID,
 			DetailsJson: doc.DetailsJSON,
 			Timestamp:   doc.CreatedAt.UnixMilli(),
-		})
+		}
+		responseBytes += protowire.SizeTag(1) + protowire.SizeBytes(proto.Size(entry))
+		if responseBytes > activitylog.MaxResponseBytes {
+			return nil, status.Error(codes.ResourceExhausted, "activity log page exceeds response limit; request a smaller page")
+		}
+		results = append(results, entry)
+	}
+	if err := cursor.Err(); err != nil {
+		log.Printf("failed to iterate logs in MongoDB: %v\n", err)
+		return nil, status.Error(codes.Internal, "failed to read activity logs")
 	}
 
 	return &pb.GetLogsResponse{

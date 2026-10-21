@@ -12,6 +12,7 @@ import (
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
+	"github.com/kirill010106/todo-notificator/root/pkg/activitylog"
 )
 
 type LogsGetter interface {
@@ -40,12 +41,13 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 		}
 
 		limitRaw := r.URL.Query().Get("limit")
-		limit := int32(50) // Default limit
+		limit := int32(activitylog.DefaultPageSize)
 		if limitRaw != "" {
 			if parsed, err := strconv.ParseInt(limitRaw, 10, 32); err == nil && parsed > 0 {
 				limit = int32(parsed)
 			}
 		}
+		limit = activitylog.PageSize(limit)
 
 		offsetRaw := r.URL.Query().Get("offset")
 		offset := int32(0) // Default offset

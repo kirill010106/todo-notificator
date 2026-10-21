@@ -188,6 +188,7 @@ func TestWebhook_CanceledUpdateFails_Returns500(t *testing.T) {
 	require.NoError(t, err)
 
 	// Запись отмены падает: обработчик обязан вернуть 5xx, чтобы шлюз повторил доставку.
+	finder.On("FindPayment", mock.Anything, "pay-cancel-fail").Return(&yoopayment.Payment{ID: "pay-cancel-fail", Status: yoopayment.Canceled}, nil)
 	// ВАЖНО: именно int64(0) — мок делает args.Get(0).(int64), голый 0 паникует.
 	updater.On("UpdatePaymentStatus", mock.Anything, "pay-cancel-fail", "canceled").
 		Return(int64(0), errors.New("db is down"))
@@ -205,8 +206,7 @@ func TestWebhook_CanceledUpdateFails_Returns500(t *testing.T) {
 	// Отмена не должна ничего начислять.
 	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "GrantPremium")
-	// Для canceled мы не ходим в API YooKassa — платёж не мог быть успешным.
-	finder.AssertNotCalled(t, "FindPayment")
+	finder.AssertExpectations(t)
 }
 
 func TestWebhook_CanceledUpdateSucceeds_Returns200(t *testing.T) {
@@ -226,6 +226,7 @@ func TestWebhook_CanceledUpdateSucceeds_Returns200(t *testing.T) {
 
 	updater.On("UpdatePaymentStatus", mock.Anything, "pay-cancel-ok", "canceled").
 		Return(int64(7), nil)
+	finder.On("FindPayment", mock.Anything, "pay-cancel-ok").Return(&yoopayment.Payment{ID: "pay-cancel-ok", Status: yoopayment.Canceled}, nil)
 
 	h := New(log, updater, finder)
 
@@ -237,6 +238,7 @@ func TestWebhook_CanceledUpdateSucceeds_Returns200(t *testing.T) {
 
 	require.Equal(t, http.StatusOK, w.Code)
 	updater.AssertExpectations(t)
+	finder.AssertExpectations(t)
 	updater.AssertNotCalled(t, "CompletePaymentAndGrantPremium")
 	updater.AssertNotCalled(t, "GrantPremium")
 }

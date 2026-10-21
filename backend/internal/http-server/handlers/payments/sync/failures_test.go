@@ -96,3 +96,17 @@ func TestSyncDoesNotGrantPremiumWithoutConfirmedPayment(t *testing.T) {
 		})
 	}
 }
+
+func TestSyncRejectsDifferentProviderPayment(t *testing.T) {
+	checker := &statusStub{pending: "expected"}
+	finder := finderStub{payment: &payment.Payment{ID: "another", Status: payment.Succeeded}}
+	token, err := jwt.NewAccessToken(domain.User{ID: 42}, "test", time.Hour)
+	require.NoError(t, err)
+	r := httptest.NewRequest("POST", "/payments/sync", nil)
+	r.Header.Set("Authorization", "Bearer "+token)
+	w := httptest.NewRecorder()
+	auth.New("test")(New(slog.New(slog.DiscardHandler), checker, finder)).ServeHTTP(w, r)
+	require.Equal(t, 502, w.Code)
+	require.Zero(t, checker.grants)
+	require.Zero(t, checker.updates)
+}

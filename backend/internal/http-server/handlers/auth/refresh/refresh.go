@@ -13,6 +13,7 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -20,7 +21,7 @@ import (
 )
 
 type Request struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required,max=64"`
 }
 
 type Response struct {
@@ -46,8 +47,14 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		)
 
 		var req Request
-		err := render.DecodeJSON(r.Body, &req)
+		err := helpers.DecodeAuthJSON(w, r, &req)
 		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				render.Status(r, http.StatusRequestEntityTooLarge)
+				render.JSON(w, r, resp.ErrorCode("request body exceeds 4096 bytes", "PAYLOAD_TOO_LARGE"))
+				return
+			}
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
 				render.Status(r, http.StatusBadRequest)
@@ -60,6 +67,11 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 			return
 		}
 
+		if len(req.RefreshToken) > 64 {
+			render.Status(r, http.StatusBadRequest)
+			render.JSON(w, r, resp.Error("refresh token exceeds 64 bytes"))
+			return
+		}
 		if err := validate.Struct(req); err != nil {
 			var validateErrs validator.ValidationErrors
 			if errors.As(err, &validateErrs) {
