@@ -51,7 +51,7 @@ func (s *server) LogEvent(ctx context.Context, req *pb.LogRequest) (*pb.LogRespo
 		"created_at":   time.Now(),
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	_, err := s.collection.InsertOne(ctxTimeout, doc)
@@ -82,7 +82,7 @@ func (s *server) GetLogs(ctx context.Context, req *pb.GetLogsRequest) (*pb.GetLo
 		findOptions.SetSkip(int64(req.GetOffset()))
 	}
 
-	ctxTimeout, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	ctxTimeout, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
 
 	cursor, err := s.collection.Find(ctxTimeout, filter, findOptions)

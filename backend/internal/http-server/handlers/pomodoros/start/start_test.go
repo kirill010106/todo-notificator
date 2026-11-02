@@ -2,6 +2,7 @@ package start
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"log/slog"
 	"net/http"
@@ -11,7 +12,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	authmw "github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -19,16 +22,16 @@ import (
 )
 
 type mockPomodoroProvider struct {
-	startErr          error
-	session           *domain.PomodoroSession
-	
-	getActiveErr      error
-	activeSession     *domain.PomodoroSession
+	startErr error
+	session  *domain.PomodoroSession
 
-	startCalled       bool
-	getActiveCalled   bool
-	startedUserID     int64
-	startedTaskID     *int64
+	getActiveErr  error
+	activeSession *domain.PomodoroSession
+
+	startCalled     bool
+	getActiveCalled bool
+	startedUserID   int64
+	startedTaskID   *int64
 }
 
 func (m *mockPomodoroProvider) StartPomodoroSession(ctx context.Context, userID int64, taskID *int64) (*domain.PomodoroSession, error) {
@@ -45,6 +48,7 @@ func (m *mockPomodoroProvider) GetActivePomodoroSession(ctx context.Context, use
 
 func setupTestRouter(h http.HandlerFunc, secret string) *chi.Mux {
 	router := chi.NewRouter()
+	router.Use(middleware.RequestID)
 	router.Use(authmw.New(secret))
 	router.Post("/pomodoros/start", h)
 	return router
@@ -110,7 +114,14 @@ func TestStart_ConflictActiveSession(t *testing.T) {
 	require.Equal(t, http.StatusConflict, w.Code)
 	require.True(t, provider.startCalled)
 	require.True(t, provider.getActiveCalled)
-	require.Contains(t, w.Body.String(), "99") // ID of active session should be in response
+	var response apiresponse.Response
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+	require.Equal(t, apiresponse.Conflict, response.Code)
+	require.Equal(t, "pomodoro session is already active", response.Message)
+	require.Equal(t, response.Message, response.Error)
+	require.NotEmpty(t, response.RequestID)
+	require.Equal(t, map[string]string{}, response.FieldErrors)
+	require.Equal(t, active, response.ActiveSession)
 }
 
 func TestStart_InternalError(t *testing.T) {

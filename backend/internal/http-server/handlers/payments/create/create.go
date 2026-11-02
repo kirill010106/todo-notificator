@@ -11,6 +11,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/google/uuid"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -40,8 +41,7 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 
 		if yooClient == nil {
 			log.Warn("yookassa client is not configured")
-			render.Status(r, http.StatusServiceUnavailable)
-			render.JSON(w, r, resp.Error("payments are temporarily unavailable"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusServiceUnavailable, Code: apiresponse.InternalError, Message: "payments are temporarily unavailable"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -82,16 +82,14 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 		})
 		if err != nil {
 			log.Error("failed to create payment in yookassa", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("Failed to create payment"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "Failed to create payment"}, apiresponse.Compatibility{})
 			return
 		}
 
 		_, err = paymentSaver.CreatePayment(r.Context(), payment.ID, userID, amount, currency, string(payment.Status), description)
 		if err != nil {
 			log.Error("failed to save payment to db", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("Failed to save payment"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "Failed to save payment"}, apiresponse.Compatibility{})
 			return
 		}
 		log.Info("payment created", slog.String("yookassa_id", payment.ID), slog.Int64("user_id", userID))
@@ -99,8 +97,7 @@ func New(log *slog.Logger, paymentSaver PaymentSaver, yooClient *yooclient.Clien
 		rawURL, err := paymentHandler.ParsePaymentLink(payment)
 		if err != nil {
 			log.Error("failed to parse payment link", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("Failed to get payment link"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "Failed to get payment link"}, apiresponse.Compatibility{})
 			return
 		}
 

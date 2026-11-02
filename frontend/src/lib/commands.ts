@@ -36,10 +36,23 @@ export async function command<T = ActionResponse>(
 }
 export function rewardLabel(result: ActionResponse) {
   if (!result.rewards) return "";
-  const { task_xp, pomodoro_xp, achievement_xp, quest_xp, penalty_xp } =
-    result.rewards;
-  const gain = task_xp + pomodoro_xp + achievement_xp + quest_xp;
-  return [gain ? `+${gain} XP` : "", penalty_xp ? `−${penalty_xp} XP` : ""]
-    .filter(Boolean)
-    .join(" · ");
+  const { task_xp = 0, pomodoro_xp = 0, coins = 0 } = result.rewards;
+  const gain = task_xp + pomodoro_xp;
+  const total = [gain ? `+${gain} XP` : "", coins ? `+${coins} монет` : ""].filter(Boolean).join(", ");
+  return task_xp && pomodoro_xp
+    ? `${total} (сессия: +${pomodoro_xp} XP; задача: +${task_xp} XP)`
+    : total;
+}
+
+// Notify only from a command result, never from bootstrap/refetch snapshots.
+export function actionNotice(userId: number, result: ActionResponse, message: string) {
+  const key = `todo:notice:${userId}:${result.operation_id}`;
+  if (result.operation_id && localStorage.getItem(key)) return "";
+  const parts = [message, rewardLabel(result)];
+  if (result.level_up) parts.push(`Новый уровень: ${result.stats?.level}.`);
+  for (const item of result.unlocked_achievements || [])
+    parts.push(`Достижение «${item.title}»: ${item.description}.`);
+  const text = parts.filter(Boolean).join(" ");
+  if (text && result.operation_id) localStorage.setItem(key, "1");
+  return text;
 }

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -33,8 +34,7 @@ func New(log *slog.Logger, userStatsGetter UserStatsGetter) http.HandlerFunc {
 		stats, err := userStatsGetter.GetUserStats(r.Context(), userID)
 		if err != nil {
 			log.Error("failed to get user stats", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to get user stats"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to get user stats"}, apiresponse.Compatibility{})
 			return
 		}
 

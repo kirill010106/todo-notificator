@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -36,14 +37,12 @@ func New(log *slog.Logger, pomodoroGetter PomodoroGetter) http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, storage.ErrSessionNotFound) {
 				l.Info("no active pomodoro session found")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("session not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "session not found"}, apiresponse.Compatibility{})
 				return
 			}
 
 			l.Error("failed to get active pomodoro session", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			return
 		}
 

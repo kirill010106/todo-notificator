@@ -213,31 +213,19 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 		delta := domain.StatsDelta{}
 		focusXP := 0
 		if action == domain.PomodoroStatusCompleted && eligible {
-			bonus, err := consumeFocusBoosterTx(ctx, tx, userID)
-			if err != nil {
-				return err
-			}
-			focusXP = domain.PomodoroRewardPoints + bonus
+			focusXP = domain.PomodoroRewardPoints
 			delta.PointsDelta = focusXP
 			if err := awardCoinsTx(ctx, tx, userID, fmt.Sprintf("focus:%d", sessionID), 10); err != nil {
 				return err
 			}
 			delta.PomodorosDelta = 1
 			delta.IncrementStreak = true
-		} else if action == domain.PomodoroStatusAbandoned && taskID != nil {
-			delta.PointsDelta = domain.PomodoroPenaltyPoints
 		}
 		if taskID != nil {
 			update := domain.TaskUpdate{IncrementPomodorosTaken: action == domain.PomodoroStatusCompleted && eligible}
-			if finishTask {
+			if finishTask && action == domain.PomodoroStatusCompleted {
 				newStatus := domain.TaskStatusDone
-				if action == domain.PomodoroStatusAbandoned {
-					newStatus = domain.TaskStatusBurnt
-					if task.Status != domain.TaskStatusBurnt {
-						delta.BurntTasksDelta = 1
-						delta.ResetStreak = true
-					}
-				} else if task.Status != domain.TaskStatusDone && !task.RewardClaimed {
+				if task.Status != domain.TaskStatusDone && !task.RewardClaimed {
 					update.RewardClaimed = true
 					if err := awardCoinsTx(ctx, tx, userID, taskCoinEvent(*taskID), 5); err != nil {
 						return err
@@ -262,7 +250,7 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 		if outcome := actionOutcome(ctx); outcome != nil {
 			outcome.Result.PomodoroCounted = action == domain.PomodoroStatusCompleted && eligible
 			outcome.Result.TaskCompleted = finishTask && taskID != nil && action == domain.PomodoroStatusCompleted
-			if taskID != nil && finishTask {
+			if taskID != nil && finishTask && action == domain.PomodoroStatusCompleted {
 				outcome.Result.ChangedTaskIDs = append(outcome.Result.ChangedTaskIDs, *taskID)
 			}
 			if action == domain.PomodoroStatusCompleted {
@@ -270,8 +258,6 @@ func (s *Storage) FinishPomodoroSession(ctx context.Context, userID, sessionID i
 					outcome.Rewards.PomodoroXP = focusXP
 				}
 				outcome.Rewards.TaskXP = delta.PointsDelta - outcome.Rewards.PomodoroXP
-			} else {
-				outcome.Rewards.PenaltyXP = -delta.PointsDelta
 			}
 		}
 		_, err := checkAndUnlockAchievementsTx(ctx, tx, userID)

@@ -130,9 +130,11 @@ export function reminderPayload(
     if (deadline && moved && Number.isFinite(moment) && moment <= now)
       errors[field] =
         "Это напоминание уже в прошлом. Измени время или удали его";
-    if (moments.has(moment))
-      errors[field] = "На это время уже есть напоминание";
-    moments.add(moment);
+    if (!result.error && Number.isFinite(moment)) {
+      if (moments.has(moment))
+        errors[field] = "На это время уже есть напоминание";
+      moments.add(moment);
+    }
     return { ...(old ? { id: old.id } : {}), offset_minutes: offset };
   });
   if (!premium && rows.length > 2 && changed)

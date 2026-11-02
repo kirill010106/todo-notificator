@@ -154,39 +154,31 @@ test("progress and server personal rewards remain available", async ({
   await fixture(page);
   await page.goto("/app/progress");
   await expect(page.getByRole("heading", { name: "Первый шаг" })).toBeVisible();
+  await page.getByRole("button", {name: "Впереди", exact: true}).click();
+  await expect(page.getByText("7 / 10 задач")).toBeVisible();
+  await expect(page.getByRole("heading", {name: "Первый шаг"})).toHaveCount(0);
+  await page.getByRole("button", {name: "Архив", exact: true}).click();
+  await expect(page.getByRole("heading", {name: "Полуночник"})).toBeVisible();
   await page.goto("/app/rewards");
   await page.getByRole("button", { name: "Своя награда" }).click();
   await page.getByLabel("Что тебя порадует?").fill("Книга");
   await page.getByRole("button", { name: "Добавить награду" }).click();
   await page.reload();
   await expect(page.getByRole("heading", { name: "Книга" })).toBeVisible();
+  await page.getByRole("button", {name: "Получить награду", exact: true}).click();
+  const sent = page.waitForRequest((r) => r.url().endsWith("/me/shop/actions"));
+  await page.getByRole("button", {name: "Подтвердить · 50 монет"}).click();
+  expect((await sent).headers()["idempotency-key"]).toBeTruthy();
+  await expect(page.getByText("0 монет", {exact: true})).toBeVisible();
 });
-test("golden chest is disabled and never patches statistics", async ({
-  page,
-}) => {
+test("retired mechanics are absent and personal rewards come first", async ({ page }) => {
   await fixture(page);
-  let writes = 0;
-  page.on("request", (request) => {
-    if (request.url().endsWith("/me/stats") && request.method() === "PATCH")
-      writes++;
-  });
   await page.goto("/app/rewards");
-  await expect(
-    page.getByText("Случайные сундуки пока недоступны.", { exact: false }),
-  ).toBeVisible();
-  expect(writes).toBe(0);
-});
-test("daily chest uses the server claim endpoint", async ({ page }) => {
-  await fixture(page, false, 60, 0, true);
-  await page.goto("/app/rewards");
-  const sent = page.waitForRequest((request) =>
-    request.url().endsWith("/me/rewards/daily-chest/claim"),
-  );
-  await page.getByRole("button", { name: "Забрать 50 XP" }).click();
-  expect((await sent).postData()).toBeNull();
-  await expect(
-    page.getByRole("button", { name: "Сегодня уже получено" }),
-  ).toBeDisabled();
+  await expect(page.getByText(/Сундук|Двойной фокус|Забрать 50 XP/)).toHaveCount(0);
+  const headings = await page.getByRole("heading", { level: 2 }).allTextContents();
+  expect(headings.indexOf("Личные награды")).toBeLessThan(headings.indexOf("Оформление и звуки"));
+  await page.goto("/app/progress");
+  await expect(page.getByText("Ежедневный ритм")).toHaveCount(0);
 });
 test("Today uses server totals and requests the next page on demand", async ({
   page,
@@ -417,8 +409,8 @@ test("shop purchase requires confirmation and is restored from server", async ({
   ).toBeVisible();
   await page.getByRole("button", { name: "Применить", exact: true }).click();
   await expect(page.locator("html")).toHaveAttribute("data-accent", "ocean");
-  await page.getByRole("button", { name: "Купить · 100 монет" }).click();
-  await page.getByRole("button", { name: "Подтвердить · 100 монет" }).click();
+  await page.getByRole("button", { name: "Купить · 30 монет" }).click();
+  await page.getByRole("button", { name: "Подтвердить · 30 монет" }).click();
   await expect(page.getByRole("dialog").getByRole("alert")).toContainText(
     "Не хватает монет",
   );

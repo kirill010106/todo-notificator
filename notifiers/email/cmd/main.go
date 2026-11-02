@@ -23,6 +23,12 @@ import (
 )
 
 func main() {
+	if err := run(); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func run() error {
 	if err := envconfig.Load(); err != nil {
 		log.Fatal(err)
 	}
@@ -72,10 +78,7 @@ func main() {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
-	srv := &http.Server{
-		Addr:    cfg.Webhook.Address,
-		Handler: mux,
-	}
+	srv := newHTTPServer(cfg.Webhook.Address, mux)
 
 	ctx, cancel := signal.NotifyContext(
 		context.Background(),
@@ -84,23 +87,13 @@ func main() {
 	)
 	defer cancel()
 
-	go func() {
-		logger.Info("webhook server started",
-			slog.String("address", cfg.Webhook.Address))
-		if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-			log.Fatalf("webhook server error: %v", err)
-		}
-	}()
-
 	logger.Info("starting email notifier")
-	go verificationWorker.Run(ctx)
-	go passwordreset.New(logger, storage, sndr).Run(ctx)
-	sched.Start(ctx)
-
-	// Graceful shutdown webhook server
-	if err := srv.Shutdown(context.Background()); err != nil {
-		logger.Error("webhook server shutdown error", sl.Err(err))
+	if err := serve(ctx, srv, serviceShutdownTimeout, webhookHandler.Shutdown,
+		verificationWorker.Run, passwordreset.New(logger, storage, sndr).Run, sched.Start); err != nil {
+		logger.Error("email notifier shutdown failed", sl.Err(err))
+		return err
 	}
 
 	logger.Info("email notifier stopped")
+	return nil
 }

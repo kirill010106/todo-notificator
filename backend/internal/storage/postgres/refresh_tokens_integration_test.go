@@ -160,7 +160,7 @@ func TestRefreshTokenSecurityIntegration(t *testing.T) {
 	// Rollback cannot restore bearer values from digests; both directions revoke
 	// sessions while preserving user and verification/outbox data.
 	require.NoError(t, s.SaveRefreshToken(ctx, accountID, "before-rollback", time.Now().Add(time.Hour)))
-	require.NoError(t, goose.Down(s.DB, "migrations"))
+	require.NoError(t, goose.DownTo(s.DB, "migrations", 25))
 	require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM refresh_tokens`).Scan(&count))
 	require.Zero(t, count)
 	require.NoError(t, goose.Up(s.DB, "migrations"))

@@ -12,6 +12,7 @@ import (
 
 	"github.com/kirill010106/todo-notificator/clients/activitylogger"
 	"github.com/kirill010106/todo-notificator/internal/config"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/account"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/login"
 	"github.com/kirill010106/todo-notificator/internal/http-server/handlers/auth/logout"
@@ -50,6 +51,7 @@ import (
 	customlogger "github.com/kirill010106/todo-notificator/internal/http-server/middleware/logger"
 	metricsMiddleware "github.com/kirill010106/todo-notificator/internal/http-server/middleware/metrics"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/ratelimit"
+	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/recoverer"
 	"github.com/kirill010106/todo-notificator/internal/storage/postgres"
 )
 
@@ -96,19 +98,18 @@ func New(cfg Config) *chi.Mux {
 		MaxAge:           300,
 	}))
 	r.Use(middleware.RequestID)
-	r.Use(contractsMiddleware.Errors)
 	r.Use(customlogger.New(cfg.Log))
 	r.Use(metricsMiddleware.New())
-	r.Use(middleware.Recoverer)
+	r.Use(recoverer.New(cfg.Log))
 	r.Use(middleware.URLFormat)
 	r.Use(middleware.RedirectSlashes)
 
 	r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-		helpers.SendError(w, http.StatusNotFound, "endpoint does not exist", "NOT_FOUND")
+		helpers.SendError(w, r, http.StatusNotFound, "endpoint does not exist", apiresponse.NotFound)
 	})
 
 	r.MethodNotAllowed(func(w http.ResponseWriter, r *http.Request) {
-		helpers.SendError(w, http.StatusMethodNotAllowed, "method not allowed", "METHOD_NOT_ALLOWED")
+		helpers.SendError(w, r, http.StatusMethodNotAllowed, "method not allowed", apiresponse.MethodNotAllowed)
 	})
 
 	r.With(publicLimit).Get("/", func(w http.ResponseWriter, r *http.Request) {

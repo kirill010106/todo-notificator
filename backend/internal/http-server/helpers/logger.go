@@ -5,9 +5,8 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5/middleware"
-	"github.com/go-chi/render"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
-	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
 // LoggerWithAuth returns constructed logger with op, request_id and userID
@@ -21,15 +20,13 @@ func LoggerWithAuth(w http.ResponseWriter, r *http.Request, log *slog.Logger, op
 	userID, ok := auth.GetUserID(r.Context())
 	if !ok {
 		l.Error("user_id not found in context")
-		render.Status(r, http.StatusUnauthorized)
-		render.JSON(w, r, resp.Error("unauthorized"))
+		apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "unauthorized"}, apiresponse.Compatibility{})
 		return nil, 0, false
 	}
 	isPremium, ok := auth.GetPremiumStatus(r.Context())
 	if !ok {
 		l.Warn("premium status not found in context")
-		render.Status(r, http.StatusInternalServerError)
-		render.JSON(w, r, resp.Error("internal error"))
+		apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal error"}, apiresponse.Compatibility{})
 		return nil, 0, false
 	}
 	l = l.With(slog.Int64("user_id", userID), slog.Bool("is_premium", isPremium))

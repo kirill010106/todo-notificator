@@ -29,6 +29,7 @@ export interface Session {
   breaks_used?: number;
   status: string;
 }
+// Legacy wire fields are retained; daily rewards are retired.
 export interface Quest {
   code: string;
   title: string;
@@ -74,6 +75,7 @@ export interface Bootstrap extends TaskPage {
   categories: Category[];
   gamification?: Gamification;
   stats?: {
+    total_completed_tasks?: number;
     total_pomodoros?: number;
     total_burnt_tasks?: number;
     [key: string]: unknown;
@@ -92,9 +94,11 @@ export interface FocusSnapshot {
 }
 export interface ActionResponse {
   operation_id: string;
+  level_up?: boolean;
   focus: FocusSnapshot;
   stats: Bootstrap["stats"];
   rewards: {
+    coins: number;
     task_xp: number;
     pomodoro_xp: number;
     achievement_xp: number;
@@ -116,6 +120,9 @@ export interface TodayState {
   overdue: { tasks: Task[]; pagination: TaskPage["pagination"] };
 }
 export interface Achievement {
+  current: number;
+  target: number;
+  archived: boolean;
   code: string;
   title: string;
   description: string;

@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -68,8 +69,7 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 		user, err := provider.GetUserByID(ctx, userID)
 		if err != nil {
 			log.Error("failed to get user", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to load user data"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to load user data"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -108,15 +108,13 @@ func New(log *slog.Logger, provider DataProvider) http.HandlerFunc {
 		}); ok {
 			value, err := extended.GetFocusState(ctx, userID)
 			if err != nil {
-				render.Status(r, 500)
-				render.JSON(w, r, resp.Error("failed to load focus state"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: 500, Code: apiresponse.InternalError, Message: "failed to load focus state"}, apiresponse.Compatibility{})
 				return
 			}
 			focus = &value
 			zone, err = extended.GetTimezone(ctx, userID)
 			if err != nil {
-				render.Status(r, 500)
-				render.JSON(w, r, resp.Error("failed to load timezone"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: 500, Code: apiresponse.InternalError, Message: "failed to load timezone"}, apiresponse.Compatibility{})
 				return
 			}
 		}

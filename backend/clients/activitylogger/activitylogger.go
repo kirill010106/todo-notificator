@@ -17,60 +17,19 @@ type Client struct {
 	api     pb.ActivityLoggerClient
 	log     *slog.Logger
 	timeout time.Duration
+	queue   *eventQueue
 }
 
 func New(ctx context.Context, log *slog.Logger, addr string, timeout time.Duration) (*Client, error) {
+	if timeout <= 0 {
+		return nil, fmt.Errorf("activity logger timeout must be positive")
+	}
 	cc, err := grpc.NewClient(addr, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create grpc client: %w", err)
 	}
 
-	return &Client{
-		api:     pb.NewActivityLoggerClient(cc),
-		log:     log,
-		timeout: timeout,
-	}, nil
-}
-
-func (c *Client) LogEvent(userID int64, action string, entityID int64, details map[string]any) {
-	// Activity logging is best-effort. A nil client must not crash the API when
-	// the optional logger service failed to initialize.
-	if c == nil || c.api == nil {
-		return
-	}
-
-	go func() {
-		ctx, cancel := context.WithTimeout(context.Background(), c.timeout)
-		defer cancel()
-
-		var detailsJSON string
-		if details != nil {
-			b, err := json.Marshal(details)
-			if err == nil {
-				detailsJSON = string(b)
-			} else {
-				c.log.Warn("activitylogger: failed to marshal details",
-					slog.String("error", err.Error()),
-					slog.String("action", action))
-			}
-		}
-		req := &pb.LogRequest{
-			UserId:      userID,
-			Action:      action,
-			EntityId:    entityID,
-			DetailsJson: detailsJSON,
-		}
-
-		resp, err := c.api.LogEvent(ctx, req)
-		if err != nil {
-			c.log.Error("activitylogger: failed to send event", slog.String("error", err.Error()))
-			return
-		}
-
-		if !resp.Success {
-			c.log.Error("activitylogger: server returned error", slog.String("error", resp.ErrorMessage))
-		}
-	}()
+	return newClient(ctx, log, pb.NewActivityLoggerClient(cc), timeout, cc), nil
 }
 
 // GetLogs fetches activity logs from the microservice

@@ -780,6 +780,9 @@ func (s *Storage) GetUserStats(ctx context.Context, userID int64) (domain.UserSt
 		return domain.UserStats{}, fmt.Errorf("%s: %w", op, err)
 	}
 
+	if err := s.executor(ctx).QueryRowContext(ctx, completedTasksQuery, userID).Scan(&uS.TotalCompletedTasks); err != nil {
+		return domain.UserStats{}, fmt.Errorf("%s: %w", op, err)
+	}
 	return uS, nil
 }
 
@@ -932,43 +935,63 @@ func (s *Storage) ApplyStatsDelta(ctx context.Context, userID int64, delta domai
 	})
 }
 
+// The journal survives deletion; each task counts once across all dates.
+const completedTasksQuery = `SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id=$1 AND action='completed'`
+
 func (s *Storage) GetAchievements(ctx context.Context, userID int64) ([]domain.Achievement, error) {
-	const op = "storage.postgres.GetAchievements"
-
-	if _, err := s.CheckAndUnlockAchievements(ctx, userID); err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-
-	query := `SELECT code, unlocked_at FROM achievements WHERE user_id = $1`
-	rows, err := s.DB.QueryContext(ctx, query, userID)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", op, err)
-	}
-	defer rows.Close()
-
-	unlockedMap := make(map[string]time.Time)
-	for rows.Next() {
-		var code string
-		var unlockedAt time.Time
-		if err := rows.Scan(&code, &unlockedAt); err == nil {
-			unlockedMap[code] = unlockedAt
+	results := []domain.Achievement{}
+	err := s.withUserTx(ctx, userID, func(tx *sql.Tx) error {
+		if _, err := checkAndUnlockAchievementsTx(ctx, tx, userID); err != nil {
+			return err
 		}
-	}
-
-	results := make([]domain.Achievement, len(domain.AvailableAchievements))
-	for i, a := range domain.AvailableAchievements {
-		item := a
-		item.UserID = userID
-		if t, ok := unlockedMap[a.Code]; ok {
-			item.Unlocked = true
-			item.UnlockedAt = &t
-		} else {
-			item.Unlocked = false
+		txctx := context.WithValue(ctx, transactionKey{}, userTransaction{tx, userID})
+		stats, err := s.GetUserStats(txctx, userID)
+		if err != nil {
+			return err
 		}
-		results[i] = item
-	}
-
-	return results, nil
+		rows, err := tx.QueryContext(ctx, `SELECT code, unlocked_at FROM achievements WHERE user_id = $1 ORDER BY code`, userID)
+		if err != nil {
+			return err
+		}
+		defer rows.Close()
+		unlocked := map[string]time.Time{}
+		for rows.Next() {
+			var code string
+			var at time.Time
+			if err := rows.Scan(&code, &at); err != nil {
+				return err
+			}
+			unlocked[code] = at
+		}
+		if err := rows.Err(); err != nil {
+			return err
+		}
+		pomodoros := int64(0)
+		if stats.TotalPomodoros != nil {
+			pomodoros = *stats.TotalPomodoros
+		}
+		for _, item := range domain.AvailableAchievements {
+			item.UserID = userID
+			item.Current = item.Progress(stats.TotalCompletedTasks, pomodoros)
+			if at, ok := unlocked[item.Code]; ok {
+				item.Unlocked, item.UnlockedAt = true, &at
+				delete(unlocked, item.Code)
+			}
+			results = append(results, item)
+		}
+		for _, item := range domain.ArchivedAchievements {
+			if at, ok := unlocked[item.Code]; ok {
+				item.UserID, item.Unlocked, item.UnlockedAt, item.Archived = userID, true, &at, true
+				results = append(results, item)
+				delete(unlocked, item.Code)
+			}
+		}
+		for code, at := range unlocked {
+			results = append(results, domain.Achievement{UserID: userID, Code: code, Title: code, Description: "Историческое достижение", Icon: "🏅", Unlocked: true, UnlockedAt: &at, Archived: true})
+		}
+		return nil
+	})
+	return results, err
 }
 
 func (s *Storage) UnlockAchievement(ctx context.Context, userID int64, code string) (bool, error) {
@@ -997,81 +1020,16 @@ func (s *Storage) CheckAndUnlockAchievements(ctx context.Context, userID int64) 
 	return unlocked, nil
 }
 
+// Compatibility endpoint: daily challenges are retired.
 func (s *Storage) GetDailyQuests(ctx context.Context, userID int64) ([]domain.DailyQuest, error) {
-	zone, err := s.GetTimezone(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	location, err := time.LoadLocation(zone)
-	if err != nil {
-		return nil, err
-	}
-	var now time.Time
-	if err := s.executor(ctx).QueryRowContext(ctx, `SELECT CURRENT_TIMESTAMP`).Scan(&now); err != nil {
-		return nil, err
-	}
-	local := now.In(location)
-	start := time.Date(local.Year(), local.Month(), local.Day(), 0, 0, 0, 0, location)
-	var createdToday int
-	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'created' AND recorded_at >= $2`, userID, start).Scan(&createdToday)
-	if err != nil {
-		return nil, err
-	}
-
-	var pomodoroToday int
-	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND status = 'completed' AND completed_at >= $2 AND completed_at - started_at >= INTERVAL '24 minutes'`, userID, start).Scan(&pomodoroToday)
-	if err != nil {
-		return nil, err
-	}
-
-	var doneToday int
-	err = s.executor(ctx).QueryRowContext(ctx, `SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'completed' AND recorded_at >= $2`, userID, start).Scan(&doneToday)
-	if err != nil {
-		return nil, err
-	}
-
-	quests := []domain.DailyQuest{
-		{
-			Code:      "create_task",
-			Title:     "Планировщик",
-			Icon:      "📋",
-			Target:    1,
-			Current:   createdToday,
-			Completed: createdToday >= 1,
-			RewardXP:  10,
-		},
-		{
-			Code:      "pomodoro_focus",
-			Title:     "Глубокий фокус",
-			Icon:      "🍅",
-			Target:    1,
-			Current:   pomodoroToday,
-			Completed: pomodoroToday >= 1,
-			RewardXP:  20,
-		},
-		{
-			Code:      "complete_tasks",
-			Title:     "Продуктивный рывок",
-			Icon:      "✅",
-			Target:    3,
-			Current:   doneToday,
-			Completed: doneToday >= 3,
-			RewardXP:  30,
-		},
-	}
-
-	claims, err := s.dailyClaims(ctx, userID)
-	if err != nil {
-		return nil, err
-	}
-	for i := range quests {
-		quests[i].Claimed = claims[quests[i].Code]
-	}
-	return quests, nil
+	return []domain.DailyQuest{}, nil
 }
 
 func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (domain.GamificationProfile, error) {
-	achievements, _ := s.GetAchievements(ctx, userID)
+	achievements, err := s.GetAchievements(ctx, userID)
+	if err != nil {
+		return domain.GamificationProfile{}, err
+	}
 
 	stats, err := s.GetUserStats(ctx, userID)
 	if err != nil {
@@ -1092,17 +1050,6 @@ func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (dom
 	}
 
 	level, currentXP, nextXP, percent, rankTitle, rankIcon := domain.CalculateLevel(points)
-	multiplier := domain.GetStreakMultiplier(streak)
-
-	quests, err := s.GetDailyQuests(ctx, userID)
-	if err != nil {
-		return domain.GamificationProfile{}, err
-	}
-	claims, err := s.dailyClaims(ctx, userID)
-	if err != nil {
-		return domain.GamificationProfile{}, err
-	}
-
 	unlockedCount := 0
 	for _, a := range achievements {
 		if a.Unlocked {
@@ -1120,10 +1067,10 @@ func (s *Storage) GetGamificationProfile(ctx context.Context, userID int64) (dom
 		RankIcon:          rankIcon,
 		Streak:            streak,
 		BestStreak:        bestStreak,
-		StreakMultiplier:  multiplier,
-		DailyQuests:       quests,
+		StreakMultiplier:  1,
+		DailyQuests:       []domain.DailyQuest{},
 		UnlockedCount:     unlockedCount,
 		TotalAchievements: len(domain.AvailableAchievements),
-		DailyChestClaimed: claims["daily_chest"],
+		DailyChestClaimed: false,
 	}, nil
 }

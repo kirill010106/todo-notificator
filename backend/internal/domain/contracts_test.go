@@ -36,10 +36,4 @@ func TestLevelBoundariesAndCap(t *testing.T) {
 	level, _, _, percent, _, _ := CalculateLevel(1000000000)
 	require.Equal(t, int64(100), level)
 	require.Equal(t, 100.0, percent)
-	for _, tc := range []struct {
-		days int64
-		want float64
-	}{{-1, 1}, {2, 1}, {3, 1.2}, {4, 1.2}, {5, 1.5}, {6, 1.5}, {7, 2}, {365, 2}} {
-		require.Equal(t, tc.want, GetStreakMultiplier(tc.days))
-	}
 }

@@ -4,12 +4,11 @@ import (
 	"context"
 	"errors"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 	"net/http"
 	"strings"
 
-	"github.com/go-chi/render"
-	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	j "github.com/kirill010106/todo-notificator/internal/lib/jwt"
 )
 
@@ -28,15 +27,13 @@ func New(secret string, providers ...UserProvider) func(next http.Handler) http.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			authHeader := r.Header.Get("Authorization")
 			if authHeader == "" {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("unauthorized"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "unauthorized"}, apiresponse.Compatibility{})
 				return
 			}
 
 			parts := strings.Split(authHeader, " ")
 			if len(parts) != 2 || parts[0] != "Bearer" {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("invalid auth header format"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "invalid auth header format"}, apiresponse.Compatibility{})
 				return
 			}
 
@@ -44,8 +41,7 @@ func New(secret string, providers ...UserProvider) func(next http.Handler) http.
 
 			claims, err := j.ParseAccessToken(tokenStr, secret)
 			if err != nil {
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("invalid token"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "invalid token"}, apiresponse.Compatibility{})
 				return
 			}
 
@@ -53,17 +49,14 @@ func New(secret string, providers ...UserProvider) func(next http.Handler) http.
 				user, err := providers[0].GetUserByID(r.Context(), claims.UserID)
 				if err != nil {
 					if errors.Is(err, storage.ErrUserNotFound) {
-						render.Status(r, 401)
-						render.JSON(w, r, resp.ErrorCode("account not found", "UNAUTHORIZED"))
+						apiresponse.Write(w, r, apiresponse.Problem{Status: 401, Code: apiresponse.Unauthorized, Message: "account not found"}, apiresponse.Compatibility{})
 						return
 					}
-					render.Status(r, 503)
-					render.JSON(w, r, resp.ErrorCode("cannot load current account", "ACCOUNT_UNAVAILABLE"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: 503, Code: apiresponse.AccountUnavailable, Message: "cannot load current account"}, apiresponse.Compatibility{})
 					return
 				}
 				if claims.AuthVersion != user.AuthVersion {
-					render.Status(r, 401)
-					render.JSON(w, r, resp.ErrorCode("Войдите в аккаунт заново", "UNAUTHORIZED"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: 401, Code: apiresponse.Unauthorized, Message: "Войдите в аккаунт заново"}, apiresponse.Compatibility{})
 					return
 				}
 				claims.IsPremium = user.IsPremium

@@ -16,7 +16,7 @@ import {
   MoreHorizontal,
 } from "lucide-react";
 import { api, errorText, json } from "../../lib/api";
-import { command, rewardLabel } from "../../lib/commands";
+import { command, actionNotice } from "../../lib/commands";
 import { safeTimeZone } from "../../lib/timezone";
 import { dateLabel } from "../../lib/tasks";
 import type {
@@ -127,8 +127,8 @@ export function TasksPage({ today = false }: { today?: boolean }) {
       onSuccess?.();
       setSelected([]);
       setDeleteIds([]);
-      const label = result?.rewards ? rewardLabel(result) : "";
-      notify(label ? `${message} ${label}` : message);
+      const text = result?.rewards ? actionNotice(data.user.id, result, message) : message;
+      if (text) notify(text);
       await refresh();
     } catch (e) {
       setError(errorText(e));

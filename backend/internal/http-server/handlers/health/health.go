@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/go-chi/render"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 )
 
@@ -21,11 +22,7 @@ func New(log *slog.Logger, db DBHealthChecker) http.HandlerFunc {
 		defer cancel()
 		err := db.PingContext(ctx)
 		if err != nil {
-			w.WriteHeader(http.StatusServiceUnavailable)
-			render.JSON(w, r, resp.Response{
-				Status: "Error",
-				Error:  "database is unreachable",
-			})
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusServiceUnavailable, Code: apiresponse.InternalError, Message: "database is unreachable"}, apiresponse.Compatibility{})
 			return
 		}
 

@@ -23,7 +23,7 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
     ...(data.tasks || []),
   ].find((task) => task.id === focus.session?.task_id)?.title;
   const finish = async (done: boolean) => {
-    if (await focus.stop(done ? "completed" : "abandoned", true))
+    if (await focus.stop(done ? "completed" : "abandoned", done))
       setDialog(null);
   };
   return (
@@ -100,7 +100,7 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
       )}
       {focus.canCancel && (
         <Button quiet disabled={focus.busy} onClick={() => void focus.cancel()}>
-          Отменить случайный старт · без штрафа
+          Отменить случайный старт
         </Button>
       )}
       {focus.error && (
@@ -232,8 +232,8 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
                 </Button>
               )}
               <p className={s.muted}>
-                Если отказаться от задачи, она будет сожжена: −30 XP и сброс
-                серии.
+                Можно остановиться и вернуться позже. Задача останется в работе,
+                накопленный опыт сохранится.
               </p>
               <Button
                 quiet
@@ -241,7 +241,7 @@ export function FocusPanel({ full = false }: { full?: boolean }) {
                 disabled={focus.busy}
                 onClick={() => void finish(false)}
               >
-                Сдаться и сжечь задачу
+                Остановить сессию
               </Button>
               <Button
                 quiet
