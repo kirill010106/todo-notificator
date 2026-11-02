@@ -19,11 +19,9 @@ func expectUserTransaction(mock sqlmock.Sqlmock, userID int64) {
 func expectNoNewAchievements(mock sqlmock.Sqlmock, userID int64) {
 	mock.ExpectExec("INSERT INTO user_stats").WithArgs(userID).WillReturnResult(sqlmock.NewResult(0, 0))
 	mock.ExpectQuery("SELECT COALESCE").WithArgs(userID).
-		WillReturnRows(sqlmock.NewRows([]string{"streak", "best", "pomodoros", "burnt"}).AddRow(0, 0, 0, 0))
+		WillReturnRows(sqlmock.NewRows([]string{"pomodoros"}).AddRow(0))
 	mock.ExpectQuery("SELECT COUNT").WithArgs(userID).
-		WillReturnRows(sqlmock.NewRows([]string{"done", "night", "early"}).AddRow(0, 0, 0))
-	mock.ExpectQuery("SELECT COALESCE").WithArgs(userID).
-		WillReturnRows(sqlmock.NewRows([]string{"premium"}).AddRow(false))
+		WillReturnRows(sqlmock.NewRows([]string{"done"}).AddRow(0))
 }
 
 func TestUpdateTaskRewardFailureRollsBack(t *testing.T) {

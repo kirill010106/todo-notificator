@@ -64,12 +64,6 @@ func unlockAchievementTx(ctx context.Context, tx *sql.Tx, userID int64, code str
 	if err != nil {
 		return false, err
 	}
-	if definition.Points > 0 {
-		// A bonus is not a new day of activity and must not extend the streak.
-		if err := applyStatsDeltaTx(ctx, tx, userID, domain.StatsDelta{PointsDelta: definition.Points}); err != nil {
-			return false, err
-		}
-	}
 	return true, nil
 }
 
@@ -77,30 +71,16 @@ func checkAndUnlockAchievementsTx(ctx context.Context, tx *sql.Tx, userID int64)
 	if err := ensureStatsTx(ctx, tx, userID); err != nil {
 		return nil, err
 	}
-	var currentStreak, bestStreak, totalPomodoros, totalBurnt int64
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(current_streak, 0), COALESCE(best_streak, 0), COALESCE(total_pomodoros, 0), COALESCE(total_burnt_tasks, 0) FROM user_stats WHERE user_id = $1`, userID).
-		Scan(&currentStreak, &bestStreak, &totalPomodoros, &totalBurnt); err != nil {
+	var totalPomodoros, doneTasks int64
+	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(total_pomodoros, 0) FROM user_stats WHERE user_id = $1`, userID).Scan(&totalPomodoros); err != nil {
 		return nil, err
 	}
-	var doneTasks, nightTasks, earlyTasks int64
-	if err := tx.QueryRowContext(ctx, `SELECT COUNT(*), COUNT(*) FILTER (WHERE EXTRACT(HOUR FROM updated_at AT TIME ZONE (SELECT timezone FROM users WHERE id=$1)) < 5), COUNT(*) FILTER (WHERE EXTRACT(HOUR FROM updated_at AT TIME ZONE (SELECT timezone FROM users WHERE id=$1)) >= 5 AND EXTRACT(HOUR FROM updated_at AT TIME ZONE (SELECT timezone FROM users WHERE id=$1)) < 8) FROM tasks WHERE user_id = $1 AND status = 'done'`, userID).
-		Scan(&doneTasks, &nightTasks, &earlyTasks); err != nil {
+	if err := tx.QueryRowContext(ctx, completedTasksQuery, userID).Scan(&doneTasks); err != nil {
 		return nil, err
-	}
-	var premium bool
-	if err := tx.QueryRowContext(ctx, `SELECT COALESCE(is_premium, false) FROM users WHERE id = $1`, userID).Scan(&premium); err != nil {
-		return nil, err
-	}
-	conditions := map[string]bool{
-		"first_step": doneTasks >= 1, "task_spree": doneTasks >= 10, "task_centurion": doneTasks >= 50,
-		"pomodoro_rookie": totalPomodoros >= 1, "pomodoro_guru": totalPomodoros >= 20,
-		"streak_three": currentStreak >= 3 || bestStreak >= 3, "streak_week": currentStreak >= 7 || bestStreak >= 7,
-		"streak_month": currentStreak >= 30 || bestStreak >= 30, "phoenix": totalBurnt >= 1 && doneTasks >= 1,
-		"night_owl": nightTasks >= 1, "early_bird": earlyTasks >= 1, "pro_club": premium,
 	}
 	var unlocked []domain.Achievement
 	for _, achievement := range domain.AvailableAchievements {
-		if !conditions[achievement.Code] {
+		if achievement.Progress(doneTasks, totalPomodoros) < achievement.Target {
 			continue
 		}
 		added, err := unlockAchievementTx(ctx, tx, userID, achievement.Code)
@@ -108,6 +88,8 @@ func checkAndUnlockAchievementsTx(ctx context.Context, tx *sql.Tx, userID int64)
 			return nil, err
 		}
 		if added {
+			achievement.Unlocked = true
+			achievement.Current = achievement.Target
 			unlocked = append(unlocked, achievement)
 		}
 	}

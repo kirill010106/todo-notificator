@@ -37,27 +37,16 @@ func TestCalculateLevel(t *testing.T) {
 	}
 }
 
-func TestGetStreakMultiplier(t *testing.T) {
-	assert.Equal(t, 1.0, GetStreakMultiplier(0))
-	assert.Equal(t, 1.0, GetStreakMultiplier(1))
-	assert.Equal(t, 1.0, GetStreakMultiplier(2))
-	assert.Equal(t, 1.2, GetStreakMultiplier(3))
-	assert.Equal(t, 1.2, GetStreakMultiplier(4))
-	assert.Equal(t, 1.5, GetStreakMultiplier(5))
-	assert.Equal(t, 1.5, GetStreakMultiplier(6))
-	assert.Equal(t, 2.0, GetStreakMultiplier(7))
-	assert.Equal(t, 2.0, GetStreakMultiplier(14))
-}
-
 func TestAvailableAchievements(t *testing.T) {
-	assert.NotEmpty(t, AvailableAchievements)
+	assert.Len(t, AvailableAchievements, 6)
 	codes := make(map[string]bool)
 	for _, a := range AvailableAchievements {
 		assert.NotEmpty(t, a.Code)
 		assert.NotEmpty(t, a.Title)
 		assert.NotEmpty(t, a.Description)
 		assert.NotEmpty(t, a.Icon)
-		assert.True(t, a.Points > 0)
+		assert.Zero(t, a.Points)
+		assert.Positive(t, a.Target)
 		assert.False(t, codes[a.Code], "duplicate code %s", a.Code)
 		codes[a.Code] = true
 	}

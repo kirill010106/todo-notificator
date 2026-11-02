@@ -1,10 +1,12 @@
 package webhook
 
 import (
+	"context"
 	"crypto/subtle"
 	"encoding/json"
 	"log/slog"
 	"net/http"
+	"sync"
 )
 
 type Scheduler interface {
@@ -16,6 +18,11 @@ type Handler struct {
 	scheduler Scheduler
 	sender    EmailSender
 	secret    string
+	jobsMu    sync.Mutex
+	jobs      sync.WaitGroup
+	stopping  bool
+	stopOnce  sync.Once
+	done      chan struct{}
 }
 
 type EmailSender interface {
@@ -34,6 +41,7 @@ func New(log *slog.Logger, scheduler Scheduler, sender EmailSender, secret strin
 		scheduler: scheduler,
 		sender:    sender,
 		secret:    secret,
+		done:      make(chan struct{}),
 	}
 }
 
@@ -64,8 +72,17 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if payload.Type == "verification" && payload.Email != "" && payload.Token != "" {
+		h.jobsMu.Lock()
+		if h.stopping {
+			h.jobsMu.Unlock()
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		h.jobs.Add(1)
+		h.jobsMu.Unlock()
 		h.log.Info("webhook: sending verification email", slog.String("email", payload.Email))
 		go func() {
+			defer h.jobs.Done()
 			if err := h.sender.SendVerificationEmail(payload.Email, payload.Token); err != nil {
 				h.log.Error("webhook: failed to send verification email", slog.String("error", err.Error()))
 			}
@@ -87,4 +104,24 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	h.scheduler.Reschedule()
 
 	w.WriteHeader(http.StatusOK)
+}
+
+// Shutdown stops admission before waiting, so no Add can race with Wait.
+// SMTP already accepted by the legacy webhook may finish within the deadline.
+func (h *Handler) Shutdown(ctx context.Context) error {
+	h.stopOnce.Do(func() {
+		h.jobsMu.Lock()
+		h.stopping = true
+		h.jobsMu.Unlock()
+		go func() {
+			h.jobs.Wait()
+			close(h.done)
+		}()
+	})
+	select {
+	case <-h.done:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

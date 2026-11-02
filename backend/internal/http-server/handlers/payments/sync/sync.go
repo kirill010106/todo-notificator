@@ -7,6 +7,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -51,8 +52,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 		paymentIDs, err := checker.GetPendingPayments(r.Context(), userID)
 		if err != nil {
 			log.Error("failed to get pending payments", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to retrieve payment status"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to retrieve payment status"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -83,8 +83,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			payment, err := finder.FindPayment(r.Context(), paymentID)
 			if err != nil {
 				log.Error("failed to find payment in yookassa", sl.Err(err), slog.String("payment_id", paymentID))
-				render.Status(r, http.StatusBadGateway)
-				render.JSON(w, r, resp.Error("failed to check payment with payment gateway"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadGateway, Code: apiresponse.InternalError, Message: "failed to check payment with payment gateway"}, apiresponse.Compatibility{})
 				return
 			}
 			if payment == nil {
@@ -92,6 +91,11 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 					latestStatus = "not_found"
 				}
 				continue
+			}
+			if payment.ID != paymentID {
+				log.Warn("payment verification returned a different id", slog.String("payment_id", paymentID))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadGateway, Code: apiresponse.InternalError, Message: "invalid payment gateway response"}, apiresponse.Compatibility{})
+				return
 			}
 			if index == 0 {
 				latestStatus = string(payment.Status)
@@ -101,8 +105,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 				grantedUserID, err := checker.CompletePaymentAndGrantPremium(r.Context(), paymentID)
 				if err != nil {
 					log.Error("failed to complete payment and grant premium via sync", sl.Err(err))
-					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, resp.Error("failed to complete payment"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to complete payment"}, apiresponse.Compatibility{})
 					return
 				}
 				log.Info("payment succeeded via sync and premium granted", slog.String("payment_id", paymentID), slog.Int64("user_id", grantedUserID))
@@ -111,8 +114,7 @@ func New(log *slog.Logger, checker PaymentStatusChecker, finder PaymentFinder) h
 			case yoopayment.Canceled:
 				if _, err := checker.UpdatePaymentStatus(r.Context(), paymentID, domain.PaymentStatusCanceled); err != nil {
 					log.Error("failed to update payment status to canceled", sl.Err(err), slog.String("payment_id", paymentID))
-					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, resp.Error("failed to update payment status"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to update payment status"}, apiresponse.Compatibility{})
 					return
 				}
 			}

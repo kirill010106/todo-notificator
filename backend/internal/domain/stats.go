@@ -6,16 +6,17 @@ import (
 )
 
 type UserStats struct {
-	ID               int64      `json:"id"`
-	UserID           int64      `json:"user_id"`
-	Points           *int64     `json:"points"`
-	Level            *int64     `json:"level"`
-	TotalPomodoros   *int64     `json:"total_pomodoros,omitzero"`
-	TotalBurntTasks  *int64     `json:"total_burnt_tasks,omitzero"`
-	CurrentStreak    *int64     `json:"current_streak,omitzero"`
-	BestStreak       *int64     `json:"best_streak,omitzero"`
-	LastActivityDate *time.Time `json:"last_activity_date,omitempty"`
-	UpdatedAt        *time.Time `json:"updated_at"`
+	TotalCompletedTasks int64      `json:"total_completed_tasks"`
+	ID                  int64      `json:"id"`
+	UserID              int64      `json:"user_id"`
+	Points              *int64     `json:"points"`
+	Level               *int64     `json:"level"`
+	TotalPomodoros      *int64     `json:"total_pomodoros,omitzero"`
+	TotalBurntTasks     *int64     `json:"total_burnt_tasks,omitzero"`
+	CurrentStreak       *int64     `json:"current_streak,omitzero"`
+	BestStreak          *int64     `json:"best_streak,omitzero"`
+	LastActivityDate    *time.Time `json:"last_activity_date,omitempty"`
+	UpdatedAt           *time.Time `json:"updated_at"`
 }
 
 type UserStatsUpdate struct {
@@ -36,6 +37,9 @@ type StatsDelta struct {
 }
 
 type Achievement struct {
+	Current     int64      `json:"current"`
+	Target      int64      `json:"target"`
+	Archived    bool       `json:"archived"`
 	ID          int64      `json:"id,omitempty"`
 	UserID      int64      `json:"user_id,omitempty"`
 	Code        string     `json:"code"`
@@ -76,18 +80,30 @@ type GamificationProfile struct {
 }
 
 var AvailableAchievements = []Achievement{
-	{Code: "first_step", Title: "Первый шаг", Description: "Завершить первую задачу", Icon: "🎯", Points: 25},
-	{Code: "task_spree", Title: "Ударный темп", Description: "Завершить 10 задач", Icon: "⚡", Points: 50},
-	{Code: "task_centurion", Title: "Центурион", Description: "Завершить 50 задач", Icon: "🏛️", Points: 200},
-	{Code: "pomodoro_rookie", Title: "Свежий томат", Description: "Завершить первую сессию Pomodoro", Icon: "🍅", Points: 30},
-	{Code: "pomodoro_guru", Title: "Дзен-фокус", Description: "Завершить 20 сессий Pomodoro", Icon: "🧘", Points: 150},
-	{Code: "streak_three", Title: "Искра привычки", Description: "Серия активности 3 дня подряд", Icon: "🕯️", Points: 40},
-	{Code: "streak_week", Title: "Неделя огня", Description: "Серия активности 7 дней подряд", Icon: "🔥", Points: 100},
-	{Code: "streak_month", Title: "Железная воля", Description: "Серия активности 30 дней подряд", Icon: "👑", Points: 500},
-	{Code: "phoenix", Title: "Пепел и Феникс", Description: "Сжечь задачу при срыве таймера и закрыть следующую", Icon: "💀", Points: 50},
-	{Code: "night_owl", Title: "Полуночник", Description: "Завершить задачу в период с 00:00 до 05:00", Icon: "🦉", Points: 35},
-	{Code: "early_bird", Title: "Ранняя пташка", Description: "Завершить задачу до 08:00 утра", Icon: "🌅", Points: 35},
-	{Code: "pro_club", Title: "Золотой статус", Description: "Активация Премиум-подписки", Icon: "💎", Points: 100},
+	{Code: "first_step", Title: "Первый шаг", Description: "Завершить первую задачу", Icon: "🎯", Target: 1},
+	{Code: "task_spree", Title: "Десятка", Description: "Завершить 10 задач", Icon: "⚡", Target: 10},
+	{Code: "task_centurion", Title: "Полсотни дел", Description: "Завершить 50 задач", Icon: "🏛️", Target: 50},
+	{Code: "pomodoro_rookie", Title: "Первый томат", Description: "Засчитать первую сессию Pomodoro", Icon: "🍅", Target: 1},
+	{Code: "pomodoro_guru", Title: "Вошёл в ритм", Description: "Засчитать 20 сессий Pomodoro", Icon: "🧘", Target: 20},
+	{Code: "pomodoro_master", Title: "Мастер концентрации", Description: "Засчитать 100 сессий Pomodoro", Icon: "🏆", Target: 100},
+}
+
+// Historical awards remain visible, but can no longer be earned.
+var ArchivedAchievements = []Achievement{
+	{Code: "streak_three", Title: "Искра привычки", Description: "Серия активности 3 дня подряд", Icon: "🕯️"},
+	{Code: "streak_week", Title: "Неделя огня", Description: "Серия активности 7 дней подряд", Icon: "🔥"},
+	{Code: "streak_month", Title: "Железная воля", Description: "Серия активности 30 дней подряд", Icon: "👑"},
+	{Code: "phoenix", Title: "Пепел и Феникс", Description: "Сжечь задачу при срыве таймера и закрыть следующую", Icon: "💀"},
+	{Code: "night_owl", Title: "Полуночник", Description: "Завершить задачу в период с 00:00 до 05:00", Icon: "🦉"},
+	{Code: "early_bird", Title: "Ранняя пташка", Description: "Завершить задачу до 08:00 утра", Icon: "🌅"},
+	{Code: "pro_club", Title: "Золотой статус", Description: "Активация Премиум-подписки", Icon: "💎"},
+}
+
+func (a Achievement) Progress(tasks, pomodoros int64) int64 {
+	if a.Code == "first_step" || a.Code == "task_spree" || a.Code == "task_centurion" {
+		return min(tasks, a.Target)
+	}
+	return min(pomodoros, a.Target)
 }
 
 // CalculateLevel calculates the level, experience within current level, experience needed for next level, and progress percent.
@@ -152,18 +168,4 @@ func CalculateLevel(points int64) (level int64, currentLevelXP int64, nextLevelX
 	}
 
 	return
-}
-
-// GetStreakMultiplier returns XP multiplier based on consecutive streak days
-func GetStreakMultiplier(streak int64) float64 {
-	switch {
-	case streak >= 7:
-		return 2.0
-	case streak >= 5:
-		return 1.5
-	case streak >= 3:
-		return 1.2
-	default:
-		return 1.0
-	}
 }

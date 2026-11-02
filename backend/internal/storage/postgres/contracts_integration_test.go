@@ -363,8 +363,8 @@ func TestFrontendContracts(t *testing.T) {
 		}
 		require.NoError(t, json.Unmarshal(responses[0].Body, &payload))
 		require.Equal(t, 10, payload.Rewards.TaskXP)
-		require.Equal(t, 25, payload.Rewards.AchievementXP)
-		require.Equal(t, int64(35), *payload.Stats.Points)
+		require.Zero(t, payload.Rewards.AchievementXP)
+		require.Equal(t, int64(10), *payload.Stats.Points)
 		_, err := execute(user, "same-key", "PATCH /tasks/1", `{"status":"pending"}`, func(context.Context) error { return nil })
 		require.Error(t, err)
 		require.Equal(t, "IDEMPOTENCY_KEY_REUSED", err.(*domain.ContractError).Code)
@@ -446,25 +446,18 @@ func TestFrontendContracts(t *testing.T) {
 		require.Equal(t, int64(0), *stats.CurrentStreak)
 		require.Equal(t, int64(12), *stats.BestStreak)
 	})
-	t.Run("daily claim is server verified and cannot be claimed twice", func(t *testing.T) {
+	t.Run("daily claims are retired without changing historical claims", func(t *testing.T) {
 		user := newUser()
-		newTask(user)
-		first, err := execute(user, "daily1", "POST /me/quests/create_task/claim", "", func(c context.Context) error { return s.ClaimDailyReward(c, user, "create_task") })
+		_, err := s.DB.ExecContext(ctx, `INSERT INTO daily_reward_claims(user_id,reward_date,code,xp) VALUES($1,CURRENT_DATE,'create_task',10)`, user)
 		require.NoError(t, err)
-		require.Equal(t, 200, first.Status)
-		repeated, err := execute(user, "daily1", "POST /me/quests/create_task/claim", "", func(c context.Context) error { t.Error("replay invoked action"); return nil })
-		require.NoError(t, err)
-		require.JSONEq(t, string(first.Body), string(repeated.Body))
-		duplicate, err := execute(user, "daily2", "POST /me/quests/create_task/claim", "", func(c context.Context) error { return s.ClaimDailyReward(c, user, "create_task") })
-		require.NoError(t, err)
-		require.Equal(t, 409, duplicate.Status)
-		unavailable, err := execute(user, "chest", "POST /me/rewards/daily-chest/claim", "", func(c context.Context) error { return s.ClaimDailyReward(c, user, "daily_chest") })
-		require.NoError(t, err)
-		require.Equal(t, 409, unavailable.Status)
-		stats, err := s.GetUserStats(ctx, user)
-		require.NoError(t, err)
-		require.Equal(t, int64(10), *stats.Points)
-		require.Zero(t, *stats.CurrentStreak)
+		for _, code := range []string{"create_task", "daily_chest", "unknown"} {
+			var problem *domain.ContractError
+			require.ErrorAs(t, s.ClaimDailyReward(ctx, user, code), &problem)
+			require.Equal(t, 410, problem.Status)
+		}
+		var count int
+		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT COUNT(*) FROM daily_reward_claims WHERE user_id=$1`, user).Scan(&count))
+		require.Equal(t, 1, count)
 	})
 	t.Run("daily completion records survive deletion and ignore repeated saves", func(t *testing.T) {
 		user := newUser()
@@ -473,14 +466,13 @@ func TestFrontendContracts(t *testing.T) {
 		for _, status := range []string{done, done, pending, done} {
 			require.NoError(t, s.UpdateTask(ctx, user, task, domain.TaskUpdate{Status: &status}))
 		}
-		quests, err := s.GetDailyQuests(ctx, user)
+		stats, err := s.GetUserStats(ctx, user)
 		require.NoError(t, err)
-		require.Equal(t, 1, quests[2].Current)
+		require.EqualValues(t, 1, stats.TotalCompletedTasks)
 		require.NoError(t, s.DeleteTask(ctx, user, task))
-		quests, err = s.GetDailyQuests(ctx, user)
+		stats, err = s.GetUserStats(ctx, user)
 		require.NoError(t, err)
-		require.Equal(t, 1, quests[0].Current)
-		require.Equal(t, 1, quests[2].Current)
+		require.EqualValues(t, 1, stats.TotalCompletedTasks)
 	})
 	t.Run("bulk results identify changed and skipped tasks", func(t *testing.T) {
 		user := newUser()

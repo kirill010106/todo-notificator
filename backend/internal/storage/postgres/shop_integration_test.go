@@ -4,8 +4,6 @@ package postgres
 
 import (
 	"context"
-	"database/sql"
-	"encoding/json"
 	"fmt"
 	todonotificator "github.com/kirill010106/todo-notificator"
 	"github.com/kirill010106/todo-notificator/internal/domain"
@@ -128,48 +126,13 @@ func TestServerShop(t *testing.T) {
 		require.NoError(t, err)
 		require.EqualValues(t, 60, wallet(user).Coins)
 	})
-	t.Run("XP booster survives cancellation and only multiplies qualified focus", func(t *testing.T) {
+	t.Run("boosters cannot be purchased or activated", func(t *testing.T) {
 		user := newUser()
-		require.NoError(t, s.withUserTx(ctx, user, func(tx *sql.Tx) error { return awardCoinsTx(ctx, tx, user, "test-funds", 100) }))
-		act(user, domain.ShopAction{Action: "buy", ItemID: "xp_boost"})
-		act(user, domain.ShopAction{Action: "activate_booster"})
-		_, err := s.ShopAction(ctx, user, domain.ShopAction{Action: "activate_booster"})
+		_, err := s.ShopAction(ctx, user, domain.ShopAction{Action: "buy", ItemID: "xp_boost"})
 		require.Error(t, err)
-		id, err := s.StartPomodoroSession(ctx, user, nil)
-		require.NoError(t, err)
-		require.NoError(t, s.AddPomodoroBreak(ctx, user, id.ID))
-		focus, err := s.GetFocusState(ctx, user)
-		require.NoError(t, err)
-		require.Equal(t, "extra_break", focus.Phase)
-		require.Contains(t, focus.AvailableActions, "cancel")
-		require.NoError(t, s.CancelPomodoroSession(ctx, user, id.ID))
-		require.True(t, wallet(user).ActiveBooster)
+		_, err = s.ShopAction(ctx, user, domain.ShopAction{Action: "activate_booster"})
+		require.Error(t, err)
 		require.EqualValues(t, 50, wallet(user).Coins)
-		id, err = s.StartPomodoroSession(ctx, user, nil)
-		require.NoError(t, err)
-		require.NoError(t, s.FinishPomodoroSession(ctx, user, id.ID, "completed", false))
-		require.True(t, wallet(user).ActiveBooster)
-		id, err = s.StartPomodoroSession(ctx, user, nil)
-		require.NoError(t, err)
-		_, err = s.DB.ExecContext(ctx, `UPDATE pomodoro_sessions SET started_at=CURRENT_TIMESTAMP-INTERVAL '25 minutes' WHERE id=$1`, id.ID)
-		require.NoError(t, err)
-		var response domain.OperationResponse
-		response, err = s.ExecuteOperation(ctx, user, "boost-finish", "POST /stop", []byte(`{}`), func(txctx context.Context) domain.OperationResponse {
-			if err := s.FinishPomodoroSession(txctx, user, id.ID, "completed", false); err != nil {
-				t.Error(err)
-				return domain.OperationResponse{Status: 500}
-			}
-			return domain.OperationResponse{Status: 200, Body: []byte(`{"status":"OK"}`)}
-		})
-		require.NoError(t, err)
-		require.Equal(t, 200, response.Status)
-		var payload struct{ Rewards domain.ActionRewards }
-		require.NoError(t, json.Unmarshal(response.Body, &payload))
-		require.Equal(t, 40, payload.Rewards.PomodoroXP)
-		require.False(t, wallet(user).ActiveBooster)
-		require.EqualValues(t, 60, wallet(user).Coins)
-		require.Error(t, s.FinishPomodoroSession(ctx, user, id.ID, "completed", false))
-		require.EqualValues(t, 60, wallet(user).Coins)
 	})
 	t.Run("cancel window uses server time and ownership", func(t *testing.T) {
 		user, other := newUser(), newUser()

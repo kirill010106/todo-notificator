@@ -1,18 +1,10 @@
 package helpers
 
 import (
-	"encoding/json"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"net/http"
-
-	"github.com/kirill010106/todo-notificator/internal/domain"
 )
 
-func SendError(w http.ResponseWriter, status int, message string, code string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	_ = json.NewEncoder(w).Encode(domain.APIError{
-		Status:  status,
-		Message: message,
-		Code:    code,
-	})
+func SendError(w http.ResponseWriter, r *http.Request, status int, message string, code apiresponse.Code) {
+	apiresponse.Write(w, r, apiresponse.Problem{Status: status, Message: message, Code: code}, apiresponse.Compatibility{StatusStyle: apiresponse.NumericStatus})
 }

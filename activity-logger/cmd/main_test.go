@@ -2,6 +2,10 @@ package main
 
 import (
 	"context"
+	"github.com/kirill010106/todo-notificator/root/pkg/activitylog"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	"strings"
 	"testing"
 	"time"
 
@@ -114,4 +118,43 @@ func TestServerIntegration(t *testing.T) {
 	getRespUser2, err := srv.GetLogs(ctx, getReqUser2)
 	require.NoError(t, err)
 	require.Len(t, getRespUser2.GetLogs(), 0)
+
+	t.Run("already canceled RPC does not insert or return history", func(t *testing.T) {
+		canceled, cancel := context.WithCancel(ctx)
+		cancel()
+		entry, err := srv.LogEvent(canceled, &pb.LogRequest{UserId: 99, Action: "CANCELED"})
+		require.NoError(t, err)
+		require.False(t, entry.GetSuccess())
+		count, err := collection.CountDocuments(ctx, bson.M{"user_id": 99})
+		require.NoError(t, err)
+		require.Zero(t, count)
+		page, err := srv.GetLogs(canceled, &pb.GetLogsRequest{UserId: 1})
+		require.Error(t, err)
+		require.Nil(t, page)
+	})
+	t.Run("large page is bounded while offset still works", func(t *testing.T) {
+		docs := make([]any, 150)
+		for i := range docs {
+			docs[i] = activityDoc{UserID: 2, Action: "PAGE", CreatedAt: time.Now()}
+		}
+		_, err := collection.InsertMany(ctx, docs)
+		require.NoError(t, err)
+		page, err := srv.GetLogs(ctx, &pb.GetLogsRequest{UserId: 2, Limit: 2147483647})
+		require.NoError(t, err)
+		require.Len(t, page.Logs, activitylog.MaxPageSize)
+		page, err = srv.GetLogs(ctx, &pb.GetLogsRequest{UserId: 2, Limit: 100, Offset: 100})
+		require.NoError(t, err)
+		require.Len(t, page.Logs, 50)
+	})
+	t.Run("large records cannot accumulate an oversized response", func(t *testing.T) {
+		doc := activityDoc{UserID: 3, Action: "LARGE", DetailsJSON: strings.Repeat("x", activitylog.MaxResponseBytes/2), CreatedAt: time.Now()}
+		_, err := collection.InsertMany(ctx, []any{doc, doc})
+		require.NoError(t, err)
+		page, err := srv.GetLogs(ctx, &pb.GetLogsRequest{UserId: 3, Limit: 2})
+		require.Nil(t, page)
+		require.Equal(t, codes.ResourceExhausted, status.Code(err))
+		page, err = srv.GetLogs(ctx, &pb.GetLogsRequest{UserId: 3, Limit: 1})
+		require.NoError(t, err)
+		require.Len(t, page.Logs, 1)
+	})
 }

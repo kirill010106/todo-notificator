@@ -47,25 +47,8 @@ const gamification = {
   streak: 7,
   best_streak: 12,
   unlocked_count: 2,
-  total_achievements: 12,
-  daily_quests: [
-    {
-      code: "tasks",
-      title: "Завершить три задачи",
-      target: 3,
-      current: 1,
-      reward_xp: 30,
-      completed: false,
-    },
-    {
-      code: "focus",
-      title: "Найти время для фокуса",
-      target: 1,
-      current: 0,
-      reward_xp: 20,
-      completed: false,
-    },
-  ],
+  total_achievements: 6,
+  daily_quests: [],
 };
 export async function fixture(
   page: Page,
@@ -90,10 +73,6 @@ export async function fixture(
   let count = completedCount;
   const profile = {
     ...gamification,
-    daily_quests: gamification.daily_quests.map((quest) => ({
-      ...quest,
-      completed: questsReady || quest.completed,
-    })),
     daily_chest_claimed: false,
   };
   const wallet = {
@@ -115,13 +94,7 @@ export async function fixture(
       price: 40,
       description: "Спокойная синяя палитра",
     },
-    {
-      id: "xp_boost",
-      title: "Двойной фокус",
-      kind: "booster",
-      price: 100,
-      description: "40 XP за следующую засчитанную сессию",
-    },
+    { id: "bell", title: "Колокольчик", kind: "sound", price: 30, description: "Лёгкий сигнал завершения" },
   ];
   const currentTasks = tasks.map((task) => ({ ...task }));
   const categories = [
@@ -174,16 +147,13 @@ export async function fixture(
       skipped_task_ids: [] as number[],
     };
     const rewards = {
+      coins: 0,
       task_xp: 0,
       pomodoro_xp: 0,
       achievement_xp: 0,
       quest_xp: 0,
       penalty_xp: 0,
     };
-    if (path === "/me/rewards/daily-chest/claim") {
-      profile.daily_chest_claimed = true;
-      rewards.quest_xp = 50;
-    }
     if (path.endsWith("/cancel")) {
       active = null;
       phase = "idle";
@@ -200,6 +170,7 @@ export async function fixture(
         breakUntil = Date.now() + (count === 0 ? 900000 : 300000);
         result.pomodoro_counted = true;
         rewards.pomodoro_xp = 20;
+        rewards.coins = 10;
       }
     }
     if (path.endsWith("/pause") && active) {
@@ -247,7 +218,7 @@ export async function fixture(
     let body: unknown = {
       status: "OK",
       id: 4,
-      operation_id: "test-operation",
+      operation_id: route.request().headers()["idempotency-key"] || "read",
       focus: focus(),
       result,
       rewards,
@@ -273,9 +244,15 @@ export async function fixture(
           return;
         }
         wallet.coins -= item.price;
-        if (item.kind === "booster")
-          wallet.boosters[item.id] = (wallet.boosters[item.id] || 0) + 1;
-        else wallet.ownedItems.push(item.id);
+        wallet.ownedItems.push(item.id);
+      }
+      if (req.action === "redeem_personal") {
+        const reward = wallet.customRewards.find((item) => item.id === req.item_id)!;
+        if (wallet.coins < reward.price) {
+          await route.fulfill({ status: 409, json: { code: "INSUFFICIENT_COINS", message: "Не хватает монет" } });
+          return;
+        }
+        wallet.coins -= reward.price;
       }
       if (req.action === "equip") wallet.activeTheme = req.item_id;
       body = { wallet };
@@ -286,7 +263,7 @@ export async function fixture(
         tasks: currentTasks,
         pagination: { total: currentTasks.length, limit: 20, offset: 0 },
         gamification: profile,
-        stats: { total_pomodoros: 18 },
+        stats: { total_pomodoros: 18, total_completed_tasks: 7 },
         active_pomodoro: active,
         focus: focus(),
       };
@@ -325,13 +302,16 @@ export async function fixture(
       body = {
         achievements: [
           {
-            code: "first",
+            code: "first_step",
             title: "Первый шаг",
             description: "Завершить первую задачу",
             icon: "✦",
             unlocked: true,
-            points: 25,
+            points: 0,
+            current: 1, target: 1, archived: false,
           },
+          {code: "task_spree", title: "Десятка", description: "Завершить 10 задач", icon: "⚡", unlocked: false, points: 0, current: 7, target: 10, archived: false},
+          {code: "night_owl", title: "Полуночник", description: "Историческая награда", icon: "🦉", unlocked: true, points: 0, current: 0, target: 0, archived: true},
         ],
       };
     else if (path === "/me/logs") body = { logs: [] };

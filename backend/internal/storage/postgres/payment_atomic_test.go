@@ -25,6 +25,7 @@ func TestPaymentPremiumTransactionFailureBoundaries(t *testing.T) {
 				switch stage {
 				case "missing":
 					payment.WillReturnError(sql.ErrNoRows)
+					mock.ExpectQuery("SELECT status FROM payments").WithArgs("payment-1").WillReturnError(sql.ErrNoRows)
 					mock.ExpectRollback()
 				case "payment update":
 					payment.WillReturnError(sentinel)

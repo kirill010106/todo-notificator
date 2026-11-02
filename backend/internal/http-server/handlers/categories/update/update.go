@@ -11,6 +11,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -52,16 +53,14 @@ func New(log *slog.Logger, categoryUpdater CategoryUpdater, eventLogger EventLog
 		categoryIDStr := chi.URLParam(r, "category_id")
 		if categoryIDStr == "" {
 			log.Warn("category_id is empty")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("category_id is required"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "category_id is required"}, apiresponse.Compatibility{})
 			return
 		}
 
 		categoryID, err := strconv.ParseInt(categoryIDStr, 10, 64)
 		if err != nil {
 			log.Warn("invalid category id", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid category_id"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid category_id"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -74,21 +73,18 @@ func New(log *slog.Logger, categoryUpdater CategoryUpdater, eventLogger EventLog
 			if errors.Is(err, io.EOF) {
 				log.Warn("request body is empty")
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Warn("failed to decode request body", sl.Err(err))
 
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
 		if req.Name == "" {
 			log.Warn("no fields to update")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("at least one field must be provided"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "at least one field must be provided"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -100,13 +96,11 @@ func New(log *slog.Logger, categoryUpdater CategoryUpdater, eventLogger EventLog
 		if err != nil {
 			if errors.Is(err, storage.ErrCategoryNotFound) {
 				log.Info("category not found or access denied")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("category not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "category not found"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Error("failed to update category", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to update category"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to update category"}, apiresponse.Compatibility{})
 			return
 		}
 

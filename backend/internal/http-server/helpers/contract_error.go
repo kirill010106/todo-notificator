@@ -2,8 +2,8 @@ package helpers
 
 import (
 	"errors"
-	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"net/http"
 )
 
@@ -12,7 +12,6 @@ func RenderContractError(w http.ResponseWriter, r *http.Request, err error) bool
 	if !errors.As(err, &problem) {
 		return false
 	}
-	render.Status(r, problem.Status)
-	render.JSON(w, r, map[string]any{"status": "Error", "code": problem.Code, "error": problem.Message, "message": problem.Message, "field_errors": problem.Fields})
+	apiresponse.Write(w, r, apiresponse.FromError(err), apiresponse.Compatibility{PreserveNullFields: true})
 	return true
 }

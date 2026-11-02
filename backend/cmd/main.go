@@ -99,6 +99,13 @@ func main() {
 	if err != nil {
 		appLog.Error("failed to init activity logger client", sl.Err(err))
 	}
+	defer func() {
+		stopCtx, stopCancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer stopCancel()
+		if err := loggerClient.Close(stopCtx); err != nil {
+			appLog.Warn("activity logger shutdown timed out", sl.Err(err))
+		}
+	}()
 
 	cleanup.StartTokenCleanup(ctx, appLog, storage, 24*time.Hour)
 

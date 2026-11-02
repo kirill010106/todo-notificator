@@ -60,6 +60,13 @@ describe("deadline and reminder draft validation", () => {
     expect(
       reminderPayload([row], undefined, false).errors.deadline,
     ).toBeTruthy();
+    const intervals = [15, 10, 5].map((minutes) => ({
+      ...newDraft(), minutes: String(minutes),
+    }));
+    expect(reminderPayload(intervals, undefined, true).errors).toEqual({
+      deadline: "Для напоминаний укажи срок или удали связанные напоминания",
+    });
+    expect(reminderPayload(intervals, deadline, true).errors).toEqual({});
     expect(
       reminderPayload([row, row], deadline, true).errors["reminders.1"],
     ).toBeTruthy();

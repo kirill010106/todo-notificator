@@ -13,6 +13,8 @@ import (
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/config"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -20,7 +22,7 @@ import (
 )
 
 type Request struct {
-	RefreshToken string `json:"refresh_token" validate:"required"`
+	RefreshToken string `json:"refresh_token" validate:"required,max=64"`
 }
 
 type Response struct {
@@ -46,39 +48,43 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		)
 
 		var req Request
-		err := render.DecodeJSON(r.Body, &req)
+		err := helpers.DecodeAuthJSON(w, r, &req)
 		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusRequestEntityTooLarge, Code: apiresponse.PayloadTooLarge, Message: "request body exceeds 4096 bytes"}, apiresponse.Compatibility{})
+				return
+			}
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Warn("failed to decode request body", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
+		if len(req.RefreshToken) > 64 {
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "refresh token exceeds 64 bytes"}, apiresponse.Compatibility{})
+			return
+		}
 		if err := validate.Struct(req); err != nil {
 			var validateErrs validator.ValidationErrors
 			if errors.As(err, &validateErrs) {
 				log.Warn("invalid request", sl.Err(err))
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validateErrs))
+				helpers.RenderValidationError(w, r, validateErrs)
 				return
 			}
 			log.Error("internal validation error", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid request"}, apiresponse.Compatibility{})
 			return
 		}
 
 		newRefreshToken, err := jwt.NewRefreshToken()
 		if err != nil {
 			log.Error("failed to generate new refresh token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to generate token"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to generate token"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -88,13 +94,11 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		if err != nil {
 			if errors.Is(err, storage.ErrRefreshTokenInvalid) {
 				log.Info("invalid refresh token")
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("invalid or expired refresh token"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "invalid or expired refresh token"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Error("failed to rotate refresh token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -103,8 +107,7 @@ func New(log *slog.Logger, tokenRefresher TokenRefresher, cfg *config.Config) ht
 		accessToken, err := jwt.NewAccessToken(*user, cfg.AppSecret, cfg.AccessTokenTTL)
 		if err != nil {
 			log.Error("failed to generate access token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to generate token"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to generate token"}, apiresponse.Compatibility{})
 			return
 		}
 

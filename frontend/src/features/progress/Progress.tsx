@@ -1,10 +1,8 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Link } from "react-router-dom";
-import { Award, Flame, Timer, Gift, Check, LockKeyhole } from "lucide-react";
+import { Award, Timer, Gift, Check, LockKeyhole } from "lucide-react";
 import { api, errorText } from "../../lib/api";
-import { claimDailyReward } from "../../lib/xp-rewards";
-import { rewardLabel } from "../../lib/commands";
 import type { Achievement, Activity } from "../../lib/types";
 import { useApp } from "../../app/context";
 import { Button, Heading, State } from "../../components/ui";
@@ -12,22 +10,7 @@ import { dateLabel } from "../../lib/tasks";
 import s from "../../styles/App.module.css";
 
 export function ProgressPage() {
-  const { data, refresh, notify } = useApp();
-  const [claiming, setClaiming] = useState("");
-  const [claimError, setClaimError] = useState("");
-  const claim = async (code: string) => {
-    setClaiming(code);
-    setClaimError("");
-    try {
-      const result = await claimDailyReward(data.user.id, code);
-      notify(`Награда получена: ${rewardLabel(result)}`);
-      await refresh();
-    } catch (error) {
-      setClaimError(errorText(error));
-    } finally {
-      setClaiming("");
-    }
-  };
+  const { data } = useApp();
   const profile = data.gamification;
   const [filter, setFilter] = useState("all");
   const [offset, setOffset] = useState(0);
@@ -44,6 +27,10 @@ export function ProgressPage() {
         { signal },
       ),
   });
+  const visibleAchievements = achievements.data?.achievements.filter((item) =>
+    filter === "archived" ? item.archived : !item.archived &&
+      (filter === "all" || (filter === "unlocked" ? item.unlocked : !item.unlocked)),
+  ) || [];
   return (
     <>
       <Heading
@@ -61,7 +48,7 @@ export function ProgressPage() {
       <div className={s.statsGrid}>
         {[
           [Award, "Уровень", profile?.level],
-          [Flame, "Серия дней", profile?.streak],
+          [Check, "Завершённые задачи", data.stats?.total_completed_tasks],
           [Timer, "Сессии фокуса", data.stats?.total_pomodoros],
         ].map(([Icon, label, value], i) => {
           const Symbol = Icon as typeof Award;
@@ -90,44 +77,13 @@ export function ProgressPage() {
             />
           </div>
           <p className={s.muted}>
-            {profile.current_level_xp} / {profile.next_level_xp} XP до
-            следующего уровня · Лучшая серия: {profile.best_streak} дней
+            За первое завершение задачи — 10 XP, за засчитанную сессию — 20 XP.
+          </p>
+          <p className={s.muted}>
+            {profile.level >= 100 ? "Максимальный уровень" : `${profile.current_level_xp} / ${profile.next_level_xp} XP до следующего уровня`}
           </p>
         </section>
       )}
-      <section className={s.card}>
-        <h2>Ежедневный ритм</h2>
-        <p className={s.muted}>
-          Новый день заданий — по часовому поясу {data.user.timezone || "UTC"}.
-        </p>
-        {claimError && (
-          <p className={s.error} role="alert">
-            {claimError}
-          </p>
-        )}
-        {profile?.daily_quests?.length ? (
-          profile.daily_quests.map((quest) => (
-            <div className={s.quest} key={quest.code}>
-              {quest.completed ? <Check size={18} /> : <Timer size={18} />}
-              <div>
-                {quest.title}
-                <small>
-                  {quest.current} / {quest.target}
-                </small>
-              </div>
-              <Button
-                quiet
-                disabled={!!claiming || !quest.completed || quest.claimed}
-                onClick={() => void claim(quest.code)}
-              >
-                {quest.claimed ? "Получено" : `Забрать ${quest.reward_xp} XP`}
-              </Button>
-            </div>
-          ))
-        ) : (
-          <p className={s.muted}>Задания пока не загружены сервером.</p>
-        )}
-      </section>
       <section>
         <div className={s.sectionTitle}>
           <h2>Коллекция достижений</h2>
@@ -138,6 +94,7 @@ export function ProgressPage() {
             ["all", "Все"],
             ["unlocked", "Полученные"],
             ["locked", "Впереди"],
+            ["archived", "Архив"],
           ].map(([key, title]) => (
             <button
               className={filter === key ? s.tabActive : ""}
@@ -157,15 +114,11 @@ export function ProgressPage() {
           >
             {errorText(achievements.error)}
           </State>
+        ) : !visibleAchievements.length ? (
+          <State title="В этой группе пока нет достижений" />
         ) : (
           <div className={s.cardGrid}>
-            {achievements.data.achievements
-              .filter(
-                (item) =>
-                  filter === "all" ||
-                  (filter === "unlocked" ? item.unlocked : !item.unlocked),
-              )
-              .map((item) => (
+            {visibleAchievements.map((item) => (
                 <article
                   className={`${s.achievement} ${!item.unlocked ? s.locked : ""}`}
                   key={item.code}
@@ -177,7 +130,7 @@ export function ProgressPage() {
                     <h3>{item.title}</h3>
                     <p>{item.description}</p>
                     <small>
-                      {item.unlocked ? "Получено" : `${item.points} XP`}
+                      {item.unlocked ? (item.archived ? "Получено · Архив" : "Получено") : `${item.current} / ${item.target} ${item.code.startsWith("pomodoro_") ? "сессий" : "задач"}`}
                     </small>
                   </div>
                 </article>

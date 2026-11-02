@@ -102,12 +102,9 @@ func (s *Storage) ExecuteOperation(ctx context.Context, userID int64, key, route
 		for _, definition := range domain.AvailableAchievements {
 			if current[definition.Code] && !previous[definition.Code] {
 				definition.Unlocked = true
+				definition.Current = definition.Target
 				unlocked = append(unlocked, definition)
-				outcome.Rewards.AchievementXP += definition.Points
 			}
-		}
-		if before.Points != nil && after.Points != nil && outcome.Rewards.PenaltyXP > 0 {
-			outcome.Rewards.PenaltyXP = int(*before.Points-*after.Points) + outcome.Rewards.AchievementXP
 		}
 		payload := map[string]any{}
 		if len(response.Body) > 0 {
@@ -121,6 +118,7 @@ func (s *Storage) ExecuteOperation(ctx context.Context, userID int64, key, route
 		payload["result"] = outcome.Result
 		payload["rewards"] = outcome.Rewards
 		payload["stats"] = after
+		payload["level_up"] = before.Level != nil && after.Level != nil && *after.Level > *before.Level
 		payload["unlocked_achievements"] = unlocked
 		focus, err := s.GetFocusState(txctx, userID)
 		if err != nil {

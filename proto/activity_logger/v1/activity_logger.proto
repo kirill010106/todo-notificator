@@ -24,6 +24,7 @@ message LogResponse {
 
 message GetLogsRequest {
     int64 user_id = 1;
+    // Defaults to 50 and is capped at 100, including direct gRPC callers.
     int32 limit = 2;
     int32 offset = 3;
 }

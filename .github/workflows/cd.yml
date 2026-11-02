@@ -91,6 +91,13 @@ jobs:
         with:
           ref: ${{ env.RELEASE_SHA }}
 
+      - name: Install verified deployment host key
+        env:
+          SERVER_IP: ${{ secrets.SERVER_IP }}
+          SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}
+          SSH_HOST_PUBLIC_KEY: ${{ secrets.SSH_HOST_PUBLIC_KEY }}
+        run: python3 scripts/configure_deploy_ssh.py --known-hosts "$RUNNER_TEMP/deploy_known_hosts"
+
       - name: Setup SSH key
         uses: webfactory/ssh-agent@v0.9.0
         with:
@@ -119,14 +126,6 @@ jobs:
 
       - name: Install Ansible
         run: sudo apt-get update && sudo apt-get install -y ansible
-
-      - name: Add server to known_hosts
-        env:
-          SERVER_IP: ${{ secrets.SERVER_IP }}
-          SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}
-        run: |
-          install -d -m 700 ~/.ssh
-          ssh-keyscan -T 15 -p "$SERVER_SSH_PORT" -H "$SERVER_IP" >> ~/.ssh/known_hosts
 
       - name: Generate .env file
         env:
@@ -162,6 +161,13 @@ jobs:
           ansible-playbook -i ansible/inventory.ini ansible/deploy.yml \
             --extra-vars "@$RUNNER_TEMP/deploy-vars.json"
         env:
+          ANSIBLE_HOST_KEY_CHECKING: "True"
+          ANSIBLE_SSH_COMMON_ARGS: >-
+            -o StrictHostKeyChecking=yes
+            -o UserKnownHostsFile=${{ runner.temp }}/deploy_known_hosts
+            -o GlobalKnownHostsFile=/dev/null
+            -o UpdateHostKeys=no
+            -o VerifyHostKeyDNS=no
           SERVER_IP: ${{ secrets.SERVER_IP }}
           SERVER_USER: ${{ secrets.SERVER_USER }}
           SERVER_SSH_PORT: ${{ vars.SERVER_SSH_PORT || '22' }}

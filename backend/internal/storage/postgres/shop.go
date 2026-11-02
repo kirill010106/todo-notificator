@@ -159,16 +159,12 @@ func (s *Storage) ShopAction(ctx context.Context, user int64, request domain.Sho
 			if item == nil {
 				return shopError("ITEM_NOT_FOUND", "Предмет не найден в магазине", 404)
 			}
-			if item.Kind != "booster" && owns(wallet, item.ID) {
+			if owns(wallet, item.ID) {
 				return shopError("ITEM_OWNED", "Этот предмет уже куплен", 409)
 			}
 			spend = item.Price
 			description = "Покупка: " + item.Title
-			if item.Kind == "booster" {
-				wallet.Boosters[item.ID]++
-			} else {
-				wallet.OwnedItems = append(wallet.OwnedItems, item.ID)
-			}
+			wallet.OwnedItems = append(wallet.OwnedItems, item.ID)
 		case "equip":
 			if request.ItemID != "default_sound" && !owns(wallet, request.ItemID) {
 				return shopError("ITEM_NOT_OWNED", "Сначала приобрети этот предмет", 403)
@@ -184,19 +180,15 @@ func (s *Storage) ShopAction(ctx context.Context, user int64, request domain.Sho
 				return shopError("ITEM_NOT_FOUND", "Предмет нельзя применить", 400)
 			}
 		case "activate_booster":
-			if wallet.ActiveBooster {
-				return shopError("BOOSTER_ACTIVE", "Бустер уже активен и ждёт засчитанную сессию", 409)
-			}
-			if wallet.Boosters["xp_boost"] < 1 {
-				return shopError("BOOSTER_EMPTY", "Сначала купи бустер двойного фокуса", 409)
-			}
-			wallet.Boosters["xp_boost"]--
-			wallet.ActiveBooster = true
+			return shopError("MECHANIC_RETIRED", "Усилители опыта больше не используются", 410)
 		default:
 			return shopError("INVALID_SHOP_ACTION", "Неизвестное действие магазина", 400)
 		}
 		if spend > wallet.Coins {
 			return shopError("INSUFFICIENT_COINS", "Не хватает монет. Завершай задачи и сессии фокуса, чтобы накопить", 409)
+		}
+		if spend < 0 || (request.Action == "redeem_personal" && spend == 0) {
+			return shopError("INVALID_REWARD", "Некорректная стоимость награды", 400)
 		}
 		wallet.Coins -= spend
 		if spend > 0 {
@@ -227,21 +219,10 @@ func awardCoinsTx(ctx context.Context, tx *sql.Tx, user int64, event string, coi
 	if err != nil {
 		return err
 	}
+	if outcome := actionOutcome(ctx); outcome != nil {
+		outcome.Rewards.Coins += coins
+	}
 	wallet.Coins += coins
 	return writeWallet(ctx, tx, user, wallet)
-}
-func consumeFocusBoosterTx(ctx context.Context, tx *sql.Tx, user int64) (int, error) {
-	wallet, err := readWallet(ctx, tx, user)
-	if err != nil {
-		return 0, err
-	}
-	if !wallet.ActiveBooster {
-		return 0, nil
-	}
-	wallet.ActiveBooster = false
-	if err := writeWallet(ctx, tx, user, wallet); err != nil {
-		return 0, err
-	}
-	return domain.PomodoroRewardPoints, nil
 }
 func taskCoinEvent(id int64) string { return fmt.Sprintf("task:%d", id) }

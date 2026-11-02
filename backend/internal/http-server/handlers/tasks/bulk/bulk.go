@@ -8,6 +8,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/render"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -40,26 +41,22 @@ func NewComplete(log *slog.Logger, storage BulkTaskStorage) http.HandlerFunc {
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid request body"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid request body"}, apiresponse.Compatibility{})
 			return
 		}
 
 		if len(req.TaskIDs) == 0 {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("task_ids list cannot be empty"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "task_ids list cannot be empty"}, apiresponse.Compatibility{})
 			return
 		}
 
 		affected, err := storage.BulkCompleteTasks(r.Context(), userID, req.TaskIDs)
 		if err != nil {
 			log.Error("failed to bulk complete tasks", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to complete tasks"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to complete tasks"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -86,26 +83,22 @@ func NewDelete(log *slog.Logger, storage BulkTaskStorage) http.HandlerFunc {
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil {
 			if errors.Is(err, io.EOF) {
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid request body"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid request body"}, apiresponse.Compatibility{})
 			return
 		}
 
 		if len(req.TaskIDs) == 0 {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("task_ids list cannot be empty"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "task_ids list cannot be empty"}, apiresponse.Compatibility{})
 			return
 		}
 
 		affected, err := storage.BulkDeleteTasks(r.Context(), userID, req.TaskIDs)
 		if err != nil {
 			log.Error("failed to bulk delete tasks", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to delete tasks"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to delete tasks"}, apiresponse.Compatibility{})
 			return
 		}
 

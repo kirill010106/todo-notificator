@@ -1,0 +1,385 @@
+{
+  "account_database_error": {
+    "status": 500,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "Не удалось выполнить запрос",
+      "error": "Не удалось выполнить запрос",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "problem_database_error": {
+    "status": 500,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "Не удалось выполнить запрос",
+      "error": "Не удалось выполнить запрос",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "operation_database_error": {
+    "status": 500,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "Не удалось сохранить действие",
+      "error": "Не удалось сохранить действие",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "webhook_provider_error": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 502,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "payment verification failed\n"
+  },
+  "webhook_succeeded_database_error": {
+    "status": 500,
+    "content_type": "",
+    "body": ""
+  },
+  "webhook_canceled_database_error": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 500,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "failed to update payment status\n"
+  },
+  "router_not_found": {
+    "status": 404,
+    "content_type": "application/json",
+    "json": {
+      "status": 404,
+      "code": "NOT_FOUND",
+      "message": "endpoint does not exist",
+      "error": "endpoint does not exist",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "router_method_not_allowed": {
+    "headers": {"Allow": ""},
+    "status": 405,
+    "content_type": "application/json",
+    "json": {
+      "status": 405,
+      "code": "METHOD_NOT_ALLOWED",
+      "message": "method not allowed",
+      "error": "method not allowed",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "dev_route_absent": {
+    "status": 404,
+    "content_type": "application/json",
+    "json": {
+      "status": 404,
+      "code": "NOT_FOUND",
+      "message": "endpoint does not exist",
+      "error": "endpoint does not exist",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "auth_missing": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "unauthorized",
+      "error": "unauthorized",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "auth_header_malformed": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "invalid auth header format",
+      "error": "invalid auth header format",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "auth_token_invalid": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "invalid token",
+      "error": "invalid token",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "login_empty": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "request body is empty",
+      "error": "request body is empty",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "login_malformed": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "failed to decode request",
+      "error": "failed to decode request",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "login_field_validation": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "validation failed",
+      "error": "validation failed",
+      "request_id": "error-baseline-request",
+      "field_errors": {
+        "email": "field email is a required field",
+        "password": "field password is a required field"
+      },
+      "validation_errors": {
+        "email": "field email is a required field",
+        "password": "field password is a required field"
+      }
+    }
+  },
+  "login_body_limit": {
+    "status": 413,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "PAYLOAD_TOO_LARGE",
+      "message": "request body exceeds 4096 bytes",
+      "error": "request body exceeds 4096 bytes",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "refresh_body_limit": {
+    "status": 413,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "PAYLOAD_TOO_LARGE",
+      "message": "request body exceeds 4096 bytes",
+      "error": "request body exceeds 4096 bytes",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "register_malformed": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "Некорректный запрос",
+      "error": "Некорректный запрос",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "register_password_validation": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "Пароль должен содержать не менее 8 символов и не более 72 байт",
+      "error": "Пароль должен содержать не менее 8 символов и не более 72 байт",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "forgot_email_validation": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "Введите корректный email",
+      "error": "Введите корректный email",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "login_unknown_account": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "invalid credentials",
+      "error": "invalid credentials",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "login_database_error": {
+    "status": 500,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "internal error",
+      "error": "internal error",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "auth_account_unavailable": {
+    "status": 503,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "ACCOUNT_UNAVAILABLE",
+      "message": "cannot load current account",
+      "error": "cannot load current account",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "health_database_error": {
+    "status": 503,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "database is unreachable",
+      "error": "database is unreachable",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "webhook_forbidden": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 403,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "forbidden\n"
+  },
+  "webhook_gateway_unavailable": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 503,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "payment verification is temporarily unavailable\n"
+  },
+  "webhook_malformed": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 400,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "unexpected EOF\n"
+  },
+  "webhook_ignored_event": {
+    "status": 200,
+    "content_type": "",
+    "body": ""
+  },
+  "webhook_missing_payment_id": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 400,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "missing payment id\n"
+  },
+  "public_rate_limit": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 429,
+    "content_type": "application/json",
+    "json": {
+      "code": "RATE_LIMITED",
+      "message": "Too Many Requests",
+      "error": "Too Many Requests",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    },
+    "retry_after": "60"
+  },
+  "login_rate_limit": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 429,
+    "content_type": "application/json",
+    "json": {
+      "code": "RATE_LIMITED",
+      "message": "Too Many Requests",
+      "error": "Too Many Requests",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    },
+    "retry_after": "60"
+  },
+  "invalid_auth_rate_limit": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 429,
+    "content_type": "application/json",
+    "json": {
+      "code": "RATE_LIMITED",
+      "message": "Too Many Requests",
+      "error": "Too Many Requests",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    },
+    "retry_after": "60"
+  },
+  "webhook_rate_limit": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 429,
+    "content_type": "text/plain; charset=utf-8",
+    "body": "Too Many Requests\n",
+    "retry_after": "60"
+  },
+  "panic_before_write": {
+    "status": 500,
+    "content_type": "application/json",
+    "json": {
+      "code": "INTERNAL_ERROR",
+      "message": "Internal Server Error",
+      "error": "Internal Server Error",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "panic_after_write": {
+    "status": 200,
+    "content_type": "text/plain",
+    "body": "partial response"
+  },
+  "webhook_panic_before_write": {
+    "status": 500,
+    "content_type": "",
+    "body": ""
+  },
+  "success_ping": {
+    "status": 200,
+    "content_type": "",
+    "body": "pong"
+  },
+  "success_api_info": {
+    "status": 200,
+    "content_type": "application/json",
+    "body": "{\"info\":\"Use /api/v1/health for checking availability of the service\",\"project\":\"todo-notificator\",\"status\":\"active\"}\n"
+  }
+}

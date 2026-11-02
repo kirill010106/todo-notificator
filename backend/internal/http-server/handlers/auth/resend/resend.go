@@ -13,6 +13,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -79,28 +80,24 @@ func New(log *slog.Logger, resender TokenResender, webhookURL, webhookSecret str
 		user, err := resender.GetUserByID(r.Context(), userID)
 		if err != nil {
 			log.Error("failed to get user", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to get user"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to get user"}, apiresponse.Compatibility{})
 			return
 		}
 
 		if user.IsVerified {
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("user is already verified"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "user is already verified"}, apiresponse.Compatibility{})
 			return
 		}
 
 		token, err := generateToken()
 		if err != nil {
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to generate token"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to generate token"}, apiresponse.Compatibility{})
 			return
 		}
 		err = resender.SaveEmailVerificationToken(r.Context(), userID, token, time.Now().Add(24*time.Hour))
 		if err != nil {
 			log.Error("failed to save token", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to save token"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to save token"}, apiresponse.Compatibility{})
 			return
 		}
 

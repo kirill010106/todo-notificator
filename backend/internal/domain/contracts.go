@@ -37,11 +37,12 @@ type ActionResult struct {
 }
 
 type ActionRewards struct {
-	TaskXP        int `json:"task_xp"`
-	PomodoroXP    int `json:"pomodoro_xp"`
-	AchievementXP int `json:"achievement_xp"`
-	QuestXP       int `json:"quest_xp"`
-	PenaltyXP     int `json:"penalty_xp"`
+	Coins         int64 `json:"coins"`
+	TaskXP        int   `json:"task_xp"`
+	PomodoroXP    int   `json:"pomodoro_xp"`
+	AchievementXP int   `json:"achievement_xp"`
+	QuestXP       int   `json:"quest_xp"`
+	PenaltyXP     int   `json:"penalty_xp"`
 }
 
 type ActionOutcome struct {
