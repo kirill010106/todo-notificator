@@ -3,6 +3,8 @@ package logout
 import (
 	"context"
 	"errors"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
+	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"io"
 	"log/slog"
 	"net/http"
@@ -11,7 +13,6 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
-	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
@@ -47,13 +48,11 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				log.Info("request body is empty")
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Warn("failed to decode request body")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -61,13 +60,11 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 			var validateErrs validator.ValidationErrors
 			if errors.As(err, &validateErrs) {
 				log.Warn("invalid request", sl.Err(err))
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validateErrs))
+				helpers.RenderValidationError(w, r, validateErrs)
 				return
 			}
 			log.Error("internal validation error", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("validation error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "validation error"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -75,8 +72,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 			err = tokenRevoker.DeleteUserRefreshTokens(r.Context(), userID)
 			if err != nil {
 				log.Error("failed to delete all user tokens", sl.Err(err))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("failed to logout from all devices"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to logout from all devices"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Info("logged out from all devices")
@@ -87,8 +83,7 @@ func New(log *slog.Logger, tokenRevoker TokenRevoker) http.HandlerFunc {
 					log.Info("refresh token not found or already expired")
 				} else {
 					log.Error("failed to delete refresh token", sl.Err(err))
-					render.Status(r, http.StatusInternalServerError)
-					render.JSON(w, r, resp.Error("failed to logout"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to logout"}, apiresponse.Compatibility{})
 					return
 				}
 			}

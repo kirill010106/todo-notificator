@@ -32,14 +32,6 @@ func Error(msg string) Response {
 	}
 }
 
-func ErrorCode(msg string, code string) Response {
-	return Response{
-		Status: StatusError,
-		Code:   code,
-		Error:  msg,
-	}
-}
-
 func ValidationError(errs validator.ValidationErrors) Response {
 	errMsgs := make(map[string]string)
 

@@ -16,6 +16,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
@@ -107,16 +108,14 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 		taskIDStr := chi.URLParam(r, "task_id")
 		if taskIDStr == "" {
 			log.Warn("task_id is empty")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("task_id is required"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "task_id is required"}, apiresponse.Compatibility{})
 			return
 		}
 
 		taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
 		if err != nil {
 			log.Warn("invalid task id", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid task_id"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid task_id"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -132,21 +131,18 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			if errors.Is(err, io.EOF) {
 				log.Warn("request body is empty")
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Warn("failed to decode request body", sl.Err(err))
 
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("Некорректный запрос: "+err.Error()))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "Некорректный запрос: " + err.Error()}, apiresponse.Compatibility{})
 			return
 		}
 
 		if req.IsEmpty() {
 			log.Warn("no fields to update")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("at least one field must be provided"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "at least one field must be provided"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -155,14 +151,12 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 
 			if errors.As(err, &validateErr) {
 				log.Warn("invalid request", sl.Err(err))
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validateErr))
+				helpers.RenderValidationError(w, r, validateErr)
 				return
 			}
 
 			log.Error("internal validation error", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -176,13 +170,11 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			}
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				log.Info("task not found or access denied")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("task not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "task not found"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Error("failed to get existing task", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to get task"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to get task"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -193,18 +185,15 @@ func New(log *slog.Logger, taskUpdater TaskUpdater, webhookURL, webhookSecret st
 			}
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				log.Info("task not found or access denied")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("task not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "task not found"}, apiresponse.Compatibility{})
 				return
 			}
 			if errors.Is(err, storage.ErrCategoryNotFound) {
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("category not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "category not found"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Error("failed to update task", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to update task"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to update task"}, apiresponse.Compatibility{})
 			return
 		}
 

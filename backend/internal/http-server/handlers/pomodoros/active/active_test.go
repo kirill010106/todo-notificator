@@ -11,7 +11,9 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	authmw "github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/lib/jwt"
 	"github.com/kirill010106/todo-notificator/internal/storage"
@@ -94,16 +96,20 @@ func TestNew_NotFound(t *testing.T) {
 	req.Header.Set("Authorization", "Bearer "+token)
 	w := httptest.NewRecorder()
 
-	router.ServeHTTP(w, req)
+	middleware.RequestID(router).ServeHTTP(w, req)
 
 	require.Equal(t, http.StatusNotFound, w.Code)
 	require.True(t, getter.called)
 
-	var resp map[string]string
-	err = json.Unmarshal(w.Body.Bytes(), &resp)
+	var response apiresponse.Response
+	err = json.Unmarshal(w.Body.Bytes(), &response)
 	require.NoError(t, err)
-	require.Equal(t, "Error", resp["status"])
-	require.Equal(t, "session not found", resp["error"])
+	require.Equal(t, "Error", response.Status)
+	require.Equal(t, "session not found", response.Error)
+	require.Equal(t, response.Error, response.Message)
+	require.Equal(t, apiresponse.NotFound, response.Code)
+	require.NotEmpty(t, response.RequestID)
+	require.Equal(t, map[string]string{}, response.FieldErrors)
 }
 
 func TestNew_InternalError(t *testing.T) {

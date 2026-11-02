@@ -5,8 +5,6 @@ import { importLegacyRewards, shop, useShop } from "../../lib/shop";
 import { readLegacyRewards } from "../../lib/rewards";
 import { Button, Heading, Sheet, State } from "../../components/ui";
 import { errorText } from "../../lib/api";
-import { claimDailyReward } from "../../lib/xp-rewards";
-import { rewardLabel } from "../../lib/commands";
 import s from "../../styles/App.module.css";
 export function RewardsPage() {
   const { data, notify, refresh } = useApp();
@@ -40,9 +38,6 @@ export function RewardsPage() {
       setBusy(false);
     }
   };
-  const dailyReady =
-    !!data.gamification?.daily_quests?.length &&
-    data.gamification.daily_quests.every((q) => q.completed);
   return (
     <>
       <Heading
@@ -117,99 +112,6 @@ export function RewardsPage() {
               {error}
             </p>
           )}
-          {wallet?.activeBooster && (
-            <p className={s.notice}>
-              Двойной фокус активен: следующая засчитанная сессия принесёт 40 XP
-              вместо 20. Ранняя отмена не расходует бустер.
-            </p>
-          )}
-          <div className={s.sectionTitle}>
-            <h2>Оформление, звук и бустеры</h2>
-          </div>
-          <div className={s.cardGrid}>
-            {query.data?.catalog.map((item) => {
-              const owned = wallet?.ownedItems.includes(item.id);
-              const equipped =
-                wallet?.activeTheme === item.id ||
-                wallet?.activeSound === item.id;
-              return (
-                <article key={item.id} className={s.card}>
-                  <Sparkles className={s.green} />
-                  <h3>{item.title}</h3>
-                  <p className={s.muted}>{item.description}</p>
-                  {item.kind === "booster" && (
-                    <p>В инвентаре: {wallet?.boosters[item.id] || 0}</p>
-                  )}
-                  <div className={s.stack}>
-                    {owned ? (
-                      <Button
-                        quiet
-                        disabled={busy || equipped}
-                        onClick={() =>
-                          void run({ action: "equip", item_id: item.id })
-                        }
-                      >
-                        {equipped ? "Используется" : "Применить"}
-                      </Button>
-                    ) : (
-                      <Button
-                        disabled={busy}
-                        onClick={() => {
-                          setError("");
-                          setPurchase({
-                            action: "buy",
-                            item_id: item.id,
-                            title: item.title,
-                            price: item.price,
-                          });
-                        }}
-                      >
-                        Купить · {item.price} монет
-                      </Button>
-                    )}
-                    {item.kind === "booster" && (
-                      <Button
-                        quiet
-                        disabled={
-                          busy ||
-                          !!wallet?.activeBooster ||
-                          !wallet?.boosters[item.id]
-                        }
-                        onClick={() => void run({ action: "activate_booster" })}
-                      >
-                        {wallet?.activeBooster
-                          ? "Бустер уже активен"
-                          : "Активировать двойной XP"}
-                      </Button>
-                    )}
-                  </div>
-                </article>
-              );
-            })}
-          </div>
-          <div className={s.row}>
-            <Button
-              quiet
-              disabled={busy || wallet?.activeTheme === "default"}
-              onClick={() => void run({ action: "equip", item_id: "default" })}
-            >
-              Зелёная палитра
-            </Button>
-            <Button
-              quiet
-              disabled={busy || wallet?.activeSound === "default"}
-              onClick={() =>
-                void run({ action: "equip", item_id: "default_sound" })
-              }
-            >
-              Обычный звук
-            </Button>
-          </div>
-          <p className={s.muted}>
-            Бустер удваивает только 20 XP за фокус. Награды за задачу,
-            достижения и задания не умножаются. Сессия засчитывается после 24
-            минут. Одновременно активен один бустер.
-          </p>
           <div className={s.sectionTitle}>
             <h2>Личные награды</h2>
           </div>
@@ -259,35 +161,70 @@ export function RewardsPage() {
               <p>Книга, чашка кофе или вечер без планов.</p>
             </button>
           </div>
-          <section className={s.card}>
-            <h2>Сундук дня</h2>
-            <p>
-              Выполни ежедневные задания и забери 50 XP. Случайные сундуки пока
-              недоступны.
-            </p>
+          <div className={s.sectionTitle}>
+            <h2>Оформление и звуки</h2>
+          </div>
+          <div className={s.cardGrid}>
+            {query.data?.catalog.map((item) => {
+              const owned = wallet?.ownedItems.includes(item.id);
+              const equipped =
+                wallet?.activeTheme === item.id ||
+                wallet?.activeSound === item.id;
+              return (
+                <article key={item.id} className={s.card}>
+                  <Sparkles className={s.green} />
+                  <h3>{item.title}</h3>
+                  <p className={s.muted}>{item.description}</p>
+                  <div className={s.stack}>
+                    {owned ? (
+                      <Button
+                        quiet
+                        disabled={busy || equipped}
+                        onClick={() =>
+                          void run({ action: "equip", item_id: item.id })
+                        }
+                      >
+                        {equipped ? "Используется" : "Применить"}
+                      </Button>
+                    ) : (
+                      <Button
+                        disabled={busy}
+                        onClick={() => {
+                          setError("");
+                          setPurchase({
+                            action: "buy",
+                            item_id: item.id,
+                            title: item.title,
+                            price: item.price,
+                          });
+                        }}
+                      >
+                        Купить · {item.price} монет
+                      </Button>
+                    )}
+                  </div>
+                </article>
+              );
+            })}
+          </div>
+          <div className={s.row}>
             <Button
-              disabled={
-                busy || !dailyReady || data.gamification?.daily_chest_claimed
-              }
-              onClick={async () => {
-                setBusy(true);
-                setError("");
-                try {
-                  const result = await claimDailyReward(data.user.id);
-                  await refresh();
-                  notify(`Награда подтверждена: ${rewardLabel(result)}.`);
-                } catch (e) {
-                  setError(errorText(e));
-                } finally {
-                  setBusy(false);
-                }
-              }}
+              quiet
+              disabled={busy || wallet?.activeTheme === "default"}
+              onClick={() => void run({ action: "equip", item_id: "default" })}
             >
-              {data.gamification?.daily_chest_claimed
-                ? "Сегодня уже получено"
-                : "Забрать 50 XP"}
+              Зелёная палитра
             </Button>
-          </section>
+            <Button
+              quiet
+              disabled={busy || wallet?.activeSound === "default"}
+              onClick={() =>
+                void run({ action: "equip", item_id: "default_sound" })
+              }
+            >
+              Обычный звук
+            </Button>
+          </div>
           <div className={s.sectionTitle}>
             <h2>История монет</h2>
           </div>

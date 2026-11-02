@@ -1,6 +1,8 @@
 package ratelimit
 
 import (
+	"encoding/json"
+	"github.com/go-chi/chi/v5/middleware"
 	"github.com/kirill010106/todo-notificator/internal/domain"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	j "github.com/kirill010106/todo-notificator/internal/lib/jwt"
@@ -10,6 +12,38 @@ import (
 	"testing"
 	"time"
 )
+
+func TestLimitResponseWithoutNormalizer(t *testing.T) {
+	for _, path := range []string{"/api/v1/tasks", "/api/v1/webhooks/yookassa"} {
+		t.Run(path, func(t *testing.T) {
+			handler := middleware.RequestID(IP(1)(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(204) })))
+			for i := 0; i < 2; i++ {
+				req := httptest.NewRequest("GET", path, nil)
+				req.Header.Set("X-Request-Id", "limited-request")
+				w := httptest.NewRecorder()
+				handler.ServeHTTP(w, req)
+				if i == 0 {
+					require.Equal(t, 204, w.Code)
+					continue
+				}
+				require.Equal(t, 429, w.Code)
+				require.Equal(t, "60", w.Header().Get("Retry-After"))
+				require.Equal(t, "1", w.Header().Get("X-RateLimit-Limit"))
+				require.Equal(t, "0", w.Header().Get("X-RateLimit-Remaining"))
+				require.Equal(t, "nosniff", w.Header().Get("X-Content-Type-Options"))
+				if path == "/api/v1/webhooks/yookassa" {
+					require.Equal(t, "text/plain; charset=utf-8", w.Header().Get("Content-Type"))
+					require.Equal(t, "Too Many Requests\n", w.Body.String())
+				} else {
+					var payload map[string]any
+					require.NoError(t, json.Unmarshal(w.Body.Bytes(), &payload))
+					require.JSONEq(t, `{"code":"RATE_LIMITED","message":"Too Many Requests","error":"Too Many Requests","request_id":"limited-request","field_errors":{}}`, w.Body.String())
+					require.Equal(t, "application/json", w.Header().Get("Content-Type"))
+				}
+			}
+		})
+	}
+}
 
 func TestAccountsBehindSameIPHaveIndependentBudgets(t *testing.T) {
 	handler := InvalidAuth("test")(auth.New("test")(User(2)(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.WriteHeader(204) }))))

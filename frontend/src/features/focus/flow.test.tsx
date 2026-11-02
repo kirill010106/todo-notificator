@@ -115,6 +115,7 @@ function setup(elapsed?: number, failStop = false, count = 0) {
         task_xp: 0,
         pomodoro_xp: 0,
         achievement_xp: 0,
+        coins: 0,
         quest_xp: 0,
         penalty_xp: 0,
       },

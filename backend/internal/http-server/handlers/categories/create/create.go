@@ -10,6 +10,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -56,14 +57,12 @@ func New(log *slog.Logger, categoryCreator CategoryCreator, eventLogger EventLog
 			if errors.Is(err, io.EOF) {
 				l.Warn("request body is empty")
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Warn("failed to decode request body", sl.Err(err))
 
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -73,14 +72,12 @@ func New(log *slog.Logger, categoryCreator CategoryCreator, eventLogger EventLog
 			if errors.As(err, &validateErr) {
 				l.Warn("invalid request", sl.Err(err))
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validateErr))
+				helpers.RenderValidationError(w, r, validateErr)
 				return
 			}
 			l.Error("internal validation error", sl.Err(err))
 
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -89,21 +86,18 @@ func New(log *slog.Logger, categoryCreator CategoryCreator, eventLogger EventLog
 		id, err := categoryCreator.CreateCategory(r.Context(), category)
 		if err != nil {
 			if errors.Is(err, storage.ErrCategoryLimitReached) {
-				render.Status(r, http.StatusForbidden)
-				render.JSON(w, r, resp.Error("В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusForbidden, Code: apiresponse.CategoryLimitReached, Message: "В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий"}, apiresponse.Compatibility{})
 				return
 			}
 			if errors.Is(err, storage.ErrCategoryExists) {
 				l.Warn("category already exists", sl.Err(err))
 
-				render.Status(r, http.StatusConflict)
-				render.JSON(w, r, resp.Error("category already exists"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusConflict, Code: apiresponse.Conflict, Message: "category already exists"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Error("failed to create category", sl.Err(err))
 
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to create category"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to create category"}, apiresponse.Compatibility{})
 			return
 		}
 

@@ -8,7 +8,7 @@ import {
 } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { api, ApiError, errorText } from "../../lib/api";
-import { command, rewardLabel } from "../../lib/commands";
+import { command, actionNotice } from "../../lib/commands";
 import type { Session, FocusSnapshot, Task } from "../../lib/types";
 import { Button, Sheet } from "../../components/ui";
 import { useApp } from "../../app/context";
@@ -139,8 +139,11 @@ export function FocusProvider({ children }: { children: ReactNode }) {
       setNow(Date.now());
       if (result.result?.pomodoro_counted && session)
         award(`session:${session.id}`, 10);
-      const suffix = rewardLabel(result);
-      if (suffix) notify(suffix);
+      const message = path.endsWith("/stop")
+        ? (result.result?.pomodoro_counted ? "Сессия завершена." : "Сессия завершена без награды за фокус.")
+        : "";
+      const text = actionNotice(data.user.id, result, message);
+      if (text) notify(text);
       await refresh();
       return result;
     } catch (error) {
@@ -207,7 +210,7 @@ export function FocusProvider({ children }: { children: ReactNode }) {
           serverNow < Date.parse(state.cancel_until),
         cancel: async () => {
           if (session && (await perform(`/pomodoros/${session.id}/cancel`)))
-            notify("Сессия отменена. Задача, XP и бустер сохранены.");
+            notify("Сессия отменена. Задача и накопленный опыт сохранены.");
         },
         session,
         seconds,
@@ -242,8 +245,8 @@ export function FocusProvider({ children }: { children: ReactNode }) {
         wide
       >
         <p>
-          В первые 30 секунд можно отменить случайный старт без потери XP и
-          изменения задачи.
+          В первые 30 секунд можно отменить случайный старт.
+          Остановка сессии не уменьшает накопленный опыт.
         </p>
         {error && <p role="alert">{error}</p>}
         <Button

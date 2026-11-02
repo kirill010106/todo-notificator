@@ -8,9 +8,8 @@ import (
 	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/go-chi/render"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
-	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
 	"github.com/kirill010106/todo-notificator/internal/storage"
 )
@@ -36,15 +35,13 @@ func New(log *slog.Logger, taskDeleter TaskDeleter, eventLogger EventLogger) htt
 		taskIDStr := chi.URLParam(r, "task_id")
 		if taskIDStr == "" {
 			l.Info("task_id is empty")
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("task_id is required"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "task_id is required"}, apiresponse.Compatibility{})
 			return
 		}
 		taskID, err := strconv.ParseInt(taskIDStr, 10, 64)
 		if err != nil {
 			l.Info("invalid task_id", slog.String("val", taskIDStr))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid task_id format"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid task_id format"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -54,13 +51,11 @@ func New(log *slog.Logger, taskDeleter TaskDeleter, eventLogger EventLogger) htt
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				l.Info("task not found or access denied")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("task not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "task not found"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Error("failed to delete task", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal error"}, apiresponse.Compatibility{})
 			return
 		}
 

@@ -90,9 +90,9 @@ func TestAPIContracts(t *testing.T) {
 	request("PATCH", "/me/profile", `{"timezone":"Europe/Moscow"}`, "", 200)
 	today := request("GET", "/me/today", "", "", 200)
 	require.Equal(t, "Europe/Moscow", today["timezone"])
-	claim := request("POST", "/me/quests/create_task/claim", `{"points":99999}`, "claim", 200)
-	require.Equal(t, float64(10), claim["rewards"].(map[string]any)["quest_xp"])
-	request("POST", "/me/quests/create_task/claim", `{}`, "claim-again", 409)
+	claim := request("POST", "/me/quests/create_task/claim", `{"points":99999}`, "claim", 410)
+	require.Equal(t, "MECHANIC_RETIRED", claim["code"])
+	request("POST", "/me/quests/create_task/claim", `{}`, "claim-again", 410)
 	bootstrap := request("GET", "/me/bootstrap", "", "", 200)
 	require.Equal(t, "Europe/Moscow", bootstrap["user"].(map[string]any)["timezone"])
 	require.Contains(t, bootstrap, "focus")
@@ -142,7 +142,7 @@ func TestAPIContracts(t *testing.T) {
 			{"PATCH", "/me/profile", "{", 400},
 			{"PATCH", "/me/profile", `{}`, 400},
 			{"PATCH", "/me/profile", `{"timezone":"not-a-zone"}`, 400},
-			{"POST", "/me/quests/unknown/claim", `{}`, 404},
+			{"POST", "/me/quests/unknown/claim", `{}`, 410},
 			{"POST", "/me/rewards/daily-chest/claim", `{}`, 409},
 			{"POST", "/me/focus/resume", `{}`, 409},
 			{"POST", "/tasks", "", 400},
@@ -209,7 +209,7 @@ func TestAPIContracts(t *testing.T) {
 		replay := request("POST", "/me/shop/actions", `{"action":"buy","item_id":"ocean"}`, "shop-buy", 200)
 		require.Equal(t, bought, replay)
 		require.Equal(t, coins.(float64)-40, bought["wallet"].(map[string]any)["coins"])
-		request("POST", "/me/shop/actions", `{"action":"buy","item_id":"xp_boost"}`, "shop-expensive", 409)
+		request("POST", "/me/shop/actions", `{"action":"buy","item_id":"xp_boost"}`, "shop-expensive", 404)
 		request("POST", "/me/shop/actions", `{"action":"equip","item_id":"ocean"}`, "shop-equip", 200)
 		request("POST", "/me/shop/actions", `{"action":"unknown"}`, "shop-invalid", 400)
 		request("POST", "/me/shop/actions", `{"action":"buy","unknown":true}`, "shop-shape", 400)

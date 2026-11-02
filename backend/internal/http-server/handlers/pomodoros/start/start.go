@@ -9,6 +9,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -22,11 +23,6 @@ type Request struct {
 type Response struct {
 	resp.Response
 	Session *domain.PomodoroSession `json:"session,omitempty"`
-}
-
-type ActiveSessionResponse struct {
-	resp.Response
-	ActiveSession *domain.PomodoroSession `json:"active_session,omitempty"`
 }
 
 type PomodoroProvider interface {
@@ -51,16 +47,14 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		err := render.DecodeJSON(r.Body, &req)
 		if err != nil && !errors.Is(err, io.EOF) {
 			log.Warn("failed to decode request body", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
 		session, err := provider.StartPomodoroSession(r.Context(), userID, req.TaskID)
 		if err != nil {
 			if errors.Is(err, storage.ErrTaskNotFound) {
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("task not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "task not found"}, apiresponse.Compatibility{})
 				return
 			}
 			if errors.Is(err, storage.ErrSessionActive) {
@@ -69,22 +63,19 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 				activeSession, getErr := provider.GetActivePomodoroSession(r.Context(), userID)
 				if getErr != nil {
 					log.Error("failed to get active pomodoro session details", sl.Err(getErr))
-					render.Status(r, http.StatusConflict)
-					render.JSON(w, r, resp.Error("pomodoro session is already active"))
+					apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusConflict, Code: apiresponse.Conflict, Message: "pomodoro session is already active"}, apiresponse.Compatibility{})
 					return
 				}
 
-				render.Status(r, http.StatusConflict)
-				render.JSON(w, r, ActiveSessionResponse{
-					Response:      resp.Error("pomodoro session is already active"),
-					ActiveSession: activeSession,
-				})
+				apiresponse.Write(w, r, apiresponse.Problem{
+					Status: http.StatusConflict, Code: apiresponse.Conflict,
+					Message: "pomodoro session is already active", ActiveSession: activeSession,
+				}, apiresponse.Compatibility{})
 				return
 			}
 
 			log.Error("failed to start pomodoro session", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to start pomodoro session"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to start pomodoro session"}, apiresponse.Compatibility{})
 			return
 		}
 

@@ -13,6 +13,7 @@ import (
 	"github.com/go-chi/render"
 	"github.com/go-playground/validator/v10"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
@@ -89,14 +90,12 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			if errors.Is(err, io.EOF) {
 				l.Warn("request body is empty")
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Warn("failed to decode request body", sl.Err(err))
 
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("Некорректный запрос: "+err.Error()))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "Некорректный запрос: " + err.Error()}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -106,14 +105,12 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			if errors.As(err, &validateErr) {
 				l.Warn("invalid request", sl.Err(err))
 
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validateErr))
+				helpers.RenderValidationError(w, r, validateErr)
 				return
 			}
 			l.Error("internal validation error", sl.Err(err))
 
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("internal server error"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -129,21 +126,18 @@ func New(log *slog.Logger, taskSaver TaskSaver, webhookURL, webhookSecret string
 			if errors.Is(err, storage.ErrTaskExists) {
 				l.Warn("task already exists", sl.Err(err))
 
-				render.Status(r, http.StatusConflict)
-				render.JSON(w, r, resp.Error("task already exists"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusConflict, Code: apiresponse.Conflict, Message: "task already exists"}, apiresponse.Compatibility{})
 				return
 			}
 			if errors.Is(err, storage.ErrCategoryNotFound) {
 				l.Warn("category not found", sl.Err(err))
 
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("category not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "category not found"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Error("failed to save task", sl.Err(err))
 
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to save task"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to save task"}, apiresponse.Compatibility{})
 			return
 		}
 

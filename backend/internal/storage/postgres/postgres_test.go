@@ -326,6 +326,7 @@ func TestGetUserStats_Success(t *testing.T) {
 		WillReturnRows(sqlmock.NewRows([]string{"id", "user_id", "points", "level", "total_pomodoros", "total_burnt_tasks", "current_streak", "best_streak", "updated_at"}).
 			AddRow(int64(1), userID, points, level, totalPomodoros, totalBurntTasks, currentStreak, bestStreak, now))
 
+	mock.ExpectQuery("SELECT COUNT").WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(7))
 	stats, err := s.GetUserStats(context.Background(), userID)
 	require.NoError(t, err)
 	require.Equal(t, userID, stats.UserID)
@@ -1256,26 +1257,11 @@ func TestUnlockAchievement(t *testing.T) {
 	userID := int64(1)
 
 	expectUserTransaction(mock, userID)
-	// Case 1: First time unlocked with points award
+	// Case 1: First unlock does not touch XP
 	insertQuery := regexp.QuoteMeta(`INSERT INTO achievements (user_id, code) VALUES ($1, $2) ON CONFLICT (user_id, code) DO NOTHING RETURNING id`)
 	mock.ExpectQuery(insertQuery).
 		WithArgs(userID, "first_step").
 		WillReturnRows(sqlmock.NewRows([]string{"id"}).AddRow(int64(100)))
-
-	ensureStatsQuery := regexp.QuoteMeta(`INSERT INTO user_stats (user_id) VALUES ($1) ON CONFLICT DO NOTHING`)
-	mock.ExpectExec(ensureStatsQuery).
-		WithArgs(userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
-
-	statsQuery := regexp.QuoteMeta(`UPDATE user_stats`)
-	mock.ExpectQuery(statsQuery).
-		WithArgs(25, 0, 0, false, false, userID).
-		WillReturnRows(sqlmock.NewRows([]string{"points"}).AddRow(int64(25)))
-
-	levelQuery := regexp.QuoteMeta(`UPDATE user_stats SET level = $1 WHERE user_id = $2`)
-	mock.ExpectExec(levelQuery).
-		WithArgs(1, userID).
-		WillReturnResult(sqlmock.NewResult(0, 1))
 
 	mock.ExpectCommit()
 	unlocked, err := s.UnlockAchievement(context.Background(), userID, "first_step")
@@ -1304,23 +1290,8 @@ func TestGetDailyQuests(t *testing.T) {
 	s := &Storage{DB: db}
 	userID := int64(1)
 
-	mock.ExpectQuery("SELECT timezone").WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"timezone"}).AddRow("UTC"))
-	mock.ExpectQuery("SELECT CURRENT_TIMESTAMP").WillReturnRows(sqlmock.NewRows([]string{"now"}).AddRow(time.Now()))
-	q1 := regexp.QuoteMeta(`SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'created' AND recorded_at >= $2`)
-	mock.ExpectQuery(q1).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(2))
-
-	q2 := regexp.QuoteMeta(`SELECT COUNT(*) FROM pomodoro_sessions WHERE user_id = $1 AND status = 'completed' AND completed_at >= $2 AND completed_at - started_at >= INTERVAL '24 minutes'`)
-	mock.ExpectQuery(q2).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(1))
-
-	q3 := regexp.QuoteMeta(`SELECT COUNT(DISTINCT task_id) FROM daily_task_activity WHERE user_id = $1 AND action = 'completed' AND recorded_at >= $2`)
-	mock.ExpectQuery(q3).WithArgs(userID, sqlmock.AnyArg()).WillReturnRows(sqlmock.NewRows([]string{"count"}).AddRow(3))
-
-	mock.ExpectQuery("SELECT code FROM daily_reward_claims").WithArgs(userID).WillReturnRows(sqlmock.NewRows([]string{"code"}))
 	quests, err := s.GetDailyQuests(context.Background(), userID)
 	require.NoError(t, err)
-	require.Len(t, quests, 3)
-	require.True(t, quests[0].Completed) // 2 >= 1
-	require.True(t, quests[1].Completed) // 1 >= 1
-	require.True(t, quests[2].Completed) // 3 >= 3
+	require.Empty(t, quests)
 	require.NoError(t, mock.ExpectationsWereMet())
 }

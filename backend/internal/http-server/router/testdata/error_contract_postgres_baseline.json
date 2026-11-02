@@ -1,0 +1,336 @@
+{
+  "command_reminder_limit": {
+    "status": 403,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "REMINDER_LIMIT_REACHED",
+      "message": "В бесплатном тарифе можно настроить до двух напоминаний на задачу. Удали лишние или подключи Premium",
+      "error": "В бесплатном тарифе можно настроить до двух напоминаний на задачу. Удали лишние или подключи Premium",
+      "request_id": "error-baseline-request",
+      "field_errors": {
+        "reminders": "Доступно до двух напоминаний на задачу"
+      }
+    }
+  },
+  "auth_account_missing": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "account not found",
+      "error": "account not found",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "auth_version_changed": {
+    "status": 401,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "UNAUTHORIZED",
+      "message": "Войдите в аккаунт заново",
+      "error": "Войдите в аккаунт заново",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "register_duplicate": {
+    "status": 409,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "EMAIL_EXISTS",
+      "message": "Этот email уже используется",
+      "error": "Этот email уже используется",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "verify_invalid_token": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INVALID_TOKEN",
+      "message": "Ссылка недействительна или срок её действия истёк",
+      "error": "Ссылка недействительна или срок её действия истёк",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "profile_empty": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "Укажите имя или часовой пояс",
+      "error": "Укажите имя или часовой пояс",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "today_invalid_pagination": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "Некорректная пагинация",
+      "error": "Некорректная пагинация",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "tasks_invalid_pagination": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "invalid pagination params",
+      "error": "invalid pagination params",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "category_missing": {
+    "status": 404,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "NOT_FOUND",
+      "message": "category not found",
+      "error": "category not found",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "category_limit": {
+    "status": 403,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "CATEGORY_LIMIT_REACHED",
+      "message": "В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий",
+      "error": "В бесплатном тарифе доступно не более 3 категорий. Перейдите на Премиум для создания неограниченного числа категорий",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "category_duplicate": {
+    "status": 409,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "CONFLICT",
+      "message": "category already exists",
+      "error": "category already exists",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_key_limit": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INVALID_IDEMPOTENCY_KEY",
+      "message": "Ключ не должен превышать 128 символов",
+      "error": "Ключ не должен превышать 128 символов",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_body_limit": {
+    "status": 413,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "BODY_TOO_LARGE",
+      "message": "Слишком большой запрос",
+      "error": "Слишком большой запрос",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_malformed_task": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INVALID_TASK_REQUEST",
+      "message": "unexpected end of JSON input",
+      "error": "unexpected end of JSON input",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_legacy_reminder": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INVALID_TASK_REQUEST",
+      "message": "поле reminder_at больше не поддерживается; используй reminders",
+      "error": "поле reminder_at больше не поддерживается; используй reminders",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_reminders_null": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "REMINDER_VALIDATION_ERROR",
+      "message": "Укажи массив: [] удаляет все напоминания",
+      "error": "Укажи массив: [] удаляет все напоминания",
+      "request_id": "error-baseline-request",
+      "field_errors": {
+        "reminders": "Укажи массив: [] удаляет все напоминания"
+      }
+    }
+  },
+  "command_reminder_field": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "REMINDER_VALIDATION_ERROR",
+      "message": "Укажи id и целое неотрицательное offset_minutes; дата и состояние отправки рассчитываются сервером",
+      "error": "Укажи id и целое неотрицательное offset_minutes; дата и состояние отправки рассчитываются сервером",
+      "request_id": "error-baseline-request",
+      "field_errors": {
+        "reminders.0": "Укажи id и целое неотрицательное offset_minutes; дата и состояние отправки рассчитываются сервером"
+      }
+    }
+  },
+  "command_title_validation": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "VALIDATION_ERROR",
+      "message": "validation failed",
+      "error": "validation failed",
+      "request_id": "error-baseline-request",
+      "field_errors": {
+        "title": "field title is a required field"
+      },
+      "validation_errors": {
+        "title": "field title is a required field"
+      }
+    }
+  },
+  "command_task_missing": {
+    "status": 404,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "NOT_FOUND",
+      "message": "task not found",
+      "error": "task not found",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "command_key_conflict": {
+    "status": 409,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "IDEMPOTENCY_KEY_REUSED",
+      "message": "Ключ уже использован для другого запроса",
+      "error": "Ключ уже использован для другого запроса",
+      "request_id": "error-baseline-request",
+      "field_errors": null
+    }
+  },
+  "pause_exhausted": {
+    "status": 409,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "BREAK_ALREADY_USED",
+      "message": "extra break is already used",
+      "error": "extra break is already used",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "shop_malformed": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "code": "VALIDATION_ERROR",
+      "message": "Некорректное действие магазина",
+      "error": "Некорректное действие магазина",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "shop_unknown_action": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INVALID_SHOP_ACTION",
+      "message": "Неизвестное действие магазина",
+      "error": "Неизвестное действие магазина",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "cancel_invalid_id": {
+    "status": 400,
+    "content_type": "application/json",
+    "json": {
+      "code": "VALIDATION_ERROR",
+      "message": "Некорректный номер сессии",
+      "error": "Некорректный номер сессии",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "cancel_session_missing": {
+    "status": 404,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "SESSION_NOT_FOUND",
+      "message": "Сессия уже закончена или не найдена",
+      "error": "Сессия уже закончена или не найдена",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "payments_disabled": {
+    "status": 503,
+    "content_type": "application/json",
+    "json": {
+      "status": "Error",
+      "code": "INTERNAL_ERROR",
+      "message": "payments are temporarily unavailable",
+      "error": "payments are temporarily unavailable",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    }
+  },
+  "user_rate_limit": {
+    "headers": {"X-Content-Type-Options": "nosniff"},
+    "status": 429,
+    "content_type": "application/json",
+    "json": {
+      "code": "RATE_LIMITED",
+      "message": "Too Many Requests",
+      "error": "Too Many Requests",
+      "request_id": "error-baseline-request",
+      "field_errors": {}
+    },
+    "retry_after": "60"
+  }
+}

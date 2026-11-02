@@ -168,9 +168,9 @@ func TestBusinessActions(t *testing.T) {
 		assertStats(t, userID, 50, 2, 0, 1)
 		abandoned := newSession(t, userID, &taskID, false)
 		require.NoError(t, s.FinishPomodoroSession(ctx, userID, abandoned, "abandoned", true))
-		assertStats(t, userID, 20, 2, 1, 0)
+		assertStats(t, userID, 50, 2, 0, 1)
 		require.ErrorIs(t, s.FinishPomodoroSession(ctx, userID, abandoned, "abandoned", true), storage.ErrSessionNotFound)
-		assertStats(t, userID, 20, 2, 1, 0)
+		assertStats(t, userID, 50, 2, 0, 1)
 	})
 
 	t.Run("short sessions and abandoned free sessions do not earn rewards", func(t *testing.T) {
@@ -187,7 +187,7 @@ func TestBusinessActions(t *testing.T) {
 		assertStats(t, userID, 0, 0, 0, 0)
 		quests, err := s.GetDailyQuests(ctx, userID)
 		require.NoError(t, err)
-		require.Zero(t, quests[1].Current)
+		require.Empty(t, quests)
 	})
 
 	t.Run("starting and finishing checks ownership and exact session ID", func(t *testing.T) {
@@ -251,7 +251,7 @@ func TestBusinessActions(t *testing.T) {
 		assertStats(t, userID, 0, 0, 0, 0)
 	})
 
-	t.Run("achievement bonus is atomic and does not extend a streak on reading", func(t *testing.T) {
+	t.Run("reading achievements never awards XP or extends a streak", func(t *testing.T) {
 		userID := newUser(t, false)
 		_, err := s.DB.ExecContext(ctx, `UPDATE user_stats SET current_streak = 3, best_streak = 3, last_activity_date = CURRENT_DATE - 1 WHERE user_id = $1`, userID)
 		require.NoError(t, err)
@@ -263,7 +263,7 @@ func TestBusinessActions(t *testing.T) {
 		require.Equal(t, before, after)
 		var points int64
 		require.NoError(t, s.DB.QueryRowContext(ctx, `SELECT points FROM user_stats WHERE user_id = $1`, userID).Scan(&points))
-		require.Positive(t, points)
+		require.Zero(t, points)
 		_, err = s.GetAchievements(ctx, userID)
 		require.NoError(t, err)
 		assertStats(t, userID, points, 0, 0, 3)

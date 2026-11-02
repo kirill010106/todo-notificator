@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
@@ -35,8 +36,7 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 
 		if logsGetter == nil {
 			log.Warn("activity logger service is not configured or unavailable")
-			render.Status(r, http.StatusServiceUnavailable)
-			render.JSON(w, r, resp.Error("activity logger is unavailable"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusServiceUnavailable, Code: apiresponse.InternalError, Message: "activity logger is unavailable"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -68,8 +68,7 @@ func New(log *slog.Logger, logsGetter LogsGetter) http.HandlerFunc {
 		logs, err := logsGetter.GetLogs(r.Context(), userID, limit, offset)
 		if err != nil {
 			log.Error("failed to get logs", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to get logs"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to get logs"}, apiresponse.Compatibility{})
 			return
 		}
 

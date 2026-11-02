@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"github.com/go-chi/httprate"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/auth"
 	"github.com/kirill010106/todo-notificator/internal/http-server/middleware/clientip"
 	j "github.com/kirill010106/todo-notificator/internal/lib/jwt"
@@ -16,7 +17,7 @@ import (
 func IP(limit int) func(http.Handler) http.Handler {
 	return httprate.Limit(limit, time.Minute, httprate.WithKeyFuncs(func(r *http.Request) (string, error) {
 		return ipKey(r), nil
-	}))
+	}), httprate.WithLimitHandler(limitReached))
 }
 
 func User(limit int) func(http.Handler) http.Handler {
@@ -25,7 +26,20 @@ func User(limit int) func(http.Handler) http.Handler {
 			return "user:" + strconv.FormatInt(id, 10), nil
 		}
 		return "ip:" + ipKey(r), nil
-	}))
+	}), httprate.WithLimitHandler(limitReached))
+}
+
+func limitReached(w http.ResponseWriter, r *http.Request) {
+	if apiresponse.IsWebhook(r) {
+		http.Error(w, http.StatusText(http.StatusTooManyRequests), http.StatusTooManyRequests)
+		return
+	}
+	// httprate has already set Retry-After and the budget headers.
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	apiresponse.Write(w, r, apiresponse.Problem{
+		Status: http.StatusTooManyRequests, Code: apiresponse.RateLimited,
+		Message: http.StatusText(http.StatusTooManyRequests),
+	}, apiresponse.Compatibility{StatusStyle: apiresponse.OmitStatus})
 }
 
 func ipKey(r *http.Request) string {

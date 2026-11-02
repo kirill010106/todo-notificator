@@ -4,11 +4,23 @@ const base = (
     ? "https://todoapi.chkpnk.ru/api/v1"
     : "/api/v1")
 ).replace(/\/$/, "");
+// Optional fields retain compatibility with older backend versions. The current
+// JSON contract requires code/message/error/request_id/field_errors; status is
+// a legacy string/number alias, and older responses may use null field errors.
+export interface ApiErrorData extends Record<string, unknown> {
+  code?: string;
+  message?: string;
+  error?: string;
+  request_id?: string;
+  field_errors?: Record<string, string> | null;
+  validation_errors?: Record<string, string> | null;
+  status?: string | number;
+}
 export class ApiError extends Error {
   constructor(
     public status: number,
     message: string,
-    public data: Record<string, unknown> = {},
+    public data: ApiErrorData = {},
   ) {
     super(message);
   }

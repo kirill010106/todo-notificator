@@ -10,6 +10,7 @@ import (
 
 	"github.com/go-chi/render"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"github.com/kirill010106/todo-notificator/internal/http-server/helpers"
 	resp "github.com/kirill010106/todo-notificator/internal/lib/api/response"
 	"github.com/kirill010106/todo-notificator/internal/lib/sl"
@@ -48,16 +49,14 @@ func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 		limit, offset, err := parsePagination(r)
 		if err != nil {
 			l.Info("invalid pagination params", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid pagination params"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid pagination params"}, apiresponse.Compatibility{})
 			return
 		}
 
 		filter, err := parseFilter(r)
 		if err != nil {
 			l.Info("invalid filter params", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error(err.Error()))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: err.Error()}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -67,13 +66,11 @@ func New(log *slog.Logger, taskGetter TaskGetter) http.HandlerFunc {
 
 			if errors.Is(err, storage.ErrTaskNotFound) {
 				l.Info("tasks not found")
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("tasks not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "tasks not found"}, apiresponse.Compatibility{})
 				return
 			}
 			l.Error("failed to get tasks", sl.Err(err))
-			render.Status(r, http.StatusInternalServerError)
-			render.JSON(w, r, resp.Error("failed to get tasks"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to get tasks"}, apiresponse.Compatibility{})
 			return
 		}
 

@@ -24,7 +24,7 @@ tags:
   - name: System
     description: "Системные ручки"
   - name: Profile
-    description: "Профиль, начальное состояние, достижения и ежедневные задания"
+    description: "Профиль, начальное состояние, достижения и награды"
   - name: Payments
     description: "Премиум через YooKassa"
   - name: Dev
@@ -35,6 +35,27 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
+  responses:
+    RateLimited:
+      description: "Бюджет запросов исчерпан; повторить после Retry-After. status в JSON отсутствует."
+      headers:
+        Retry-After:
+          required: true
+          description: "Количество секунд до повтора."
+          schema:
+            type: integer
+            minimum: 0
+            example: 60
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
+    InternalError:
+      description: "Внутренний отказ. Recoverer возвращает JSON 500 только до отправки финальных заголовков; после начала ответа второй JSON не дописывается."
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ErrorResponse"
   schemas:
     StatusResponse:
       type: object
@@ -44,27 +65,42 @@ components:
           example: OK
     ErrorResponse:
       type: object
+      description: "Общий JSON-контракт ошибок API. status — необязательное legacy-поле: Error или числовой HTTP-статус; у 429 и recoverer отсутствует. error дублирует message. field_errors:null сохраняется у прежних ContractError без полей. Webhook YooKassa использует отдельный пустой/text/plain контракт."
+      required: [code, message, error, request_id, field_errors]
       properties:
         status:
-          type: string
-          example: Error
-        error:
-          type: string
-          example: "invalid request"
+          oneOf:
+            - type: string
+              enum: [Error]
+            - type: integer
+              minimum: 400
+              maximum: 599
         code:
           type: string
-        validation_errors:
-          type: object
-          additionalProperties:
-            type: string
+          minLength: 1
+          description: "Стабильный машинный код; не определяется по тексту. Клиент должен поддерживать неизвестные коды через HTTP-статус."
         message:
           type: string
+          description: "Безопасное публичное сообщение, без внутренних причин отказа."
+        error:
+          type: string
+          description: "Legacy-псевдоним message, сохраняется для прежних клиентов."
         request_id:
           type: string
+          minLength: 1
         field_errors:
           type: object
+          nullable: true
+          description: "Сообщения по полям, включая индексы reminders.0. Обычно пустой объект; legacy null разрешён для совместимости."
           additionalProperties:
             type: string
+        validation_errors:
+          type: object
+          description: "Legacy-псевдоним field_errors для validator-ответов, присутствует не во всех ошибках."
+          additionalProperties:
+            type: string
+        active_session:
+          $ref: "#/components/schemas/PomodoroSession"
     TokensResponse:
       type: object
       properties:
@@ -266,6 +302,10 @@ components:
     UserStats:
       type: object
       properties:
+        total_completed_tasks:
+          type: integer
+          format: int64
+          description: "Накопительное число уникальных завершённых задач, включая удалённые"
         id:
           type: integer
           format: int64
@@ -402,25 +442,9 @@ components:
           items:
             $ref: "#/components/schemas/ActivityLog"
     APIError:
-      type: object
-      properties:
-        status:
-          type: integer
-          example: 404
-        message:
-          type: string
-        code:
-          type: string
-        request_id:
-          type: string
-        field_errors:
-          type: object
-          additionalProperties:
-            type: string
-      required:
-        - status
-        - message
-        - code
+      description: "Совместимое имя общего контракта; роутерные 404/405 используют числовой status."
+      allOf:
+        - $ref: "#/components/schemas/ErrorResponse"
     Profile:
       type: object
       properties:
@@ -460,6 +484,9 @@ components:
     Achievement:
       type: object
       properties:
+        current: {type: integer, format: int64, description: "Текущий прогресс, не выше target"}
+        target: {type: integer, format: int64}
+        archived: {type: boolean, description: "Историческое достижение вне активной коллекции"}
         id:
           type: integer
           format: int64
@@ -476,6 +503,7 @@ components:
           type: string
         points:
           type: integer
+          description: "Совместимость: всегда 0, достижение не начисляет XP"
         unlocked:
           type: boolean
         unlocked_at:
@@ -530,17 +558,25 @@ components:
           type: integer
           format: int64
         streak_multiplier:
+          deprecated: true
+          description: "Всегда 1; серии не увеличивают XP"
           type: number
           format: double
         daily_quests:
+          deprecated: true
+          description: "Всегда пустой массив"
           type: array
           items:
             $ref: "#/components/schemas/DailyQuest"
         unlocked_count:
           type: integer
+          description: "Все полученные достижения, включая архив"
         total_achievements:
           type: integer
+          description: "Количество активных достижений: 6"
         daily_chest_claimed:
+          deprecated: true
+          description: "Всегда false; новые ежедневные награды отключены"
           type: boolean
     ProfileResponse:
       type: object
@@ -666,7 +702,7 @@ components:
         ownedItems: {type: array, items: {type: string}}
         activeTheme: {type: string, enum: [default, ocean, violet]}
         activeSound: {type: string, enum: [default, bell]}
-        activeBooster: {type: boolean, description: "Следующая засчитанная сессия даёт 40 XP вместо 20. Отмена и короткая сессия не расходуют бустер"}
+        activeBooster: {type: boolean, description: "Совместимость: всегда false после миграции 00027"}
         imported: {type: boolean, description: "Однократный импорт наград и настроек выполнен; старые монеты и бустеры не начисляются"}
     ShopResponse:
       type: object
@@ -679,7 +715,7 @@ components:
             properties:
               id: {type: string}
               title: {type: string}
-              kind: {type: string, enum: [theme, sound, booster]}
+              kind: {type: string, enum: [theme, sound]}
               price: {type: integer, minimum: 0}
               description: {type: string}
         ledger:
@@ -768,6 +804,7 @@ components:
     ActionRewards:
       type: object
       properties:
+        coins: {type: integer, format: int64, description: "Фактически начисленные монеты: 5 за задачу, 10 за сессию"}
         task_xp:
           type: integer
         pomodoro_xp:
@@ -778,10 +815,11 @@ components:
           type: integer
         penalty_xp:
           type: integer
-      description: "Фактические изменения XP операции; penalty_xp — положительная величина реально списанных очков. Дополнительные достижения отражены отдельно."
+      description: "Фактические награды операции. task_xp: 10 за первое завершение задачи; pomodoro_xp: 20 за засчитанную сессию. achievement_xp, quest_xp и penalty_xp сохранены для совместимости и равны 0 в новых операциях."
     ActionResponse:
       type: object
       properties:
+        level_up: {type: boolean, description: "Эта операция повысила уровень"}
         operation_id:
           type: string
         result:
@@ -844,11 +882,15 @@ paths:
               schema: {$ref: "#/components/schemas/ShopResponse"}
         "401":
           description: "Необходима авторизация"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /me/shop/actions:
     post:
       tags: [Profile]
-      summary: "Покупка, применение, личная награда, активация XP-бустера или однократный импорт"
-      description: "Атомарно под блокировкой пользователя. Idempotency-Key обеспечивает повтор ответа без повторного списания. Каталожная цена определяется сервером. Данные другого аккаунта недоступны."
+      summary: "Покупка, применение, личная награда или однократный импорт"
+      description: "Атомарно под блокировкой пользователя. Idempotency-Key обеспечивает повтор ответа без повторного списания. Каталожная цена определяется сервером. Данные другого аккаунта недоступны. activate_booster сохранён только для совместимости и возвращает 410."
       parameters:
         - in: header
           name: Idempotency-Key
@@ -874,6 +916,7 @@ paths:
                     activeTheme: {type: string}
                     activeSound: {type: string}
       responses:
+        "410": {description: "MECHANIC_RETIRED — activate_booster больше не поддерживается"}
         "200":
           description: "Сохранённый кошелёк; также общие поля ActionResponse"
           content:
@@ -885,12 +928,16 @@ paths:
         "400": {description: "Некорректное действие или личная награда"}
         "403": {description: "Предмет не принадлежит пользователю"}
         "404": {description: "Предмет или личная награда не найдены"}
-        "409": {description: "Недостаточно монет, предмет уже куплен, бустер активен или отсутствует"}
+        "409": {description: "Недостаточно монет, предмет уже куплен или ключ использован для другого запроса"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /pomodoros/{id}/cancel:
     post:
       tags: [Pomodoros]
       summary: "Отменить случайный старт в первые 30 секунд"
-      description: "Не начисляет и не списывает XP/монеты, не меняет задачу и не расходует бустер. Статус сессии cancelled. Граница проверяется по clock_timestamp() в транзакции."
+      description: "Не начисляет и не списывает XP/монеты, не меняет задачу. Статус сессии cancelled. Граница проверяется по clock_timestamp() в транзакции."
       parameters:
         - in: path
           name: id
@@ -908,6 +955,10 @@ paths:
         "400": {description: "Неверный идентификатор"}
         "404": {description: "Сессия не найдена или принадлежит другому пользователю"}
         "409": {description: "Сессия не активна или прошло 30 секунд; CANCEL_WINDOW_EXPIRED"}
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /register:
     post:
       tags:
@@ -960,6 +1011,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /password/forgot:
     post:
       tags: [Auth]
@@ -992,11 +1045,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: "Лимит запросов"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/RateLimited"
         "500":
           description: "Внутренняя ошибка"
           content:
@@ -1038,11 +1087,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: "Лимит запросов"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/RateLimited"
         "500":
           description: "Внутренняя ошибка"
           content:
@@ -1097,11 +1142,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: "Лимит запросов"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/RateLimited"
         "500":
           description: "Внутренняя ошибка"
           content:
@@ -1155,11 +1196,7 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
         "429":
-          description: "Лимит запросов"
-          content:
-            application/json:
-              schema:
-                $ref: "#/components/schemas/ErrorResponse"
+          $ref: "#/components/responses/RateLimited"
         "500":
           description: "Внутренняя ошибка"
           content:
@@ -1223,6 +1260,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /refresh:
     post:
       tags:
@@ -1274,6 +1313,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /verify:
     get:
       tags:
@@ -1305,6 +1346,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /logout:
     post:
       tags:
@@ -1337,6 +1380,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /tasks:
     get:
       tags:
@@ -1437,6 +1482,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     post:
       tags:
         - Tasks
@@ -1515,6 +1562,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
   /categories:
@@ -1547,6 +1596,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     post:
       tags:
         - Categories
@@ -1599,6 +1650,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   "/categories/{category_id}":
     get:
       tags:
@@ -1648,6 +1701,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     patch:
       tags:
         - Categories
@@ -1701,6 +1756,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     delete:
       tags:
         - Categories
@@ -1740,6 +1797,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /me/stats:
     get:
       tags:
@@ -1765,6 +1824,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /pomodoros/active:
     get:
       tags:
@@ -1801,6 +1862,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /pomodoros/start:
     post:
       tags:
@@ -1858,6 +1921,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "Тело необязательно; без task_id или при task_id=null запускается свободная сессия. Задача должна существовать и принадлежать текущему пользователю, иначе возвращается 404. Параллельные запросы запуска сериализуются: у пользователя может быть только одна активная сессия. При конфликте возвращается 409."
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
@@ -1913,6 +1978,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "undefined Момент начала и окончания дополнительного перерыва сохраняется на сервере. /me/focus показывает фазу extra_break; /me/focus/resume досрочно заканчивает перерыв. Рабочие часы продолжают идти."
   "/pomodoros/{id}/stop":
     post:
@@ -1978,7 +2045,9 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
-      description: "Останавливает именно активную сессию с ID из URL, принадлежащую текущему пользователю. Повторная остановка завершенной сессии возвращает 404 и не меняет статистику. completed: длительность не менее 24 минут по времени БД дает 20 очков и увеличивает счетчики засчитанных Pomodoro. При finish_task=true связанная задача становится done и дополнительно дает 10 очков, если ее награда раньше не выдавалась. Полноценный Pomodoro с первым завершением задачи дает 30 базовых очков; достижения могут добавить бонусы. Короткая сессия не дает награды за Pomodoro и не увеличивает его счетчики. Явное первое завершение задачи при finish_task=true может дать обычные 10 очков за задачу. abandoned: сессия со связанной задачей штрафуется на 30 очков (итоговые очки не ниже нуля). При finish_task=true задача становится burnt; первый переход в burnt увеличивает счетчик сожженных задач и сбрасывает текущий стрик. Свободная сессия при abandoned сохраняется в истории без штрафа. Прерывание при удалении задачи также не штрафуется. Состояния сессии и задачи, статистика, уровень и достижения сохраняются в одной транзакции. Ответ не содержит обновленную статистику — ее нужно прочитать отдельно. Успех дополнен ActionResponse с реальными наградами, статистикой и следующим состоянием focus. Повтор с тем же Idempotency-Key возвращает прежний успех; без ключа повторная остановка остается 404."
+        "429":
+          $ref: "#/components/responses/RateLimited"
+      description: "Останавливает свою активную сессию. completed после 24 минут по времени БД даёт 20 XP и 10 монет; при первом завершении связанной задачи через finish_task=true добавляет 10 XP и 5 монет. Короткая сессия не награждается, но явное завершение задачи может дать её обычную награду. abandoned оставляет задачу в прежнем состоянии, не уменьшает XP и не сбрасывает серию. Все изменения и достижения атомарны. Ответ содержит ActionResponse. Повтор с тем же Idempotency-Key возвращает сохранённый ответ; без ключа остановленная сессия даёт 404."
   /verify/resend:
     post:
       tags:
@@ -2009,6 +2078,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /me/logs:
     get:
       tags:
@@ -2052,6 +2123,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "По умолчанию limit=50, верхняя граница — 100, большие значения ограничиваются. Для бесплатного тарифа limit ограничен пятью записями и offset всегда 0. Актуальный тариф проверяется middleware по БД. Невалидные параметры заменяются значениями по умолчанию. Сериализованный protobuf-ответ activity-logger ограничен 4 МиБ; при превышении или ошибке чтения HTTP возвращает 500 без частичной истории."
   /health:
     get:
@@ -2072,6 +2145,10 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /me/profile:
     get:
       tags:
@@ -2096,6 +2173,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
     patch:
       tags:
         - Profile
@@ -2133,6 +2212,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       requestBody:
         required: true
         content:
@@ -2174,13 +2255,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "Возвращает пользователя, категории, первые 20 задач (offset=0), статистику, геймификацию и активную Pomodoro-сессию. Параметры пагинации не принимает. Ответ также содержит focus с серверным временем и сохраненным состоянием перерывов."
   /me/achievements:
     get:
       tags:
         - Profile
       summary: "Список достижений пользователя"
-      description: "Возвращает достижения и проверяет доступность новых по серверным данным. Запись достижения и его бонус сохраняются атомарно, один раз. Бонус за достижение не продлевает стрик и не обновляет дату активности."
+      description: "Возвращает шесть основных достижений с current/target и полученные исторические с archived=true. Выдаёт доступные достижения по накопительной статистике один раз, без начисления XP."
       responses:
         "200":
           description: "Успешный ответ"
@@ -2200,12 +2283,15 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /me/quests:
     get:
+      deprecated: true
+      description: "Совместимость: возвращает quests=[]; ежедневные задания отключены"
       tags:
         - Profile
       summary: "Ежедневные задания пользователя"
-      description: "Возвращает текущий прогресс ежедневных заданий по календарному дню БД. Для задания pomodoro_focus учитываются только completed-сессии длительностью не менее 24 минут; abandoned и короткие сессии не учитываются. reward_xp содержит объявленную награду задания. Автоматическое начисление этой награды и отдельный метод ее получения пока не реализованы."
       responses:
         "200":
           description: "Успешный ответ"
@@ -2225,6 +2311,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /tasks/bulk-complete:
     post:
       tags:
@@ -2264,6 +2352,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
   /tasks/bulk-delete:
@@ -2303,6 +2393,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /payments/create:
     post:
       tags:
@@ -2340,6 +2432,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /payments/sync:
     post:
       tags:
@@ -2371,6 +2465,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /webhooks/yookassa:
     post:
       tags:
@@ -2428,6 +2524,18 @@ paths:
             text/plain:
               schema:
                 type: string
+        "429":
+          description: "Бюджет webhook исчерпан; прежний текстовый ответ."
+          headers:
+            Retry-After:
+              required: true
+              schema:
+                type: integer
+                minimum: 0
+          content:
+            text/plain:
+              schema:
+                type: string
   /dev/toggle-premium:
     post:
       tags:
@@ -2459,6 +2567,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /:
     get:
       tags:
@@ -2482,6 +2592,10 @@ paths:
                   info:
                     type: string
                     example: "Use /api/v1/health for checking availability of the service"
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   /ping:
     get:
       tags:
@@ -2502,6 +2616,10 @@ paths:
               schema:
                 type: string
                 example: pong
+        "429":
+          $ref: "#/components/responses/RateLimited"
+        "500":
+          $ref: "#/components/responses/InternalError"
   "/tasks/{task_id}":
     patch:
       tags:
@@ -2588,6 +2706,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "Отсутствующее поле сохраняется. Явный null снимает deadline или category_id. reminders отсутствует — сохранить; [] — удалить; массив заменяет настройки атомарно. Для снятия срока нужно явно удалить связанные относительные напоминания. Перенос срока сдвигает неотправленные относительные напоминания. Отправленные не повторяются. При потере Premium существующие сверх двух работают, но добавление/перепланирование сверх лимита запрещено. Нужно хотя бы одно распознанное поле. Первое завершение дает 10 XP; reward_claimed сохраняется после повторного открытия. Изменение, награда и достижения атомарны. Ответ дополнен ActionResponse."
     delete:
       tags:
@@ -2628,6 +2748,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /me/focus:
     get:
       tags:
@@ -2666,6 +2788,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
   /me/focus/resume:
     post:
       tags:
@@ -2704,6 +2828,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
   /me/focus/rest/finish:
@@ -2744,6 +2870,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
   /me/today:
@@ -2784,6 +2912,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       description: "Только pending-задачи со сроком. overdue: deadline < server_now; today: deadline >= server_now и < начала завтрашнего дня в выбранном поясе. Группы не пересекаются. Без срока — только /tasks. Списки и полные totals читаются в одном снимке БД. Между запросами страниц данные могут измениться; стабильный курсор не реализован."
       parameters:
         - in: query
@@ -2815,12 +2945,19 @@ paths:
           description: "IANA; если отсутствует, используется профиль. Не меняет профиль."
   "/me/quests/{code}/claim":
     post:
+      deprecated: true
       tags:
         - Profile
-      summary: "Получить серверную награду выполненного ежедневного задания"
+      summary: "Отключённая ежедневная награда (совместимость)"
       security:
         - bearerAuth: []
       responses:
+        "410":
+          description: "MECHANIC_RETIRED — ежедневные награды отключены"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "200":
           description: "Успешный ответ"
           content:
@@ -2857,6 +2994,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
         - in: path
@@ -2865,15 +3004,22 @@ paths:
           schema:
             type: string
           description: "code из GET /me/quests"
-      description: "Размер XP задает сервер, клиентские points не используются. Уникальность аккаунт + день в timezone профиля + код. До выполнения: 409 QUEST_NOT_COMPLETED; повтор с новым ключом: 409 REWARD_ALREADY_CLAIMED; неизвестный код: 404 REWARD_NOT_FOUND. С тем же ключом возвращается сохраненный успех. Дневной сундук требует выполнения, но не обязательного получения наград отдельных заданий. Бонусы не продлевают серию."
+      description: "Новые запросы возвращают 410 MECHANIC_RETIRED. История сохранена. Replay старого успешного запроса с тем же ключом возвращает прежний ответ без повторного начисления."
   /me/rewards/daily-chest/claim:
     post:
+      deprecated: true
       tags:
         - Profile
-      summary: "Получить 50 XP за выполнение всех ежедневных заданий"
+      summary: "Отключённая ежедневная награда (совместимость)"
       security:
         - bearerAuth: []
       responses:
+        "410":
+          description: "MECHANIC_RETIRED — ежедневные награды отключены"
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorResponse"
         "200":
           description: "Успешный ответ"
           content:
@@ -2910,6 +3056,8 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ErrorResponse"
+        "429":
+          $ref: "#/components/responses/RateLimited"
       parameters:
         - $ref: "#/components/parameters/IdempotencyKey"
-      description: "Размер XP задает сервер, клиентские points не используются. Уникальность аккаунт + день в timezone профиля + код. До выполнения: 409 QUEST_NOT_COMPLETED; повтор с новым ключом: 409 REWARD_ALREADY_CLAIMED; неизвестный код: 404 REWARD_NOT_FOUND. С тем же ключом возвращается сохраненный успех. Дневной сундук требует выполнения, но не обязательного получения наград отдельных заданий. Бонусы не продлевают серию."
+      description: "Новые запросы возвращают 410 MECHANIC_RETIRED. История сохранена. Replay старого успешного запроса с тем же ключом возвращает прежний ответ без повторного начисления."

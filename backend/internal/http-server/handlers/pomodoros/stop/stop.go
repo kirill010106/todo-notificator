@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"github.com/kirill010106/todo-notificator/internal/domain"
+	"github.com/kirill010106/todo-notificator/internal/http-server/apiresponse"
 	"io"
 	"log/slog"
 	"net/http"
@@ -46,8 +47,7 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		sessionID, err := strconv.ParseInt(sessionIDStr, 10, 64)
 		if err != nil || sessionID <= 0 {
 			log.Warn("invalid session id", slog.String("session_id", sessionIDStr))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("invalid session id"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "invalid session id"}, apiresponse.Compatibility{})
 			return
 		}
 
@@ -58,25 +58,21 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		if err != nil {
 			if errors.Is(err, io.EOF) {
 				log.Warn("request body is empty")
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.Error("empty request body"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "empty request body"}, apiresponse.Compatibility{})
 				return
 			}
 			log.Error("failed to decode request body", sl.Err(err))
-			render.Status(r, http.StatusBadRequest)
-			render.JSON(w, r, resp.Error("failed to decode request"))
+			apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusBadRequest, Code: apiresponse.ValidationError, Message: "failed to decode request"}, apiresponse.Compatibility{})
 			return
 		}
 
 		if err = validate.Struct(req); err != nil {
 			var validationErrors validator.ValidationErrors
 			if errors.As(err, &validationErrors) {
-				render.Status(r, http.StatusBadRequest)
-				render.JSON(w, r, resp.ValidationError(validationErrors))
+				helpers.RenderValidationError(w, r, validationErrors)
 			} else {
 				log.Error("internal validation error", sl.Err(err))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("internal server error"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "internal server error"}, apiresponse.Compatibility{})
 			}
 			return
 		}
@@ -85,15 +81,12 @@ func New(log *slog.Logger, provider PomodoroProvider, eventLogger EventLogger) h
 		if err != nil {
 			switch {
 			case errors.Is(err, storage.ErrUserNotFound):
-				render.Status(r, http.StatusUnauthorized)
-				render.JSON(w, r, resp.Error("unauthorized"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusUnauthorized, Code: apiresponse.Unauthorized, Message: "unauthorized"}, apiresponse.Compatibility{})
 			case errors.Is(err, storage.ErrSessionNotFound), errors.Is(err, storage.ErrTaskNotFound):
-				render.Status(r, http.StatusNotFound)
-				render.JSON(w, r, resp.Error("active session or task not found"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusNotFound, Code: apiresponse.NotFound, Message: "active session or task not found"}, apiresponse.Compatibility{})
 			default:
 				log.Error("failed to finish pomodoro transaction", sl.Err(err))
-				render.Status(r, http.StatusInternalServerError)
-				render.JSON(w, r, resp.Error("failed to stop pomodoro session"))
+				apiresponse.Write(w, r, apiresponse.Problem{Status: http.StatusInternalServerError, Code: apiresponse.InternalError, Message: "failed to stop pomodoro session"}, apiresponse.Compatibility{})
 			}
 			return
 		}
