@@ -143,7 +143,7 @@ func TestAPIContracts(t *testing.T) {
 			{"PATCH", "/me/profile", `{}`, 400},
 			{"PATCH", "/me/profile", `{"timezone":"not-a-zone"}`, 400},
 			{"POST", "/me/quests/unknown/claim", `{}`, 410},
-			{"POST", "/me/rewards/daily-chest/claim", `{}`, 409},
+			{"POST", "/me/rewards/daily-chest/claim", `{}`, 410},
 			{"POST", "/me/focus/resume", `{}`, 409},
 			{"POST", "/tasks", "", 400},
 			{"POST", "/tasks", "{", 400},
